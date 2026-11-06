@@ -55,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -116,8 +117,9 @@ fun CollectScreen(
         }
 
         // 状態行：記録中だけ赤い点。文は短く、注記の字で
+        val playing = vm.playingLabel
         val status = when {
-            vm.isDemoPlaying -> StatusLine("デモ散歩を再生中", Fieldbook.Survey)
+            playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> StatusLine("停止中・「記録開始」で歩き始める", Fieldbook.Mark)
         }
@@ -136,6 +138,7 @@ fun CollectScreen(
         }
 
         // 図：地図 or 軌跡。四隅の見当を地図の外側に描く（地図は Android の View なので、上には描けない）
+        val hasMap = BuildConfig.MAPS_API_KEY.isNotBlank()
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -147,9 +150,10 @@ fun CollectScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(4.dp))
-                    .border(1.dp, Fieldbook.GridMajor, RoundedCornerShape(4.dp)),
+                    // 枠線は地図の端が分かるように地図あり版だけ。地図なし版は手持ちのカードと同じく見当だけ
+                    .then(if (hasMap) Modifier.border(1.dp, Fieldbook.GridMajor, RoundedCornerShape(4.dp)) else Modifier),
             ) {
-                if (BuildConfig.MAPS_API_KEY.isNotBlank()) {
+                if (hasMap) {
                     TrackMap(points)
                 } else {
                     TrackCanvas(points, modifier = Modifier.fillMaxSize())
@@ -340,6 +344,17 @@ private fun TrackMap(points: List<TrackPoint>) {
             Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
             Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
         }
+        // 今いる場所（最後の点）：青い点
+        if (last != null) {
+            Circle(
+                center = LatLng(last.lat, last.lng),
+                radius = 4.0,
+                fillColor = Fieldbook.Survey,
+                strokeColor = Color.White,
+                strokeWidth = 4f,
+                zIndex = 3f,
+            )
+        }
     }
 }
 
@@ -388,6 +403,10 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
         val first = xy.first()
         drawCircle(Fieldbook.Ink, radius = 5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
         drawCircle(Fieldbook.Paper, radius = 2.5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
+        // 今いる場所（最後の点）：青い点（地図あり版と同じ）
+        val lastPt = xy.last()
+        drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+        drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
 
         // 縮尺：幅の 1/4 くらいを切りのいい長さに
         val barM = niceLength(size.width * 0.25f / scale)
