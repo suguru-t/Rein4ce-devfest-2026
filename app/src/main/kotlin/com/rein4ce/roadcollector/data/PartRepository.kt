@@ -5,12 +5,12 @@ import android.util.Log
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.sample.SampleParts
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -54,17 +54,13 @@ class PartRepository(
     /** 手持ちで「先頭へ」を押した時刻（パーツの id → epoch millis）。並び順は手持ち画面が決める（InventoryOrder.kt） */
     val movedToTopAt: StateFlow<Map<String, Long>> = _movedToTopAt
 
-    /**
-     * 起動時の読み込みが終わったら完了する。保存（persist）はこれを待つ。
-     * 待たないと、読み込みより先に保存が走ったとき、保存済みの手持ちを上書きして消してしまう。
-     */
-    private val loaded = CompletableDeferred<Unit>()
-
     private val _isLoaded = MutableStateFlow(false)
 
     /**
-     * 起動時の読み込みが終わったか。終わるまでは [parts] が空なので、画面は件数や「見本を戻す」を出さない
-     * （読み込み中に「見本を戻す」を押すと、わざと消した見本まで戻ってしまうため）。
+     * 起動時の読み込みが終わったか。
+     * - 保存（save）はこれが true になるまで待つ。待たないと、読み込みより先に保存が走ったとき、保存済みの手持ちを上書きして消してしまう
+     * - 終わるまでは [parts] が空なので、画面は件数や「見本を戻す」を出さない
+     *   （読み込み中に「見本を戻す」を押すと、わざと消した見本まで戻ってしまうため）
      */
     val isLoaded: StateFlow<Boolean> = _isLoaded
 
@@ -73,7 +69,6 @@ class PartRepository(
             try {
                 load()
             } finally {
-                loaded.complete(Unit)
                 _isLoaded.value = true
             }
         }
@@ -187,7 +182,7 @@ class PartRepository(
      */
     private fun save(target: File, encode: () -> String) {
         scope.launch {
-            loaded.await()
+            isLoaded.first { it }
             writeLock.withLock {
                 runCatching {
                     val json = encode()
