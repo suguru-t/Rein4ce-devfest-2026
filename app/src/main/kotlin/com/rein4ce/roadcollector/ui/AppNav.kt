@@ -2,9 +2,6 @@ package com.rein4ce.roadcollector.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -22,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
+import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
@@ -35,10 +33,10 @@ import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
  *   gallery   … C：サーバ連携（ui/gallery, net/）
  */
 sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
-    // アイコンは material-icons の標準セット（追加依存なし）。好みで material-icons-extended に替えてよい
-    data object Collect : Dest("collect", "採集", Icons.Filled.Place)
-    data object Inventory : Dest("inventory", "手持ち", Icons.AutoMirrored.Filled.List)
-    data object Stack : Dest("stack", "積む", Icons.Filled.Build)
+    // 靴・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
+    data object Collect : Dest("collect", "採集", AppIcons.Shoe)
+    data object Inventory : Dest("inventory", "手持ち", AppIcons.Bag)
+    data object Stack : Dest("stack", "積む", AppIcons.Blocks)
     data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share)
 
     companion object {
