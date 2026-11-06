@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.logback.classic)
+    implementation(libs.google.genai)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
