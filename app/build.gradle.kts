@@ -12,7 +12,8 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-val mapsApiKey: String = localProps.getProperty("MAPS_API_KEY")?.trim().orEmpty()
+// Maps API キー：local.properties → 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）の順に見る
+val mapsApiKey: String = (localProps.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY"))?.trim().orEmpty()
 val serverBaseUrl: String = localProps.getProperty("SERVER_BASE_URL")?.trim().orEmpty()
     .ifEmpty { "https://road-collector-415368216017.asia-northeast1.run.app" }
 
@@ -30,6 +31,19 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         buildConfigField("String", "SERVER_BASE_URL", "\"$serverBaseUrl\"")
+    }
+
+    // デバッグ署名はチーム共通の鍵（app/debug.keystore）を使う。
+    // 全員と GitHub Actions のビルドが同じ署名になるので、Maps API キーの「Android アプリ」制限に
+    // この鍵の SHA-1 を 1 つ登録すれば、誰のビルドでも地図が出る。端末に入れ替えるときのアンインストールも要らない。
+    // デバッグ用なので秘密ではない（パスワードは Android 標準と同じ "android"）。
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
