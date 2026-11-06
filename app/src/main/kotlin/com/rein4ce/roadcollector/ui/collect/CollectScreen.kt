@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -72,6 +73,11 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
+
+    // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
+    val fileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) vm.playFile(uri) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -155,7 +161,11 @@ fun CollectScreen(
                 ) {
                     Text("記録開始")
                 }
-                DemoMenuButton(enabled = !vm.isDemoPlaying, onPick = { vm.playDemo(it) })
+                DemoMenuButton(
+                    enabled = !vm.isDemoPlaying,
+                    onPick = { vm.playDemo(it) },
+                    onPickFile = { fileLauncher.launch(arrayOf("*/*")) },
+                )
             }
         }
     }
@@ -194,7 +204,11 @@ fun CollectScreen(
 }
 
 @Composable
-private fun DemoMenuButton(enabled: Boolean, onPick: (SampleTracks.SampleTrack) -> Unit) {
+private fun DemoMenuButton(
+    enabled: Boolean,
+    onPick: (SampleTracks.SampleTrack) -> Unit,
+    onPickFile: () -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { open = true }, enabled = enabled) { Text("デモ散歩") }
@@ -205,6 +219,11 @@ private fun DemoMenuButton(enabled: Boolean, onPick: (SampleTracks.SampleTrack) 
                     onClick = { open = false; onPick(track) },
                 )
             }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("ファイルから再生（GPX / JSON）") },
+                onClick = { open = false; onPickFile() },
+            )
         }
     }
 }
