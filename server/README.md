@@ -45,9 +45,35 @@ gcloud run deploy road-collector \
 
 デモ当日はコールドスタートを避けるため `--min-instances=1` にし、終わったら 0 に戻す（クレジット節約）。
 
+## 保存先（メモリ / Firestore）
+
+`TowerStore` はインターフェースで、実装が 2 つある。
+
+| 実装 | 使われるとき |
+|---|---|
+| `MemoryTowerStore` | 手元の既定、テスト。再起動で消える。gcloud なしで動く |
+| `FirestoreTowerStore` | Cloud Run 上（環境変数 `K_SERVICE` があると自動で）、または `TOWER_STORE=firestore` |
+
+環境変数：
+
+- `TOWER_STORE`：`firestore` か `memory` で明示する。未指定なら上の表のとおり
+- `TOWER_COLLECTION`：コレクション名（既定 `towers`）。手元で試すときは本番とは別の名前にする
+- `GOOGLE_CLOUD_PROJECT`：プロジェクトを固定したいとき。未指定なら認証情報から決まる
+
+Firestore では 1 タワー 1 ドキュメント。`json` フィールドにタワー全体が入り、一覧用に `height`・`partCount`・`createdAt`・`author` も持つ。
+
+手元から本物の Firestore につなぐ（データベース `(default)`、ネイティブモード、`asia-northeast1` は作成済み。鍵ファイルは作らない）：
+
+```
+gcloud auth application-default login     # 最初の 1 回だけ
+TOWER_STORE=firestore TOWER_COLLECTION=towers_localtest ./gradlew :server:run
+```
+
+起動ログに `TowerStore: FirestoreTowerStore` と出れば Firestore につながっている。Cloud Run のサービスアカウントには `roles/datastore.user` を付与済みなので、デプロイするだけで Firestore 版になる。
+
 ## 次にやること（C 担当）
 
-- `TowerStore` を Firestore に置き換える。データベース `(default)`（ネイティブモード、`asia-northeast1`）は作成済みで、Cloud Run のサービスアカウントにも `roles/datastore.user` を付与済み。鍵ファイルは作らない。手元から本物の Firestore につなぐときは、先に `gcloud auth application-default login` を実行する
+- Firestore 版を Cloud Run にデプロイして、本番で「送信 → 一覧 → 共有ページ」を確認する
 - `SharePage` の `og:image` を PNG にする（SVG → PNG 変換して Cloud Storage に置く、または画像化エンドポイント）
 - `POST /parts/name`：Vertex AI（Gemini）でパーツに名前と一言を付ける
 - 対戦方式が決まったら `/challenges`
