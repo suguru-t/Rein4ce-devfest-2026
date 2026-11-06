@@ -1,5 +1,13 @@
 package com.rein4ce.roadcollector.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,17 +27,22 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -95,9 +108,9 @@ fun AppNav() {
 }
 
 /**
- * 下のタブバー。YouTube や Slack のように、アイコンだけの平らなバー（丸いハイライトや文字は出さない）。
- * 選択中は墨色、それ以外は薄い灰色。色は野帳（Fieldbook）にそろえる。
- * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡す。
+ * 下のタブバー。YouTube や Slack のように、アイコンだけの平らなバー（丸いハイライトは出さない）。
+ * タップしたタブだけ、アイコンが少し大きくなって下に名前が出る。それ以外は薄い灰色のアイコンだけ。
+ * 色は野帳（Fieldbook）にそろえる。読み上げ（TalkBack）にはタブ名と選択状態を渡す。
  */
 @Composable
 private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
@@ -107,14 +120,21 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .height(56.dp),
+                .height(60.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Dest.all.forEach { dest ->
                 val isSelected = current?.hierarchy?.any { it.route == dest.route } == true
-                Box(
-                    contentAlignment = Alignment.Center,
+                // 選ばれたら、バネのように少し跳ねて大きくなる
+                val scale by animateFloatAsState(
+                    targetValue = if (isSelected) 1.2f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                    label = "tabScale",
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
@@ -129,8 +149,27 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                         imageVector = dest.icon,
                         contentDescription = null,
                         tint = if (isSelected) Fieldbook.Ink else Fieldbook.Mark,
-                        modifier = Modifier.size(if (isSelected) 28.dp else 26.dp),
+                        modifier = Modifier
+                            .size(26.dp)
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            },
                     )
+                    // 名前は選んだタブだけ。開くときは下から伸びて、閉じるときは縮む
+                    AnimatedVisibility(
+                        visible = isSelected,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        Text(
+                            dest.label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Fieldbook.Ink,
+                            modifier = Modifier.padding(top = 6.dp).clearAndSetSemantics {},
+                        )
+                    }
                 }
             }
         }
