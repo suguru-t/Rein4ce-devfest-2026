@@ -47,7 +47,7 @@ gcloud run deploy road-collector \
 
 ## 次にやること（C 担当）
 
-- `TowerStore` を Firestore に置き換える（Cloud Run のサービスアカウントに `roles/datastore.user` を付与。鍵ファイルは作らない）
+- `TowerStore` を Firestore に置き換える。データベース `(default)`（ネイティブモード、`asia-northeast1`）は作成済みで、Cloud Run のサービスアカウントにも `roles/datastore.user` を付与済み。鍵ファイルは作らない。手元から本物の Firestore につなぐときは、先に `gcloud auth application-default login` を実行する
 - `SharePage` の `og:image` を PNG にする（SVG → PNG 変換して Cloud Storage に置く、または画像化エンドポイント）
 - `POST /parts/name`：Vertex AI（Gemini）でパーツに名前と一言を付ける
 - 対戦方式が決まったら `/challenges`
