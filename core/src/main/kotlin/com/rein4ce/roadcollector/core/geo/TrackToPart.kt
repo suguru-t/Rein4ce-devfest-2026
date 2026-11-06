@@ -67,7 +67,9 @@ object TrackToPart {
             )
         }
 
-        val kind = classify(normalized, closed)
+        // 分類は粗い形で判定する（形を細かく残しても、名札と色が変わらないように）
+        val coarse = Simplify.rdpWithLimit(xy, params.classifyEpsilonM, params.classifyMaxVertices)
+        val kind = classify(coarse.map { Pt(it.x.toFloat(), it.y.toFloat()) }, closed)
 
         val part = Part(
             id = id,
@@ -90,7 +92,7 @@ object TrackToPart {
 
     /**
      * 表示用の分類。曲がり角（50° 以上）の数と向きで決める。
-     * 厳密さは不要。ルールには使わない。
+     * 厳密さは不要。ルールには使わない。角度しか見ないので、点の単位（m でも正規化後でも）は問わない。
      */
     fun classify(points: List<Pt>, closed: Boolean): Kind {
         if (closed) return Kind.RING

@@ -30,7 +30,7 @@ enum class Kind(val label: String) {
  *
  * フィールドを変えるときは必ず全員に周知すること。
  *
- * @property points     正規化済みの頂点列。バウンディングボックスの中心が原点、長辺が 1.0。最大 12 個程度。
+ * @property points     正規化済みの頂点列。バウンディングボックスの中心が原点、長辺が 1.0。最大 24 個（ConversionParams.maxVertices）。
  * @property thickness  太さ。長辺に対する比率（初期値 0.15）。
  * @property closed     輪なら true（最後の点と最初の点をつなぐ）。
  * @property kind       表示用の分類。
