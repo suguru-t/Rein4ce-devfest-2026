@@ -1,0 +1,9 @@
+# Android Studio が自動生成する local.properties に、以下の行を追加してください。
+# （local.properties は git に含めない）
+
+# Maps SDK for Android の API キー。空のままでも動く（地図の代わりに軌跡を Canvas で描く）
+MAPS_API_KEY=
+
+# サーバの URL。エミュレータからホスト PC の localhost は 10.0.2.2
+# Cloud Run にデプロイしたら https://road-collector-xxxx-an.a.run.app のように差し替える
+SERVER_BASE_URL=http://10.0.2.2:8080
