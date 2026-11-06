@@ -49,12 +49,21 @@ class PartRepository(
      */
     private val loaded = CompletableDeferred<Unit>()
 
+    private val _isLoaded = MutableStateFlow(false)
+
+    /**
+     * 起動時の読み込みが終わったか。終わるまでは [parts] が空なので、画面は件数や「見本を戻す」を出さない
+     * （読み込み中に「見本を戻す」を押すと、わざと消した見本まで戻ってしまうため）。
+     */
+    val isLoaded: StateFlow<Boolean> = _isLoaded
+
     init {
         scope.launch {
             try {
                 load()
             } finally {
                 loaded.complete(Unit)
+                _isLoaded.value = true
             }
         }
     }

@@ -57,6 +57,7 @@ import java.util.Locale
 fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
+    val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     // 並びは「採集したパーツを新しい順 → 見本を決まった順」。保存の順番には頼らない
     val shown = remember(parts) {
         val (samples, collected) = parts.partition { SampleParts.byId(it.id) != null }
@@ -81,7 +82,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             Text("手持ち", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
             Spacer(Modifier.weight(1f))
             Text(
-                "採集 ${parts.size - sampleCount} ・ 見本 $sampleCount",
+                // 読み込み中は parts が空なので、件数は出さない
+                if (isLoaded) "採集 ${parts.size - sampleCount} ・ 見本 $sampleCount" else "読み込み中…",
                 fontFamily = Fieldbook.Data,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
@@ -95,8 +97,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 color = Fieldbook.Muted,
                 modifier = Modifier.weight(1f),
             )
-            // 消した見本だけを足し戻す。採集したパーツと選択には触らない
-            if (missingSamples > 0) {
+            // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
+            // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
+            if (isLoaded && missingSamples > 0) {
                 TextButton(onClick = { repository.restoreMissingSamples() }) {
                     Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
                 }
