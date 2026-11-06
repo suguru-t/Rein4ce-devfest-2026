@@ -1,7 +1,6 @@
 package com.rein4ce.roadcollector.ui.inventory
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,12 +46,24 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyGridState
+import android.os.SystemClock
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * B 担当：手持ちパーツ一覧。タップで選択（最大 5 本）→「積む」へ。長押しで削除。
+ * B 担当：手持ちパーツ一覧。タップで選択（最大 5 本）→「積む」へ。
+ * 長押しのまま動かすと並べ替え、動かさずに離すとメニュー（先頭へ・削除）。iPhone のホーム画面のアプリを動かすときと同じ。
  * 見た目は「測量野帳」（Fieldbook.kt）。
  */
 @Composable
@@ -60,9 +71,22 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    val movedToTopAt by repository.movedToTopAt.collectAsStateWithLifecycle()
-    // 並びは「最後に触ったものが上」（InventoryOrder.kt）。保存の順番には頼らない
-    val shown = remember(parts, movedToTopAt) { inventoryOrder(parts, movedToTopAt) }
+    val savedOrder by repository.order.collectAsStateWithLifecycle()
+    // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
+    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
+    var arranged by remember { mutableStateOf(shown) }
+    // ドラッグしているパーツの id と、ドラッグを始めたときの位置
+    var draggingId by remember { mutableStateOf<String?>(null) }
+    var dragStartIndex by remember { mutableStateOf(-1) }
+    // 長押しして動かさずに離すと、そのあとにタップ（選択の切り替え）も届いてしまうので、直後の 1 回だけ無視する
+    var ignoreTapFor by remember { mutableStateOf<String?>(null) }
+    var ignoreTapUntil by remember { mutableStateOf(0L) }
+    LaunchedEffect(shown) { if (draggingId == null) arranged = shown }
+    fun saveArranged(list: List<Part>) {
+        arranged = list
+        repository.setOrder(list.map { it.id })
+    }
     val sampleCount = parts.count { SampleParts.byId(it.id) != null }
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
@@ -93,7 +117,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで先頭へ／消す",
+                "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで動かす／メニュー",
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
                 modifier = Modifier.weight(1f),
@@ -107,41 +131,82 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
+        val gridState = rememberLazyGridState()
+        val haptics = LocalHapticFeedback.current
+        val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+            // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）
+            arranged = arranged.moved(from.index, to.index)
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
+            state = gridState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(shown, key = { it.id }) { part ->
-                val order = validSelected.indexOf(part.id).takeIf { it >= 0 }?.plus(1)
-                PartCard(
-                    part = part,
-                    order = order,
-                    isSample = SampleParts.byId(part.id) != null,
-                    isFirst = part.id == shown.firstOrNull()?.id,
-                    menuOpen = menuFor == part.id,
-                    onMenuDismiss = { menuFor = null },
-                    onMoveToTop = {
-                        menuFor = null
-                        repository.moveToTop(part.id)
-                    },
-                    onDelete = {
-                        menuFor = null
-                        pendingDelete = part
-                    },
-                    // 並びが変わったとき、カードが滑らかに動くように
-                    modifier = Modifier.animateItem(),
-                    onClick = {
-                        if (part.id in selectedIds) {
-                            selectedIds.remove(part.id)
-                        } else if (validSelected.size < GameSession.MAX_PARTS) {
-                            selectedIds.add(part.id)
-                        }
-                    },
-                    onLongClick = { menuFor = part.id },
-                )
+            items(arranged, key = { it.id }) { part ->
+                // ReorderableItem が、並びが変わったときにカードを滑らかに動かす（animateItem）
+                ReorderableItem(reorderState, key = part.id) { isDragging ->
+                    val order = validSelected.indexOf(part.id).takeIf { it >= 0 }?.plus(1)
+                    val index = arranged.indexOfFirst { it.id == part.id }
+                    fun moveTo(to: Int) = saveArranged(arranged.moved(index, to))
+                    PartCard(
+                        part = part,
+                        order = order,
+                        isSample = SampleParts.byId(part.id) != null,
+                        isFirst = index == 0,
+                        isDragging = isDragging,
+                        menuOpen = menuFor == part.id,
+                        onMenuDismiss = { menuFor = null },
+                        onMoveToTop = {
+                            menuFor = null
+                            moveTo(0)
+                        },
+                        onDelete = {
+                            menuFor = null
+                            pendingDelete = part
+                        },
+                        onClick = {
+                            if (ignoreTapFor == part.id && SystemClock.uptimeMillis() < ignoreTapUntil) {
+                                ignoreTapFor = null
+                                return@PartCard
+                            }
+                            if (part.id in selectedIds) {
+                                selectedIds.remove(part.id)
+                            } else if (validSelected.size < GameSession.MAX_PARTS) {
+                                selectedIds.add(part.id)
+                            }
+                        },
+                        dragHandle = Modifier.longPressDraggableHandle(
+                            onDragStarted = {
+                                draggingId = part.id
+                                dragStartIndex = arranged.indexOfFirst { it.id == part.id }
+                                menuFor = null
+                                ignoreTapFor = part.id
+                                ignoreTapUntil = SystemClock.uptimeMillis() + 1_500L
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDragStopped = {
+                                val now = arranged.indexOfFirst { it.id == part.id }
+                                draggingId = null
+                                if (now != dragStartIndex) {
+                                    saveArranged(arranged) // 動かした → その並びを保存（このあとタップは届かない）
+                                    ignoreTapFor = null
+                                } else {
+                                    menuFor = part.id // 動かさずに離した → メニュー（続けて届くタップは無視する）
+                                }
+                            },
+                        ),
+                        // ドラッグできない読み上げ（TalkBack）の人のための操作
+                        a11yActions = listOfNotNull(
+                            CustomAccessibilityAction("先頭へ") { moveTo(0); true }.takeIf { index > 0 },
+                            CustomAccessibilityAction("前へ") { moveTo(index - 1); true }.takeIf { index > 0 },
+                            CustomAccessibilityAction("後ろへ") { moveTo(index + 1); true }.takeIf { index < arranged.size - 1 },
+                            CustomAccessibilityAction("削除") { pendingDelete = part; true },
+                        ),
+                    )
+                }
             }
         }
 
@@ -213,29 +278,45 @@ private fun PartCard(
     order: Int?,
     isSample: Boolean,
     isFirst: Boolean,
+    isDragging: Boolean,
     menuOpen: Boolean,
     onMenuDismiss: () -> Unit,
     onMoveToTop: () -> Unit,
     onDelete: () -> Unit,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    dragHandle: Modifier,
+    a11yActions: List<CustomAccessibilityAction>,
 ) {
     val selected = order != null
     // 主役は形そのもの。分類（L字など）は出さない
     val date = if (isSample) "見本" else formatDate(part.walkedAt)
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .then(if (selected) Modifier.background(Fieldbook.SelectedPaper).dashedOutline(Fieldbook.Survey) else Modifier)
+            // ドラッグ中は少し持ち上げる（大きく・影・白地）
+            .graphicsLayer {
+                val s = if (isDragging) 1.05f else 1f
+                scaleX = s
+                scaleY = s
+                shadowElevation = if (isDragging) 10.dp.toPx() else 0f
+            }
+            .then(
+                when {
+                    isDragging -> Modifier.background(Color.White)
+                    selected -> Modifier.background(Fieldbook.SelectedPaper).dashedOutline(Fieldbook.Survey)
+                    else -> Modifier
+                },
+            )
             // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
-            .semantics { if (order != null) stateDescription = "$order 番目に積む" }
-            .combinedClickable(
-                // 読み上げ（TalkBack）で、タップと長押しの意味が伝わるように
+            .semantics {
+                if (order != null) stateDescription = "$order 番目に積む"
+                customActions = a11yActions
+            }
+            .then(dragHandle)
+            .clickable(
+                // 読み上げ（TalkBack）で、タップの意味が伝わるように
                 onClickLabel = if (selected) "選択を外す" else "選択",
-                onLongClickLabel = "メニュー（先頭へ・削除）",
                 onClick = onClick,
-                onLongClick = onLongClick,
             )
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
