@@ -19,7 +19,7 @@ import io.ktor.serialization.kotlinx.json.json
 
 /**
  * Cloud Run 上のサーバ（:server モジュール）を呼ぶ。
- * URL は local.properties の SERVER_BASE_URL（既定はエミュレータ→ホストの http://10.0.2.2:8080）。
+ * URL は local.properties の SERVER_BASE_URL（既定は本番の Cloud Run。ローカルサーバなら http://10.0.2.2:8080）。
  */
 object ApiClient {
 

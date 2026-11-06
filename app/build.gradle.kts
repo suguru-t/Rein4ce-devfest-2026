@@ -14,7 +14,7 @@ val localProps = Properties().apply {
 }
 val mapsApiKey: String = localProps.getProperty("MAPS_API_KEY")?.trim().orEmpty()
 val serverBaseUrl: String = localProps.getProperty("SERVER_BASE_URL")?.trim().orEmpty()
-    .ifEmpty { "http://10.0.2.2:8080" }
+    .ifEmpty { "https://road-collector-415368216017.asia-northeast1.run.app" }
 
 android {
     namespace = "com.rein4ce.roadcollector"

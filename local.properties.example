@@ -4,6 +4,7 @@
 # Maps SDK for Android の API キー。空のままでも動く（地図の代わりに軌跡を Canvas で描く）
 MAPS_API_KEY=
 
-# サーバの URL。エミュレータからホスト PC の localhost は 10.0.2.2
-# Cloud Run にデプロイしたら https://road-collector-xxxx-an.a.run.app のように差し替える
-SERVER_BASE_URL=http://10.0.2.2:8080
+# サーバの URL。既定は本番サーバ（Cloud Run）。この行がなくても本番につながる
+# ローカルで ./gradlew :server:run したサーバを使うときだけ http://10.0.2.2:8080 に書き換える
+# （10.0.2.2 はエミュレータから見たホスト PC の localhost）
+SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app

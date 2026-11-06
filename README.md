@@ -21,11 +21,18 @@
 1. Android Studio（Narwhal 以降）で、このフォルダを開く
 2. Studio が作る `local.properties` に `local.properties.example` の 2 行を足す
    - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画）
-   - `SERVER_BASE_URL=http://10.0.2.2:8080`（エミュレータ → ホスト PC のサーバ）
+   - `SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app`（本番サーバ。下の「サーバの接続先」を参照）
 3. Run。エミュレータでも実機でも可（minSdk 26）
 
 実機で GPS を試すときは、権限ダイアログで「アプリの使用中のみ許可」でよい（バックグラウンド権限は使わない）。
 エミュレータで歩くには Extended Controls → Location で GPX を再生するか、アプリ内の「デモ散歩」を使う。
+
+### サーバの接続先
+
+本番サーバ（Cloud Run）：https://road-collector-415368216017.asia-northeast1.run.app
+
+アプリは既定でこの URL につながる。ローカルで `./gradlew :server:run` するときだけ、`local.properties` に `SERVER_BASE_URL=http://10.0.2.2:8080` を書く（10.0.2.2 はエミュレータから見たホスト PC の localhost）。
+この値はビルド時にアプリへ埋め込まれるので、書き換えたら Gradle Sync してから Run し直す。
 
 ### サーバ（ローカル）
 
