@@ -181,7 +181,7 @@ fun CollectScreen(
                     Spacer(Modifier.height(8.dp))
                     Text(o.part.displayName)
                     Text(
-                        "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点 → 頂点 ${o.stats.simplifiedPoints} 個",
+                        "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点 → 頂点 ${o.stats.simplifiedPoints} 個（ε ${"%.0f".format(o.stats.epsilonM)} m）",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
