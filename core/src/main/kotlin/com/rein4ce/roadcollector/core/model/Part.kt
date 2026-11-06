@@ -49,7 +49,8 @@ data class Part(
     val walkedAt: Long = 0L,
     val name: String? = null,
 ) {
-    val displayName: String get() = name ?: kind.label
+    /** 画面に出す名前。名前がまだないときは、分類（L字など）ではなく歩いた距離で呼ぶ */
+    val displayName: String get() = name ?: "$distanceM m の散歩"
 
     companion object {
         const val DEFAULT_THICKNESS = 0.15f
