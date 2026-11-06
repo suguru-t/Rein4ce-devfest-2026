@@ -221,7 +221,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             onDragStopped = {
                                 val now = arranged.indexOfFirst { it.id == part.id }
                                 draggingId = null
-                                if (now != dragStartIndex) saveArranged(arranged)
+                                if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
+                                // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
+                                // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
+                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
