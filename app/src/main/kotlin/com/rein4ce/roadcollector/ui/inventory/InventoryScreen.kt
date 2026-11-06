@@ -1,7 +1,7 @@
 package com.rein4ce.roadcollector.ui.inventory
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +24,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.PartThumbnail
 import com.rein4ce.roadcollector.ui.theme.Orange
@@ -40,13 +44,15 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * B 担当：手持ちパーツ一覧。タップで選択（最大 5 個）→「積む」へ。
+ * B 担当：手持ちパーツ一覧。タップで選択（最大 5 個）→「積む」へ。長押しで削除。
  */
 @Composable
 fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
+    // 削除の確認ダイアログを出しているパーツ（null なら出していない）
+    var pendingDelete by remember { mutableStateOf<Part?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -55,10 +61,14 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text("手持ちパーツ ${parts.size} 個", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { repository.resetToSamples(); selectedIds.clear() }) { Text("サンプルに戻す") }
+            TextButton(onClick = {
+                repository.resetToSamples()
+                selectedIds.clear()
+                GameSession.selected = emptyList()
+            }) { Text("サンプルに戻す") }
         }
         Text(
-            "タップで選択（最大 ${GameSession.MAX_PARTS} 個）",
+            "タップで選択（最大 ${GameSession.MAX_PARTS} 個）・長押しで削除",
             style = MaterialTheme.typography.bodySmall,
         )
         Spacer(Modifier.height(8.dp))
@@ -81,6 +91,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             selectedIds.add(part.id)
                         }
                     },
+                    onLongClick = { pendingDelete = part },
                 )
             }
         }
@@ -98,22 +109,60 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             Text("選んだ ${selectedIds.size} 個で積む")
         }
     }
+
+    pendingDelete?.let { part ->
+        DeleteDialog(
+            part = part,
+            onConfirm = {
+                repository.remove(part.id)
+                // 選択中のパーツを消したときは、選択からも外す（積む画面に消えたパーツが渡らないように）
+                selectedIds.remove(part.id)
+                GameSession.selected = GameSession.selected.filterNot { it.id == part.id }
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null },
+        )
+    }
 }
 
 @Composable
-private fun PartCard(part: Part, selected: Boolean, onClick: () -> Unit) {
+private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val isSample = SampleParts.all.any { it.id == part.id }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("パーツを削除") },
+        text = {
+            Text(
+                "「${part.displayName}」を削除します。" +
+                    if (isSample) "サンプルは「サンプルに戻す」で元に戻せます。"
+                    else "採集したパーツは元に戻せません。",
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("削除") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
+    )
+}
+
+@Composable
+private fun PartCard(part: Part, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val border = if (selected) Modifier.border(3.dp, Orange, RoundedCornerShape(12.dp)) else Modifier
+    // 名前がないパーツは見出しが種類名になるので、下の行には種類名を重ねて出さない
+    val details = listOfNotNull(
+        part.kind.label.takeIf { part.name != null },
+        "${part.distanceM} m",
+        formatDate(part.walkedAt),
+    ).joinToString(" ・ ")
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .then(border)
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             PartThumbnail(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
             Text(part.displayName, style = MaterialTheme.typography.titleSmall)
             Text(
-                "${part.kind.label} ・ ${part.distanceM} m ・ ${formatDate(part.walkedAt)}",
+                details,
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF5B6675),
             )

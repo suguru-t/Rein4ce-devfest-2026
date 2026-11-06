@@ -45,8 +45,9 @@ class PartRepository(context: Context) {
         }
     }
 
+    /** 新しく採集したパーツは先頭に入れる（手持ち画面を開いたとき、すぐ見えるように） */
     fun add(part: Part) {
-        _parts.update { it + part }
+        _parts.update { listOf(part) + it }
         persist()
     }
 
