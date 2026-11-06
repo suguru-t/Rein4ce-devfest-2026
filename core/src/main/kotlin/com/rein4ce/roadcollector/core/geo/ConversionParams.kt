@@ -5,18 +5,29 @@ package com.rein4ce.roadcollector.core.geo
  * 「技術選定まとめ」6 章の初期値。実際に歩いてから調整する。
  */
 data class ConversionParams(
-    /** これ未満の距離はパーツにしない [m] */
-    val minDistanceM: Double = 200.0,
+    /**
+     * これ未満の距離はパーツにしない [m]。
+     * 2026-11-06 に 200 → 150（iPhone で歩いた 6 本のうち、きれいな L 字・ジグザグの 2 本が 157 m・178 m で弾かれていた）
+     */
+    val minDistanceM: Double = 150.0,
     /** accuracy がこれより悪い点は捨てる [m] */
     val maxAccuracyM: Float = 30f,
     /** 前回の点からこれ未満しか動いていない点は無視 [m] */
     val minStepM: Double = 5.0,
     /**
+     * 前回採用した点からの移動速度がこれを超える点は捨てる [m/s]（時刻が分かる点だけ）。
+     * 歩きは 1.5 m/s くらいなので、5 m/s（時速 18 km）を超える移動は GPS の飛び。
+     * 記録開始直後に位置が定まらずぐるぐる動く点や、建物の間で一瞬 30 m 飛ぶ点を落とす。
+     * 精度（accuracy）が分からない GPX でも効く。2026-11-06 追加
+     */
+    val maxSpeedMps: Double = 5.0,
+    /**
      * Douglas-Peucker の ε [m]。線からこれ以上離れた曲がりは残す。
      * 小さいほど歩いた形の細かい曲がりが残る（小さすぎると GPS の揺れまで形になる）。
      * 2026-11-06 に 15 → 8（歩いた形をなるべくそのままパーツにする方針）
+     * 2026-11-06 に 8 → 10（iPhone で歩いた 6 本で確認。8 だとまっすぐな区間に小さなコブが 1 つ出た記録があり、10 なら出ない。角は 10 でも全部残る）
      */
-    val epsilonM: Double = 8.0,
+    val epsilonM: Double = 10.0,
     /**
      * GPS の精度に合わせて ε を大きくするか。
      * true なら、アプリが使う点（精度 maxAccuracyM 以内）の精度の中央値と epsilonM の大きい方を ε にする。

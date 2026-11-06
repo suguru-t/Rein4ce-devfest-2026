@@ -11,7 +11,7 @@ import kotlin.math.max
 /**
  * GPS 軌跡 → Part への変換パイプライン。
  *
- * 1. フィルタ（精度・最小移動）
+ * 1. フィルタ（精度・最小移動・最大速度）
  * 2. メートル座標へ投影
  * 3. 距離チェック
  * 4. Douglas-Peucker で簡略化（頂点上限あり）
@@ -43,7 +43,7 @@ object TrackToPart {
         id: String = newId(),
         walkedAt: Long = points.lastOrNull()?.timeMs ?: 0L,
     ): Result {
-        val filtered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM)
+        val filtered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM, params.maxSpeedMps)
         if (filtered.size < 2) return Result.TooFewPoints(filtered.size)
 
         val xy = Projection.toMeters(filtered)
