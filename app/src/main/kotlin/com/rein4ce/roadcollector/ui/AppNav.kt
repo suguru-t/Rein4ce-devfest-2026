@@ -1,15 +1,11 @@
 package com.rein4ce.roadcollector.ui
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,25 +20,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -64,13 +59,16 @@ import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
  *   inventory … B：手持ちパーツ（ui/inventory）
  *   stack     … D：積み上げゲーム（ui/game）
  *   gallery   … C：サーバ連携（ui/gallery, net/）
+ *
+ * @property icon        選択中に出す「塗り」のアイコン
+ * @property iconOutline それ以外のときに出す「線画」のアイコン
  */
-sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
+sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
     // 靴・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
-    data object Collect : Dest("collect", "採集", AppIcons.Shoe)
-    data object Inventory : Dest("inventory", "手持ち", AppIcons.Bag)
-    data object Stack : Dest("stack", "積む", AppIcons.Blocks)
-    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share)
+    data object Collect : Dest("collect", "採集", AppIcons.Shoe, AppIcons.ShoeOutline)
+    data object Inventory : Dest("inventory", "手持ち", AppIcons.Bag, AppIcons.BagOutline)
+    data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
+    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
 
     companion object {
         val all = listOf(Collect, Inventory, Stack, Gallery)
@@ -108,9 +106,10 @@ fun AppNav() {
 }
 
 /**
- * 下のタブバー。YouTube や Slack のように、アイコンだけの平らなバー（丸いハイライトは出さない）。
- * タップしたタブだけ、アイコンが少し大きくなって下に名前が出る。それ以外は薄い灰色のアイコンだけ。
- * 色は野帳（Fieldbook）にそろえる。読み上げ（TalkBack）にはタブ名と選択状態を渡す。
+ * 下のタブバー。Instagram のタブのように、文字なし・アイコンだけ。
+ * 選択中は「塗り」、それ以外は「線画」のアイコンで、大きさと色は同じ（墨色）。
+ * タップしたタブは、ひと呼吸だけ縮んで戻る。背景は野帳の紙色、上に細い罫線。
+ * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡す。
  */
 @Composable
 private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
@@ -120,21 +119,22 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .height(60.dp),
+                .height(50.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Dest.all.forEach { dest ->
                 val isSelected = current?.hierarchy?.any { it.route == dest.route } == true
-                // 選ばれたら、バネのように少し跳ねて大きくなる
-                val scale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.2f else 1f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-                    label = "tabScale",
-                )
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                // 選ばれた瞬間にひと呼吸縮んで、バネで戻る
+                val scale = remember { Animatable(1f) }
+                LaunchedEffect(isSelected) {
+                    if (isSelected) {
+                        scale.snapTo(0.8f)
+                        scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                    }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
@@ -143,33 +143,20 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                             selected = isSelected
                             contentDescription = dest.label
                         }
-                        .clickable { onGo(dest) },
+                        // 波紋は出さない（Instagram と同じく、アイコンの弾みだけ）
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onGo(dest) },
                 ) {
                     Icon(
-                        imageVector = dest.icon,
+                        imageVector = if (isSelected) dest.icon else dest.iconOutline,
                         contentDescription = null,
-                        tint = if (isSelected) Fieldbook.Ink else Fieldbook.Mark,
+                        tint = Fieldbook.Ink,
                         modifier = Modifier
                             .size(26.dp)
                             .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
+                                scaleX = scale.value
+                                scaleY = scale.value
                             },
                     )
-                    // 名前は選んだタブだけ。開くときは下から伸びて、閉じるときは縮む
-                    AnimatedVisibility(
-                        visible = isSelected,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically(),
-                    ) {
-                        Text(
-                            dest.label,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Fieldbook.Ink,
-                            modifier = Modifier.padding(top = 6.dp).clearAndSetSemantics {},
-                        )
-                    }
                 }
             }
         }
