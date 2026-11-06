@@ -73,7 +73,7 @@ app/    com.rein4ce.roadcollector
 
 server/ com.rein4ce.roadcollector.server                                                  … C
   Application.kt  Ktor 起動（PORT 環境変数）
-  Routes.kt       GET /, /healthz, /towers, POST /towers, GET /towers/{id}, /towers/{id}/image.svg
+  Routes.kt       GET /, /health, /towers, POST /towers, GET /towers/{id}, /towers/{id}/image.svg
   TowerStore.kt   いまはメモリ。Firestore に置き換える
   SharePage.kt    OGP 付き共有ページ
 ```

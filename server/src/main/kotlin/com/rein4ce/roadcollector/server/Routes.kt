@@ -21,7 +21,7 @@ import io.ktor.server.routing.post
  * API 一覧（技術選定まとめ 4 章）
  *
  *   GET  /                     動作確認
- *   GET  /healthz              ヘルスチェック
+ *   GET  /health               ヘルスチェック（/healthz は Cloud Run の予約パスで届かないため使わない）
  *   GET  /towers               一覧（新しい順）
  *   POST /towers               保存 → { id, url }
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON
@@ -36,7 +36,7 @@ fun Route.towerRoutes(store: TowerStore) {
         call.respondText("Road Collector server OK (${store.count()} towers)")
     }
 
-    get("/healthz") {
+    get("/health") {
         call.respondText("ok")
     }
 
