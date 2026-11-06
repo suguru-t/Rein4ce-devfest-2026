@@ -13,6 +13,7 @@ import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
+import com.rein4ce.roadcollector.core.geo.TrackFilter
 import com.rein4ce.roadcollector.core.geo.TrackToPart
 import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
@@ -45,14 +46,22 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     var outcome: Outcome? by mutableStateOf(null)
         private set
 
-    var isDemoPlaying: Boolean by mutableStateOf(false)
+    /** 再生中のものの呼び名（「デモ散歩」「ファイル」）。再生していなければ null */
+    var playingLabel: String? by mutableStateOf(null)
         private set
+
+    val isDemoPlaying: Boolean get() = playingLabel != null
 
     private var demoJob: Job? = null
 
-    /** 距離 [m]（表示用。フィルタ前の生データなので目安） */
-    fun distanceM(pts: List<TrackPoint>): Double =
-        Projection.pathLength(Projection.toMeters(pts))
+    /**
+     * 距離 [m]（表示用）。パーツの distanceM と同じく TrackFilter を通してから測るので、
+     * 見出しの「L=」と結果ダイアログの「L=」が同じ値になる。
+     */
+    fun distanceM(pts: List<TrackPoint>): Double {
+        val p = ConversionParams.DEFAULT
+        return Projection.pathLength(Projection.toMeters(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps)))
+    }
 
     fun startRecording() {
         val ctx = getApplication<Application>()
@@ -65,16 +74,16 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAndConvert() {
         val ctx = getApplication<Application>()
         demoJob?.cancel()
-        isDemoPlaying = false
+        playingLabel = null
         LocationRecordingService.stop(ctx)
         val pts = TrackRecorder.stop()
         convert(pts)
     }
 
-    fun playDemo(track: SampleTracks.SampleTrack) = playPoints { track.points }
+    fun playDemo(track: SampleTracks.SampleTrack) = playPoints("デモ散歩") { track.points }
 
     /** 実機で録った GPX / JSON ファイルを読んで、デモ散歩と同じように流す。 */
-    fun playFile(uri: Uri) = playPoints {
+    fun playFile(uri: Uri) = playPoints("ファイル") {
         val ctx = getApplication<Application>()
         val text = withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -82,11 +91,11 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         TrackFileParser.parse(text)
     }
 
-    private fun playPoints(load: suspend () -> List<TrackPoint>) {
+    private fun playPoints(label: String, load: suspend () -> List<TrackPoint>) {
         if (isRecording.value) return
         demoJob?.cancel()
         demoJob = viewModelScope.launch {
-            isDemoPlaying = true
+            playingLabel = label
             try {
                 val points = try {
                     load()
@@ -100,7 +109,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                 val pts = TrackRecorder.stop()
                 convert(pts)
             } finally {
-                isDemoPlaying = false
+                playingLabel = null
             }
         }
     }

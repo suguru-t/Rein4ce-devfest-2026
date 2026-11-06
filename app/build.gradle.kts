@@ -78,6 +78,8 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    // 手持ちのドラッグでの並べ替え（LazyVerticalGrid 用。Apache-2.0）
+    implementation(libs.reorderable)
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.play.services.location)
@@ -92,4 +94,5 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -37,7 +37,7 @@ import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
     // アイコンは material-icons の標準セット（追加依存なし）。好みで material-icons-extended に替えてよい
     data object Collect : Dest("collect", "採集", Icons.Filled.Place)
-    data object Inventory : Dest("inventory", "手持ち", Icons.AutoMirrored.Filled.List)
+    data object Inventory : Dest("inventory", "コレクション", Icons.AutoMirrored.Filled.List)
     data object Stack : Dest("stack", "積む", Icons.Filled.Build)
     data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share)
 
