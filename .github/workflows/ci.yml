@@ -1,0 +1,53 @@
+# main への push とプルリクエストのたびに、core のテスト・server のビルド・app の APK ビルドを走らせる。
+# ビルドした APK は、実行結果ページの Artifacts から app-debug.apk としてダウンロードできる（14 日間保存）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同じブランチで新しい push があったら、古い実行は止める
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # Gradle のキャッシュは setup-java の標準機能を使う
+      # （gradle/actions v6 のキャッシュは別ライセンスの部品になったため使わない）
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      # local.properties が無いので、MAPS_API_KEY は空（地図なし）、SERVER_BASE_URL は本番の Cloud Run になる
+      - name: core のテスト・server のビルド・app の APK ビルド
+        run: ./gradlew --no-daemon :core:test :server:build :app:assembleDebug
+
+      - name: APK をアップロード
+        uses: actions/upload-artifact@v7
+        with:
+          path: app/build/outputs/apk/debug/app-debug.apk
+          archive: false
+          retention-days: 14
+
+      - name: テスト結果をアップロード（失敗したときだけ）
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            core/build/reports/tests/
+            server/build/reports/tests/
+          retention-days: 7
