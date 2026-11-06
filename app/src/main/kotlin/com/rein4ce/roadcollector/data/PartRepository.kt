@@ -21,11 +21,22 @@ import java.io.File
 /**
  * 手持ちパーツの保存。いまは JSON ファイル 1 つ（filesDir/parts.json）。
  * Room に置き換えるときは、このクラスの中身だけ差し替えればよい。
+ *
+ * テストでは [file] と [scope] を差し替えて、Android なしで動かす（app/src/test の PartRepositoryTest）。
+ *
+ * @param file    保存先
+ * @param scope   読み込み・保存を走らせる場所
+ * @param logError 読み込み・保存に失敗したときの記録（テストでは何もしない関数を渡す）
  */
-class PartRepository(context: Context) {
+class PartRepository(
+    private val file: File,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val logError: (String, Throwable) -> Unit = { message, e -> Log.w(TAG, message, e) },
+) {
 
-    private val file = File(context.filesDir, "parts.json")
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** アプリからはこちら。保存先は filesDir/parts.json */
+    constructor(context: Context) : this(File(context.filesDir, "parts.json"))
+
     private val serializer = ListSerializer(Part.serializer())
     private val writeLock = Mutex()
 
@@ -55,7 +66,7 @@ class PartRepository(context: Context) {
     private fun load() {
         val fromFile: List<Part>? = runCatching {
             if (file.exists()) AppJson.decodeFromString(serializer, file.readText()) else null
-        }.onFailure { Log.w(TAG, "parts.json could not be read, reseeding", it) }.getOrNull()
+        }.onFailure { logError("parts.json could not be read, reseeding", it) }.getOrNull()
 
         val base = fromFile ?: SampleParts.all
         var addedBeforeLoad = false
@@ -89,6 +100,33 @@ class PartRepository(context: Context) {
     }
 
     /**
+     * パーツに名前を付ける。命名 API（POST /parts/name）の結果を入れるときと、手持ち画面で付け直すときに使う。
+     *
+     * - 前後の空白は落とす。空なら名前を外す（表示は「○ m の散歩」に戻る）
+     * - そのパーツがもう無い（名前が届く前に削除された）ときは何もしない
+     * - 積む画面に渡した選択（[GameSession.selected]）には反映しない。反映すると、積んでいる途中のゲームが最初からやり直しになるため
+     *
+     * @return 名前を付けた（そのパーツがあった）なら true
+     */
+    fun rename(id: String, name: String?): Boolean {
+        val cleaned = name?.trim()?.takeIf { it.isNotEmpty() }
+        var found = false
+        _parts.update { list ->
+            found = false // update は競合すると関数を呼び直すので、毎回数え直す
+            list.map { p ->
+                if (p.id == id) {
+                    found = true
+                    p.copy(name = cleaned)
+                } else {
+                    p
+                }
+            }
+        }
+        if (found) persist()
+        return found
+    }
+
+    /**
      * parts.json に保存する。
      * - 起動時の読み込みが終わるまで待つ（読む前に書くと、保存済みの手持ちを上書きしてしまう）
      * - 書き込みは 1 本ずつ順番に行い、書く直前の最新の状態を書く（古い状態が後から上書きして、消したパーツが復活しないように）
@@ -106,7 +144,7 @@ class PartRepository(context: Context) {
                         file.writeText(json)
                         tmp.delete()
                     }
-                }.onFailure { Log.e(TAG, "failed to save parts.json", it) }
+                }.onFailure { logError("failed to save parts.json", it) }
             }
         }
     }

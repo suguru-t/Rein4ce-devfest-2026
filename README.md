@@ -52,13 +52,14 @@ Cloud Run へのデプロイは [server/README.md](server/README.md)。
 ```
 ./gradlew :core:test     # 変換ロジック・物理・SVG・軌跡ファイル読み込み
 ./gradlew :server:test   # サーバの API（保存・一覧・共有ページ・画像）
+./gradlew :app:testDebugUnitTest   # アプリの手持ちの保存（Android なしで動く）
 ```
 
 `core` は Android に依存しないので、変換ロジックと物理はここで素早く検証できる。
 
 ### 自動チェック（GitHub Actions）
 
-main への push とプルリクエストのたびに、`core` と `server` のテスト、`server` のビルド、`app` の APK ビルドが自動で走る（`.github/workflows/ci.yml`）。結果はリポジトリの Actions タブで見られる。
+main への push とプルリクエストのたびに、`core`・`server`・`app` のテスト、`server` のビルド、`app` の APK ビルドが自動で走る（`.github/workflows/ci.yml`）。結果はリポジトリの Actions タブで見られる。
 
 ビルドした APK は、各実行結果ページの Artifacts にある `app-debug.apk` からダウンロードできる（GitHub へのログインが必要。14 日間保存）。
 
@@ -120,7 +121,7 @@ data class Part(
 ## 検証状況（正直に。2026-11-06 時点）
 
 - `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 34 本が通る
-- `app`：エミュレータ（Android 17）で「デモ散歩 → 手持ち → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。**実機での GPS 記録と、Maps API キーを入れたときの地図表示はまだ確認していない**
+- `app`：手持ちの保存のユニットテスト 7 本が通る。エミュレータ（Android 17）で「デモ散歩 → 手持ち → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
 - `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）
 - `gradle/libs.versions.toml` の版はすべて公開済みのもの。Studio が新しい版を勧めてきたら上げて構わない
