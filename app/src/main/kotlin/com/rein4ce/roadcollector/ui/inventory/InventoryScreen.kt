@@ -2,11 +2,13 @@ package com.rein4ce.roadcollector.ui.inventory
 
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -74,6 +76,8 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
+import androidx.compose.animation.core.animateFloatAsState
+import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -132,23 +136,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text("コレクション", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-            Spacer(Modifier.weight(1f))
-            Text(
-                when {
-                    editing -> "並べ替え中"
-                    // 読み込み中は parts が空なので、件数は出さない
-                    !isLoaded -> "読み込み中…"
-                    else -> "採集 ${parts.size - sampleCount} ・ 見本 $sampleCount"
-                },
-                fontFamily = Fieldbook.Data,
-                fontSize = 12.sp,
-                fontWeight = if (editing) FontWeight.Bold else FontWeight.Normal,
-                color = if (editing) Fieldbook.Survey else Fieldbook.Muted,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-        }
+        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）
+        CollectionMeter(
+            totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
+            walks = parts.size - sampleCount,
+            samples = sampleCount,
+            isLoaded = isLoaded,
+            editing = editing,
+            reduceMotion = reduceMotion,
+        )
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (editing) {
@@ -281,6 +277,65 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 pendingDelete = null
             },
             onDismiss = { pendingDelete = null },
+        )
+    }
+}
+
+/**
+ * コレクション画面の見出し。小さな「コレクション」の下に、歩いた距離の合計（見本は含めない）を大きく出す。
+ * 合計が変わると、メーターのように数字が回って新しい値まで動く（アニメーションを切っている人には動かさない）。
+ * 読み込み中は parts が空なので、数字は出さない。
+ */
+@Composable
+private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boolean, editing: Boolean, reduceMotion: Boolean) {
+    // メーターの値。合計が変わったら、数字が回って新しい値まで動く
+    val shownM by animateFloatAsState(
+        targetValue = totalM.toFloat(),
+        animationSpec = if (reduceMotion) snap() else tween(durationMillis = 1_100, easing = FastOutSlowInEasing),
+        label = "meter",
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 $totalM メートル。見本 $samples" else "コレクション。読み込み中"
+            },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "コレクション",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = Fieldbook.Muted,
+            )
+            Spacer(Modifier.weight(1f))
+            if (editing) {
+                Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
+            }
+        }
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                if (isLoaded) "%,d".format(shownM.roundToInt()) else "—",
+                fontFamily = Fieldbook.Data,
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.5).sp,
+                color = Fieldbook.Ink,
+            )
+            Text(
+                "m",
+                fontFamily = Fieldbook.Data,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Fieldbook.Ink,
+                modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
+            )
+        }
+        Text(
+            if (isLoaded) "これまでに集めた道 $walks 本 ・ 見本 $samples" else "読み込み中…",
+            fontSize = 13.sp,
+            color = Fieldbook.Ink,
         )
     }
 }
