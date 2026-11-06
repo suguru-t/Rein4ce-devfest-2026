@@ -163,7 +163,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         drawPart(part, center, scalePx, color = Fieldbook.Road)
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
-        drawCompassNeedle(measurer, center = Offset(ox + s - 14f * u, oy + 22f * u), length = 26f * u, labelStyle = label)
+        drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = 8.sp))
 
         // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
         val len = normalizedLength(part)

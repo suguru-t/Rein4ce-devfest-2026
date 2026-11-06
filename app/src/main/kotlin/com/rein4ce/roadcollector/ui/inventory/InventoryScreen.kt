@@ -133,7 +133,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text("手持ち", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+            Text("コレクション", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
             Spacer(Modifier.weight(1f))
             Text(
                 when {

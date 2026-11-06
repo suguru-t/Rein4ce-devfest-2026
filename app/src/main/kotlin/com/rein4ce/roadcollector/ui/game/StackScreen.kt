@@ -84,9 +84,9 @@ fun StackScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("手持ちパーツがありません")
+            Text("コレクションにパーツがありません")
             Spacer(Modifier.height(8.dp))
-            Button(onClick = onGoInventory) { Text("手持ちへ") }
+            Button(onClick = onGoInventory) { Text("コレクションへ") }
         }
         return
     }
