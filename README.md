@@ -28,7 +28,7 @@
 エミュレータで歩くには Extended Controls → Location で GPX を再生するか、アプリ内の「デモ散歩」を使う。
 
 「デモ散歩」メニューの「ファイルから再生（GPX / JSON）」で、実機で録った軌跡ファイルを早回しで流せる（`core/io/TrackFileParser`）。
-GPX は `<trkpt lat lon><time>` を読む（精度は不明として扱う）。JSON は `TrackPoint` の配列（`[{"lat":…,"lng":…,"accuracyM":…,"timeMs":…}]`）か `Track`（`{"points":[…]}`）。
+GPX は `<trkpt lat lon><time>` を読む（精度は不明として扱う）。JSON は `TrackPoint` の配列（`[{"lat":…,"lng":…,"accuracyM":…,"timeMs":…}]`）か、`points` を持つオブジェクト（`{"points":[…]}`。`Track` 全体でも可）。
 デモ散歩・ファイル再生とも、時刻は「最後の点 = 今」にずらして流すので、パーツの採集日時は再生した日時になる。
 
 ### サーバの接続先
@@ -119,7 +119,7 @@ data class Part(
 
 ## 検証状況（正直に。2026-11-06 時点）
 
-- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 17 本が通る
+- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 19 本が通る
 - `app`：エミュレータ（Android 17）で「デモ散歩 → 手持ち → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。**実機での GPS 記録と、Maps API キーを入れたときの地図表示はまだ確認していない**
 - `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）

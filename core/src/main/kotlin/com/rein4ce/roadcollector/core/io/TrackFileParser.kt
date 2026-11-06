@@ -1,7 +1,6 @@
 package com.rein4ce.roadcollector.core.io
 
 import com.rein4ce.roadcollector.core.model.AppJson
-import com.rein4ce.roadcollector.core.model.Track
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
@@ -19,7 +18,9 @@ import org.w3c.dom.Element
  *
  * - GPX：`<trkpt lat="…" lon="…"><time>…</time></trkpt>`（`<rtept>` も可）。
  *   精度は GPX に無いので 0（不明）にする。`<time>` が無ければ 0
- * - JSON：[Track] 全体（`{"points":[…]}`）か、[TrackPoint] の配列（`[{"lat":…,"lng":…},…]`）
+ * - JSON：[TrackPoint] の配列（`[{"lat":…,"lng":…},…]`）か、`points` を持つオブジェクト
+ *   （[com.rein4ce.roadcollector.core.model.Track] 全体でも、`{"points":[…]}` だけでも可）
+ * - 先頭の BOM・空白・改行は無視する
  *
  * 読めないときは [IllegalArgumentException]（メッセージは画面にそのまま出す想定）。
  */
@@ -29,7 +30,7 @@ object TrackFileParser {
 
     /** 先頭の文字で GPX（XML）か JSON かを判定する。 */
     fun detect(text: String): Format? {
-        val head = text.trimStart('﻿', ' ', '\t', '\r', '\n')
+        val head = clean(text)
         return when {
             head.startsWith("<") -> Format.GPX
             head.startsWith("{") || head.startsWith("[") -> Format.JSON
@@ -37,22 +38,31 @@ object TrackFileParser {
         }
     }
 
-    fun parse(text: String): List<TrackPoint> = when (detect(text)) {
-        Format.GPX -> parseGpx(text)
-        Format.JSON -> parseJson(text)
-        null -> throw IllegalArgumentException("GPX でも JSON でもありません")
+    fun parse(text: String): List<TrackPoint> {
+        val body = clean(text)
+        return when (detect(body)) {
+            Format.GPX -> parseGpx(body)
+            Format.JSON -> parseJson(body)
+            null -> throw IllegalArgumentException("GPX でも JSON でもありません")
+        }
     }
+
+    /** BOM と先頭の空白・改行を落とす（BOM 付き JSON や、先頭が改行の GPX も読めるように） */
+    private fun clean(text: String): String = text.trimStart('﻿', ' ', '\t', '\r', '\n')
 
     fun parseJson(text: String): List<TrackPoint> {
         val element = try {
-            AppJson.parseToJsonElement(text)
+            AppJson.parseToJsonElement(clean(text))
         } catch (e: Exception) {
             throw IllegalArgumentException("JSON として読めません：${e.message}")
         }
+        val pointsSerializer = ListSerializer(TrackPoint.serializer())
         val points = try {
             when {
-                element is JsonArray -> AppJson.decodeFromJsonElement(ListSerializer(TrackPoint.serializer()), element)
-                element is JsonObject && "points" in element -> AppJson.decodeFromJsonElement(Track.serializer(), element).points
+                element is JsonArray -> AppJson.decodeFromJsonElement(pointsSerializer, element)
+                // Track 全体でも、{"points":[…]} だけ（id などが無い）でも読めるように points だけを見る
+                element is JsonObject && "points" in element ->
+                    AppJson.decodeFromJsonElement(pointsSerializer, element.getValue("points"))
                 else -> throw IllegalArgumentException("points の配列が見つかりません")
             }
         } catch (e: IllegalArgumentException) {
@@ -62,7 +72,8 @@ object TrackFileParser {
         return points
     }
 
-    fun parseGpx(text: String): List<TrackPoint> {
+    fun parseGpx(rawText: String): List<TrackPoint> {
+        val text = clean(rawText)
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = false
             // 外部エンティティは読まない（他人のファイルを開くので）

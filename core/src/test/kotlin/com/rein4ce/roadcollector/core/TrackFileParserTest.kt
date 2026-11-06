@@ -52,6 +52,25 @@ class TrackFileParserTest {
     }
 
     @Test
+    fun `json object with only points is read`() {
+        val src = SampleTracks.bar.points.take(5)
+        val text = "{\"points\":" + AppJson.encodeToString(ListSerializer(TrackPoint.serializer()), src) + "}"
+        assertEquals(src, TrackFileParser.parse(text))
+    }
+
+    @Test
+    fun `leading bom and whitespace are ignored`() {
+        val src = SampleTracks.bar.points.take(3)
+        val json = "﻿  \n" + AppJson.encodeToString(ListSerializer(TrackPoint.serializer()), src)
+        assertEquals(TrackFileParser.Format.JSON, TrackFileParser.detect(json))
+        assertEquals(src, TrackFileParser.parse(json))
+
+        val gpxWithLeadingNewline = "﻿\n\n" + gpx
+        assertEquals(TrackFileParser.Format.GPX, TrackFileParser.detect(gpxWithLeadingNewline))
+        assertEquals(3, TrackFileParser.parse(gpxWithLeadingNewline).size)
+    }
+
+    @Test
     fun `unreadable input is rejected with a message`() {
         assertThrows(IllegalArgumentException::class.java) { TrackFileParser.parse("hello") }
         assertThrows(IllegalArgumentException::class.java) { TrackFileParser.parse("<gpx></gpx>") }
