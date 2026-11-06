@@ -154,10 +154,10 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
 @Composable
 private fun PartCard(part: Part, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val border = if (selected) Modifier.border(3.dp, Orange, RoundedCornerShape(12.dp)) else Modifier
-    // 名前がないパーツは見出しが種類名になるので、下の行には種類名を重ねて出さない
+    // 主役は形そのもの。分類（L字など）は出さない。
+    // 名前がないパーツは見出しが「705 m の散歩」になるので、下の行に距離を重ねて出さない
     val details = listOfNotNull(
-        part.kind.label.takeIf { part.hasName },
-        "${part.distanceM} m",
+        "${part.distanceM} m".takeIf { part.hasName },
         formatDate(part.walkedAt),
     ).joinToString(" ・ ")
     Card(

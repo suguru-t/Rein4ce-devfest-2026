@@ -179,7 +179,7 @@ fun CollectScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     PartThumbnail(o.part, modifier = Modifier.size(140.dp))
                     Spacer(Modifier.height(8.dp))
-                    Text("${o.part.kind.label} ・ ${o.part.distanceM} m")
+                    Text(o.part.displayName)
                     Text(
                         "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点 → 頂点 ${o.stats.simplifiedPoints} 個",
                         style = MaterialTheme.typography.bodySmall,

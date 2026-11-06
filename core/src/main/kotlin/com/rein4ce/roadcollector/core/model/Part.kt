@@ -30,7 +30,7 @@ enum class Kind(val label: String) {
  *
  * フィールドを変えるときは必ず全員に周知すること。
  *
- * @property points     正規化済みの頂点列。バウンディングボックスの中心が原点、長辺が 1.0。最大 12 個程度。
+ * @property points     正規化済みの頂点列。バウンディングボックスの中心が原点、長辺が 1.0。最大 24 個（ConversionParams.maxVertices）。
  * @property thickness  太さ。長辺に対する比率（初期値 0.15）。
  * @property closed     輪なら true（最後の点と最初の点をつなぐ）。
  * @property kind       表示用の分類。
@@ -52,8 +52,8 @@ data class Part(
     /** 名前が付いているか。空文字は「名前なし」と同じに扱う（名前の有無はここだけで判定する） */
     val hasName: Boolean get() = !name.isNullOrBlank()
 
-    /** 画面に出す名前。名前がないときは分類名 */
-    val displayName: String get() = name?.takeIf { hasName } ?: kind.label
+    /** 画面に出す名前。名前がまだないときは、分類（L字など）ではなく歩いた距離で呼ぶ */
+    val displayName: String get() = name?.takeIf { hasName } ?: "$distanceM m の散歩"
 
     companion object {
         const val DEFAULT_THICKNESS = 0.15f

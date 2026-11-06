@@ -95,7 +95,7 @@ server/ com.rein4ce.roadcollector.server                                        
 
 ### 各担当の「次にやること」
 
-- **A（採集）**：実機で歩いて `ConversionParams` の数値（精度 30 m、最小移動 5 m、ε 15 m）を調整。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みは済み。Issue #1）
+- **A（採集）**：実機で歩いて `ConversionParams` の数値（精度 30 m、最小移動 5 m、ε 8 m、頂点 24 個）を調整。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みは済み。Issue #1）
 - **B（変換・手持ち）**：`TrackToPart.classify` の精度（実データで棒/L/U/輪/ジグザグがどう出るか）。手持ち画面の見た目、削除、並び替え
 - **C（サーバ）**：Day1 に Cloud Run へ Hello World をデプロイ（server/README.md）。`TowerStore` を Firestore に。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
 - **D（ゲーム）**：操作感（ドラッグ感度、回転の刻み）、台の幅、摩擦などの調整。静止判定の待ち時間。対戦モード（交互置き or 非同期スコアバトル）
@@ -105,7 +105,7 @@ server/ com.rein4ce.roadcollector.server                                        
 ```kotlin
 data class Part(
     val id: String,
-    val points: List<Pt>,     // 正規化済み。バウンディングボックス中心が原点、長辺 1.0、y 上向き。最大 12 個
+    val points: List<Pt>,     // 正規化済み。バウンディングボックス中心が原点、長辺 1.0、y 上向き。最大 24 個
     val thickness: Float,     // 太さ（長辺に対する比率、初期値 0.15）
     val closed: Boolean,      // 輪なら true
     val kind: Kind,           // BAR / L / U / RING / ZIGZAG / OTHER（表示用）
@@ -119,7 +119,7 @@ data class Part(
 
 ## 検証状況（正直に。2026-11-06 時点）
 
-- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 19 本が通る
+- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 23 本が通る
 - `app`：エミュレータ（Android 17）で「デモ散歩 → 手持ち → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。**実機での GPS 記録と、Maps API キーを入れたときの地図表示はまだ確認していない**
 - `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）
