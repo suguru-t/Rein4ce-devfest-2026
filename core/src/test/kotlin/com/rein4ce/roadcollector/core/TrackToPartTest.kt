@@ -101,8 +101,45 @@ class TrackToPartTest {
         assertEquals(Kind.BAR, part.kind)
     }
 
-    /** 経路点（メートル）を 4 m 刻みで補間し、±2 m の揺れを足して GPS の点列にする（SampleTracks と同じ作り方）。 */
-    private fun walk(waypointsM: List<Pair<Double, Double>>, seed: Int = 42): List<TrackPoint> {
+    @Test
+    fun `accurate gps keeps the base epsilon`() {
+        // 精度 ±3 m の記録は、ε 8 m のまま細かく残す
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0), accuracyM = 3f)) as TrackToPart.Result.Success
+        assertEquals(8.0, r.stats.epsilonM, 1e-9)
+    }
+
+    @Test
+    fun `rough gps is simplified to its accuracy`() {
+        // まっすぐ 400 m を、±6 m 揺れる粗い GPS（精度 15 m）で記録したもの。
+        // ε 8 m のままだと揺れが 11 個の頂点になる（揺れがもっと大きいと頂点の上限で ε が勝手に上がるので、この程度で試す）
+        val track = walk(listOf(0.0 to 0.0, 0.0 to 400.0), noiseM = 6.0, accuracyM = 15f)
+        val fixed = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(epsilonFollowsAccuracy = false)) as TrackToPart.Result.Success
+        val adaptive = TrackToPart.convert(track) as TrackToPart.Result.Success
+
+        // ε を精度（15 m）に合わせると、揺れが形にならず、名札もまっすぐ（棒）になる
+        assertEquals(15.0, adaptive.stats.epsilonM, 1e-9)
+        assertTrue("fixed=${fixed.part.points.size} adaptive=${adaptive.part.points.size}", adaptive.part.points.size < fixed.part.points.size)
+        assertTrue("adaptive=${adaptive.part.points.size}", adaptive.part.points.size <= 3)
+        assertEquals(Kind.BAR, adaptive.part.kind)
+    }
+
+    @Test
+    fun `unknown accuracy keeps the base epsilon`() {
+        // GPX など、精度が分からない（0）点だけなら、ε 8 m のまま
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0), accuracyM = 0f)) as TrackToPart.Result.Success
+        assertEquals(8.0, r.stats.epsilonM, 1e-9)
+    }
+
+    /**
+     * 経路点（メートル）を 4 m 刻みで補間し、±noiseM の揺れを足して GPS の点列にする（SampleTracks と同じ作り方）。
+     * accuracyM は全点に同じ値を入れる（0 は「精度が分からない」）。
+     */
+    private fun walk(
+        waypointsM: List<Pair<Double, Double>>,
+        seed: Int = 42,
+        noiseM: Double = 2.0,
+        accuracyM: Float = 8f,
+    ): List<TrackPoint> {
         val rnd = Random(seed)
         val lat0 = 35.7496
         val lng0 = 139.8049
@@ -116,9 +153,9 @@ class TrackToPartTest {
             val n = (hypot(x1 - x0, y1 - y0) / 4.0).toInt().coerceAtLeast(1)
             for (k in (if (i == 1) 0 else 1)..n) {
                 val f = k.toDouble() / n
-                val x = x0 + (x1 - x0) * f + (rnd.nextDouble() * 2 - 1) * 2.0
-                val y = y0 + (y1 - y0) * f + (rnd.nextDouble() * 2 - 1) * 2.0
-                out += TrackPoint(lat0 + y / mPerDegLat, lng0 + x / mPerDegLng, accuracyM = 8f, timeMs = t)
+                val x = x0 + (x1 - x0) * f + (rnd.nextDouble() * 2 - 1) * noiseM
+                val y = y0 + (y1 - y0) * f + (rnd.nextDouble() * 2 - 1) * noiseM
+                out += TrackPoint(lat0 + y / mPerDegLat, lng0 + x / mPerDegLng, accuracyM = accuracyM, timeMs = t)
                 t += 3_000L
             }
         }

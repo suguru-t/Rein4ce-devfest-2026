@@ -33,6 +33,8 @@ object TrackToPart {
         val simplifiedPoints: Int,
         val distanceM: Double,
         val longSideM: Double,
+        /** 簡略化に実際に使った ε [m]（GPS の精度に合わせて大きくなることがある） */
+        val epsilonM: Double,
     )
 
     fun convert(
@@ -48,7 +50,8 @@ object TrackToPart {
         val distance = Projection.pathLength(xy)
         if (distance < params.minDistanceM) return Result.TooShort(distance, params.minDistanceM)
 
-        val simplified = Simplify.rdpWithLimit(xy, params.epsilonM, params.maxVertices)
+        val epsilon = effectiveEpsilon(filtered, params)
+        val simplified = Simplify.rdpWithLimit(xy, epsilon, params.maxVertices)
         if (simplified.size < 2) return Result.TooFewPoints(simplified.size)
 
         val bbox = BBox.of(simplified)
@@ -67,8 +70,9 @@ object TrackToPart {
             )
         }
 
-        // 分類は粗い形で判定する（形を細かく残しても、名札と色が変わらないように）
-        val coarse = Simplify.rdpWithLimit(xy, params.classifyEpsilonM, params.classifyMaxVertices)
+        // 分類は粗い形で判定する（形を細かく残しても、名札と色が変わらないように）。
+        // GPS が粗くて ε を大きくしたときは、分類もそれより細かくは見ない（揺れを曲がり角と数えないように）
+        val coarse = Simplify.rdpWithLimit(xy, max(params.classifyEpsilonM, epsilon), params.classifyMaxVertices)
         val kind = classify(coarse.map { Pt(it.x.toFloat(), it.y.toFloat()) }, closed)
 
         val part = Part(
@@ -86,8 +90,21 @@ object TrackToPart {
             simplifiedPoints = simplified.size,
             distanceM = distance,
             longSideM = longSide,
+            epsilonM = epsilon,
         )
         return Result.Success(part, stats)
+    }
+
+    /**
+     * 簡略化に使う ε [m]。
+     * [ConversionParams.epsilonFollowsAccuracy] なら、使う点の精度の中央値と [ConversionParams.epsilonM] の大きい方。
+     * 精度が分からない点（0）は数えず、全部分からなければ epsilonM のまま。
+     */
+    fun effectiveEpsilon(filtered: List<TrackPoint>, params: ConversionParams): Double {
+        if (!params.epsilonFollowsAccuracy) return params.epsilonM
+        val known = filtered.map { it.accuracyM.toDouble() }.filter { it > 0.0 }.sorted()
+        if (known.isEmpty()) return params.epsilonM
+        return max(params.epsilonM, known[known.size / 2])
     }
 
     /**

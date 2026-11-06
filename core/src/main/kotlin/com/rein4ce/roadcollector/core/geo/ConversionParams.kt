@@ -18,6 +18,14 @@ data class ConversionParams(
      */
     val epsilonM: Double = 8.0,
     /**
+     * GPS の精度に合わせて ε を大きくするか。
+     * true なら、アプリが使う点（精度 maxAccuracyM 以内）の精度の中央値と epsilonM の大きい方を ε にする。
+     * 精度が良い記録は epsilonM のまま細かく残し、粗い記録だけ大まかにまとめる（GPS の揺れで形が絡まらないように）。
+     * 精度が分からない点（accuracyM = 0。GPX など）は数えない。全部分からなければ epsilonM のまま。
+     * 2026-11-06 追加（iPhone で歩いた 6 本で確認。精度が良い 5 本は変わらず、粗い 1 本は頂点 16 → 9 個）
+     */
+    val epsilonFollowsAccuracy: Boolean = true,
+    /**
      * 頂点の上限。曲がり角の多い散歩でも角を残せるように多めにしている。
      * 1 頂点ごとに物理の部品（矩形 1 つ＋関節の円 1 つ）が増える。
      * 2026-11-06 に 12 → 24
