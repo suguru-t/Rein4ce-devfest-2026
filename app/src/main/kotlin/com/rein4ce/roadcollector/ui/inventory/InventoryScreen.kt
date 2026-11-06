@@ -130,10 +130,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // 虫めがねで大きく見ているパーツ（null なら見ていない）
     var zoomed by remember { mutableStateOf<Part?>(null) }
 
+    // 方眼の地はアプリ全体（AppNav の Scaffold）で 1 枚敷いているので、ここでは描かない（二重になって端で線がずれる）
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）
