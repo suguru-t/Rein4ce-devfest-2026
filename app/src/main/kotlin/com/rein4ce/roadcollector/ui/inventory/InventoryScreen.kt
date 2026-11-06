@@ -50,7 +50,16 @@ import java.util.Locale
 fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
+    // 並びは「採集したパーツを新しい順 → サンプルを決まった順」。保存の順番には頼らない
+    val shown = remember(parts) {
+        val (samples, collected) = parts.partition { SampleParts.byId(it.id) != null }
+        collected.sortedByDescending { it.walkedAt } +
+            samples.sortedBy { s -> SampleParts.all.indexOfFirst { it.id == s.id } }
+    }
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
+    // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
+    val validSelected = selectedIds.filter { id -> parts.any { it.id == id } }
+    val missingSamples = SampleParts.all.count { s -> parts.none { it.id == s.id } }
     // 削除の確認ダイアログを出しているパーツ（null なら出していない）
     var pendingDelete by remember { mutableStateOf<Part?>(null) }
 
@@ -61,11 +70,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text("手持ちパーツ ${parts.size} 個", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = {
-                repository.resetToSamples()
-                selectedIds.clear()
-                GameSession.selected = emptyList()
-            }) { Text("サンプルに戻す") }
+            // 消したサンプルだけを足し戻す。採集したパーツと選択には触らない
+            if (missingSamples > 0) {
+                TextButton(onClick = { repository.restoreMissingSamples() }) { Text("サンプルを戻す") }
+            }
         }
         Text(
             "タップで選択（最大 ${GameSession.MAX_PARTS} 個）・長押しで削除",
@@ -79,7 +87,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(parts, key = { it.id }) { part ->
+            items(shown, key = { it.id }) { part ->
                 val selected = part.id in selectedIds
                 PartCard(
                     part = part,
@@ -87,7 +95,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     onClick = {
                         if (selected) {
                             selectedIds.remove(part.id)
-                        } else if (selectedIds.size < GameSession.MAX_PARTS) {
+                        } else if (validSelected.size < GameSession.MAX_PARTS) {
                             selectedIds.add(part.id)
                         }
                     },
@@ -99,14 +107,14 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
-                val chosen = selectedIds.mapNotNull { id -> parts.firstOrNull { it.id == id } }
+                val chosen = validSelected.mapNotNull { id -> parts.firstOrNull { it.id == id } }
                 GameSession.selected = chosen
                 onGoStack()
             },
-            enabled = selectedIds.isNotEmpty(),
+            enabled = validSelected.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("選んだ ${selectedIds.size} 個で積む")
+            Text("選んだ ${validSelected.size} 個で積む")
         }
     }
 
@@ -115,9 +123,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             part = part,
             onConfirm = {
                 repository.remove(part.id)
-                // 選択中のパーツを消したときは、選択からも外す（積む画面に消えたパーツが渡らないように）
+                // この画面の選択からは外す。積む画面に渡した選択（GameSession.selected）には触らない。
+                // 触ると、積んでいる途中のゲームが最初からやり直しになるため
                 selectedIds.remove(part.id)
-                GameSession.selected = GameSession.selected.filterNot { it.id == part.id }
                 pendingDelete = null
             },
             onDismiss = { pendingDelete = null },
@@ -127,14 +135,14 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 
 @Composable
 private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val isSample = SampleParts.all.any { it.id == part.id }
+    val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("パーツを削除") },
         text = {
             Text(
                 "「${part.displayName}」を削除します。" +
-                    if (isSample) "サンプルは「サンプルに戻す」で元に戻せます。"
+                    if (isSample) "サンプルは「サンプルを戻す」でいつでも戻せます。"
                     else "採集したパーツは元に戻せません。",
             )
         },
@@ -148,7 +156,7 @@ private fun PartCard(part: Part, selected: Boolean, onClick: () -> Unit, onLongC
     val border = if (selected) Modifier.border(3.dp, Orange, RoundedCornerShape(12.dp)) else Modifier
     // 名前がないパーツは見出しが種類名になるので、下の行には種類名を重ねて出さない
     val details = listOfNotNull(
-        part.kind.label.takeIf { part.name != null },
+        part.kind.label.takeIf { part.hasName },
         "${part.distanceM} m",
         formatDate(part.walkedAt),
     ).joinToString(" ・ ")
@@ -156,7 +164,13 @@ private fun PartCard(part: Part, selected: Boolean, onClick: () -> Unit, onLongC
         modifier = Modifier
             .fillMaxWidth()
             .then(border)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(
+                // 読み上げ（TalkBack）で、タップと長押しの意味が伝わるように
+                onClickLabel = if (selected) "選択を外す" else "選択",
+                onLongClickLabel = "削除",
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
             PartThumbnail(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
