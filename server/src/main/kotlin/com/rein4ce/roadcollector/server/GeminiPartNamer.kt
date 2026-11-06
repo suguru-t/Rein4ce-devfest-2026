@@ -83,17 +83,6 @@ class GeminiPartNamer(
     }
 }
 
-/**
- * Gemini への指示文。手がかりは形・距離・日時だけ（位置情報は Part に入っていない）。
- * TODO(C): 手順 4 で、日時を「朝・昼・夕方・夜」と月に直すなどして作り込む。
- */
-internal fun buildNamingPrompt(part: Part): String = """
-    散歩で歩いた道の形から生まれた、積み木パーツに名前を付けてください。
-    - 形：${part.kind.label}${if (part.closed) "（輪になっている）" else ""}
-    - 歩いた距離：${part.distanceM} m
-    ルール：日本語で ${PartNamer.MAX_NAME_LENGTH} 文字以内。地名・人名・実在の店名は入れない。
-""".trimIndent()
-
 @Serializable
 private data class NameJson(val name: String? = null)
 
