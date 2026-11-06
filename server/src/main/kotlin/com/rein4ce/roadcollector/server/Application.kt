@@ -29,8 +29,6 @@ fun Application.module(store: TowerStore = TowerStore.fromEnvironment()) {
         allowHeader(HttpHeaders.ContentType)
     }
 
-    environment.log.info("TowerStore: ${store::class.simpleName}")
-
     routing {
         towerRoutes(store)
     }

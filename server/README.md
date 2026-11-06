@@ -58,7 +58,7 @@ gcloud run deploy road-collector \
 
 - `TOWER_STORE`：`firestore` か `memory` で明示する。未指定なら上の表のとおり
 - `TOWER_COLLECTION`：コレクション名（既定 `towers`）。手元で試すときは本番とは別の名前にする
-- `GOOGLE_CLOUD_PROJECT`：プロジェクトを固定したいとき。未指定なら認証情報から決まる
+- `GOOGLE_CLOUD_PROJECT`：**保存先のプロジェクト**。Cloud Run では実行環境から自動で決まるので不要。**手元では必ず指定する**（未指定だと Java クライアントが gcloud の設定などから決めるため、複数のプロジェクトを使っていると別のプロジェクトを向くことがある）
 
 Firestore では 1 タワー 1 ドキュメント。`json` フィールドにタワー全体が入り、一覧用に `height`・`partCount`・`createdAt`・`author` も持つ。
 
@@ -66,10 +66,32 @@ Firestore では 1 タワー 1 ドキュメント。`json` フィールドにタ
 
 ```
 gcloud auth application-default login     # 最初の 1 回だけ
-TOWER_STORE=firestore TOWER_COLLECTION=towers_localtest ./gradlew :server:run
+GOOGLE_CLOUD_PROJECT=hackathon-2026-513703 TOWER_STORE=firestore TOWER_COLLECTION=towers_localtest ./gradlew :server:run
 ```
 
-起動ログに `TowerStore: FirestoreTowerStore` と出れば Firestore につながっている。Cloud Run のサービスアカウントには `roles/datastore.user` を付与済みなので、デプロイするだけで Firestore 版になる。
+起動ログに `TowerStore: firestore（project=..., database=..., collection=...）` と出れば、**Firestore 版が選ばれて接続先が決まった**ところまでは分かる。この時点ではまだ読み書きしていないので、プロジェクトの間違いや権限不足は、実際に保存・取得して初めて分かる（`/health` は DB を呼ばないので、200 でも DB の確認にはならない）。
+
+接続先・権限・保存の確認は、次の順でやる：
+
+```
+# 1. 保存（201 と id が返る）
+curl -s -X POST localhost:8080/towers -H "Content-Type: application/json" -d @tower.json
+# 2. 返ってきた id で取得（200。JSON で返る）
+curl -s -H "Accept: application/json" localhost:8080/towers/<id>
+# 3. 一覧に出る（200）
+curl -s localhost:8080/towers
+# 4. サーバを再起動して、もう一度 2 を実行 → 同じ id で取得できれば Firestore に残っている
+```
+
+| 確認 | 分かること |
+|---|---|
+| 起動ログに firestore と出る | Firestore 版が選ばれ、接続先が決まった |
+| `/health` が 200 | Web サーバが応答している（DB は未確認） |
+| `POST /towers` が 201 | 書き込みの権限があり、保存できた |
+| 返った id で `GET` が 200 | 読み取りの権限があり、保存したものを取り出せた |
+| 再起動後も同じ id で取れる | メモリではなく Firestore に残っている |
+
+Cloud Run のサービスアカウントには `roles/datastore.user` を付与済みなので、デプロイするだけで Firestore 版になる。
 
 ## 次にやること（C 担当）
 

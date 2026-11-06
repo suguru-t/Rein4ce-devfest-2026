@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
+import org.slf4j.LoggerFactory
 
 /**
  * タワーの保存先。実装は 2 つ。
@@ -27,6 +28,8 @@ interface TowerStore {
     companion object {
         const val SUMMARY_LIMIT = 500
 
+        private val log = LoggerFactory.getLogger(TowerStore::class.java)
+
         /**
          * TOWER_STORE=firestore か memory で明示できる。未指定なら、
          * Cloud Run 上（K_SERVICE がある）では Firestore、手元ではメモリ。
@@ -39,14 +42,17 @@ interface TowerStore {
                 null, "" -> !env("K_SERVICE").isNullOrBlank()
                 else -> error("TOWER_STORE は firestore か memory（指定値: $explicit）")
             }
-            return if (useFirestore) {
-                FirestoreTowerStore.create(
-                    projectId = env("GOOGLE_CLOUD_PROJECT")?.takeIf { it.isNotBlank() },
-                    collection = env("TOWER_COLLECTION")?.takeIf { it.isNotBlank() } ?: "towers",
-                )
-            } else {
-                MemoryTowerStore()
+            if (!useFirestore) {
+                log.info("TowerStore: memory（再起動で消える）")
+                return MemoryTowerStore()
             }
+            val store = FirestoreTowerStore.create(
+                projectId = env("GOOGLE_CLOUD_PROJECT")?.takeIf { it.isNotBlank() },
+                collection = env("TOWER_COLLECTION")?.takeIf { it.isNotBlank() } ?: "towers",
+            )
+            // この行は「Firestore 版を選んで接続先を決めた」ことしか示さない。読み書きできるかは POST → GET で確かめる
+            log.info("TowerStore: firestore（${store.description}）")
+            return store
         }
     }
 }
