@@ -167,6 +167,50 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `move to top is saved and survives a restart`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk)
+
+        assertTrue(repo.moveToTop(SampleParts.all[2].id, now = 5_000L))
+        advanceUntilIdle()
+        assertEquals(mapOf(SampleParts.all[2].id to 5_000L), repo.movedToTopAt.value)
+
+        // アプリを開き直しても残る（parts.json とは別のファイル）
+        val again = repository(f)
+        advanceUntilIdle()
+        assertEquals(mapOf(SampleParts.all[2].id to 5_000L), again.movedToTopAt.value)
+        assertTrue(File(tmp.root, "parts_order.json").exists())
+    }
+
+    @Test
+    fun `deleting a part forgets its move to top`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk)
+        repo.moveToTop(walk.id, now = 5_000L)
+        repo.remove(walk.id)
+        advanceUntilIdle()
+
+        assertTrue(repo.movedToTopAt.value.isEmpty())
+        val again = repository(f)
+        advanceUntilIdle()
+        assertTrue(again.movedToTopAt.value.isEmpty())
+    }
+
+    @Test
+    fun `move to top of a missing part does nothing`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+
+        assertFalse(repo.moveToTop("nothing-here", now = 5_000L))
+        assertTrue(repo.movedToTopAt.value.isEmpty())
+    }
+
+    @Test
     fun `a part collected and named before loading finishes keeps its name`() = runTest {
         val f = file()
         write(f, SampleParts.all)

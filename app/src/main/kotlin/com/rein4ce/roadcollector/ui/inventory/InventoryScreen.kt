@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,12 +60,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    // 並びは「採集したパーツを新しい順 → 見本を決まった順」。保存の順番には頼らない
-    val shown = remember(parts) {
-        val (samples, collected) = parts.partition { SampleParts.byId(it.id) != null }
-        collected.sortedByDescending { it.walkedAt } +
-            samples.sortedBy { s -> SampleParts.all.indexOfFirst { it.id == s.id } }
-    }
+    val movedToTopAt by repository.movedToTopAt.collectAsStateWithLifecycle()
+    // 並びは「最後に触ったものが上」（InventoryOrder.kt）。保存の順番には頼らない
+    val shown = remember(parts, movedToTopAt) { inventoryOrder(parts, movedToTopAt) }
     val sampleCount = parts.count { SampleParts.byId(it.id) != null }
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
@@ -71,6 +70,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val missingSamples = SampleParts.all.count { s -> parts.none { it.id == s.id } }
     // 削除の確認ダイアログを出しているパーツ（null なら出していない）
     var pendingDelete by remember { mutableStateOf<Part?>(null) }
+    // 長押しのメニューを開いているパーツの id（null なら開いていない）
+    var menuFor by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -92,7 +93,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで消す",
+                "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで先頭へ／消す",
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
                 modifier = Modifier.weight(1f),
@@ -119,6 +120,19 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     part = part,
                     order = order,
                     isSample = SampleParts.byId(part.id) != null,
+                    isFirst = part.id == shown.firstOrNull()?.id,
+                    menuOpen = menuFor == part.id,
+                    onMenuDismiss = { menuFor = null },
+                    onMoveToTop = {
+                        menuFor = null
+                        repository.moveToTop(part.id)
+                    },
+                    onDelete = {
+                        menuFor = null
+                        pendingDelete = part
+                    },
+                    // 並びが変わったとき、カードが滑らかに動くように
+                    modifier = Modifier.animateItem(),
                     onClick = {
                         if (part.id in selectedIds) {
                             selectedIds.remove(part.id)
@@ -126,7 +140,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             selectedIds.add(part.id)
                         }
                     },
-                    onLongClick = { pendingDelete = part },
+                    onLongClick = { menuFor = part.id },
                 )
             }
         }
@@ -194,12 +208,24 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
  * @param order 選んだ順（＝積む順）。選んでいなければ null
  */
 @Composable
-private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun PartCard(
+    part: Part,
+    order: Int?,
+    isSample: Boolean,
+    isFirst: Boolean,
+    menuOpen: Boolean,
+    onMenuDismiss: () -> Unit,
+    onMoveToTop: () -> Unit,
+    onDelete: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val selected = order != null
     // 主役は形そのもの。分類（L字など）は出さない
     val date = if (isSample) "見本" else formatDate(part.walkedAt)
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .then(if (selected) Modifier.background(Fieldbook.SelectedPaper).dashedOutline(Fieldbook.Survey) else Modifier)
             // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
@@ -207,7 +233,7 @@ private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> 
             .combinedClickable(
                 // 読み上げ（TalkBack）で、タップと長押しの意味が伝わるように
                 onClickLabel = if (selected) "選択を外す" else "選択",
-                onLongClickLabel = "削除",
+                onLongClickLabel = "メニュー（先頭へ・削除）",
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
@@ -215,6 +241,17 @@ private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> 
     ) {
         Box {
             FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
+                DropdownMenuItem(
+                    text = { Text("先頭へ") },
+                    onClick = onMoveToTop,
+                    enabled = !isFirst,
+                )
+                DropdownMenuItem(
+                    text = { Text("削除…", color = Color(0xFFB3412F)) },
+                    onClick = onDelete,
+                )
+            }
             if (order != null) {
                 Text(
                     Fieldbook.orderMark(order),
