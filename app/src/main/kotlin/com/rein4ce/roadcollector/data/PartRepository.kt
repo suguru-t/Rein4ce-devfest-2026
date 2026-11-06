@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import java.io.File
 
@@ -41,18 +40,21 @@ class PartRepository(
 
     private val serializer = ListSerializer(Part.serializer())
 
-    /** 「先頭へ」を押した時刻（パーツの id → epoch millis）の保存先。パーツのデータ形式は変えたくないので別のファイルにする */
+    /** 手持ちの並び順（パーツの id の列）の保存先。パーツのデータ形式は変えたくないので別のファイルにする */
     private val orderFile = File(file.parentFile, "${file.nameWithoutExtension}_order.json")
-    private val orderSerializer = MapSerializer(String.serializer(), Long.serializer())
+    private val orderSerializer = ListSerializer(String.serializer())
     private val writeLock = Mutex()
 
     private val _parts = MutableStateFlow<List<Part>>(emptyList())
     val parts: StateFlow<List<Part>> = _parts
 
-    private val _movedToTopAt = MutableStateFlow<Map<String, Long>>(emptyMap())
+    private val _order = MutableStateFlow<List<String>>(emptyList())
 
-    /** 手持ちで「先頭へ」を押した時刻（パーツの id → epoch millis）。並び順は手持ち画面が決める（InventoryOrder.kt） */
-    val movedToTopAt: StateFlow<Map<String, Long>> = _movedToTopAt
+    /**
+     * 手持ちで並べ替えた順（パーツの id の列）。まだ並べ替えていなければ空。
+     * ここに無いパーツ（並べ替えたあとに採集したもの、戻した見本）の置き場所は、手持ち画面が決める（InventoryOrder.kt）
+     */
+    val order: StateFlow<List<String>> = _order
 
     private val _isLoaded = MutableStateFlow(false)
 
@@ -93,15 +95,16 @@ class PartRepository(
         }
         if (fromFile == null || addedBeforeLoad) persist()
 
-        // 「先頭へ」の記録。読み込み前に押された分（ふつうは無い）は、そちらを優先して残す
-        val orderFromFile: Map<String, Long> = runCatching {
-            if (orderFile.exists()) AppJson.decodeFromString(orderSerializer, orderFile.readText()) else emptyMap()
-        }.onFailure { logError("${orderFile.name} could not be read, ignoring", it) }.getOrDefault(emptyMap())
+        // 並び順。読み込み前に並べ替えられていたら（ふつうは無い）そちらを使う。
+        // 前の形式（「先頭へ」の時刻の表）や壊れたファイルは読めないので、並べ替えていない状態から始める
+        val orderFromFile: List<String> = runCatching {
+            if (orderFile.exists()) AppJson.decodeFromString(orderSerializer, orderFile.readText()) else emptyList()
+        }.onFailure { logError("${orderFile.name} could not be read, ignoring", it) }.getOrDefault(emptyList())
         val ids = _parts.value.mapTo(HashSet()) { it.id }
-        _movedToTopAt.update { early -> (orderFromFile + early).filterKeys { it in ids } }
+        _order.update { early -> (early.ifEmpty { orderFromFile }).filter { it in ids }.distinct() }
     }
 
-    /** 採集したパーツを足す。並び順は手持ち画面が採集日時と「先頭へ」の時刻で決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない */
+    /** 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない */
     fun add(part: Part) {
         _parts.update { it + part }
         persist()
@@ -110,22 +113,20 @@ class PartRepository(
     fun remove(id: String) {
         _parts.update { list -> list.filterNot { it.id == id } }
         persist()
-        if (id in _movedToTopAt.value) {
-            _movedToTopAt.update { it - id }
+        if (id in _order.value) {
+            _order.update { it - id }
             persistOrder()
         }
     }
 
     /**
-     * 手持ちの先頭に移す（「先頭へ」を押した時刻を記録する）。
-     * 新しく採集したパーツも採集した時刻で上に来るので、「最後に触ったものが上」という並びになる。
-     * @return そのパーツがあれば true
+     * 手持ちの並び順を保存する（ドラッグで並べ替えた、「先頭へ」を押した、など）。
+     * 手持ちに無い id と重複は落とす。
      */
-    fun moveToTop(id: String, now: Long = System.currentTimeMillis()): Boolean {
-        if (_parts.value.none { it.id == id }) return false
-        _movedToTopAt.update { it + (id to now) }
+    fun setOrder(ids: List<String>) {
+        val have = _parts.value.mapTo(HashSet()) { it.id }
+        _order.value = ids.filter { it in have }.distinct()
         persistOrder()
-        return true
     }
 
     /** 削除したサンプルだけを足し戻す。採集したパーツには触らない */
@@ -172,7 +173,7 @@ class PartRepository(
      */
     private fun persist() = save(file) { AppJson.encodeToString(serializer, _parts.value) }
 
-    private fun persistOrder() = save(orderFile) { AppJson.encodeToString(orderSerializer, _movedToTopAt.value) }
+    private fun persistOrder() = save(orderFile) { AppJson.encodeToString(orderSerializer, _order.value) }
 
     /**
      * ファイルに保存する（parts.json も、並び順のファイルも同じ書き方）。
