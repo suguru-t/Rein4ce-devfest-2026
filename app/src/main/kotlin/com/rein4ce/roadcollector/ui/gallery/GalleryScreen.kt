@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -33,7 +33,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -42,7 +44,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,10 +91,10 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
     val state = vm.state
     val towers = (state as? GalleryViewModel.State.Loaded)?.towers.orEmpty()
 
+    // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         // 見出し：左に画面名、右に測量の数値（他の画面と同じ位置・字）
@@ -128,15 +129,11 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
             GalleryViewModel.State.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Fieldbook.Survey)
             }
+            // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明（手元のサーバの使い方）は出さない。
+            // 手元のサーバにつなぐ方法は README「サーバの接続先」にある
             is GalleryViewModel.State.Error -> Note {
-                Text(state.message, fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "電波のない場所か、サーバが起動中かもしれません。少し待って「再読み込み」を押してください。\n" +
-                        "手元のサーバで試すには ./gradlew :server:run を起動し、SERVER_BASE_URL を http://10.0.2.2:8080 にします。",
-                    fontSize = 12.sp,
-                    color = Fieldbook.Muted,
-                )
+                Text("少し待って「再読み込み」を押してください。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+                Text("電波のない場所か、サーバが起動中かもしれません。", fontSize = 12.sp, color = Fieldbook.Muted)
             }
             is GalleryViewModel.State.Loaded -> if (towers.isEmpty()) {
                 Note {
@@ -149,10 +146,10 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
                 ) {
-                    items(towers, key = { it.id }, contentType = { "tower" }) { t ->
+                    itemsIndexed(towers, key = { _, t -> t.id }, contentType = { _, _ -> "tower" }) { i, t ->
                         TowerCard(
                             tower = t,
-                            rank = towers.indexOf(t) + 1,
+                            rank = i + 1,
                             ratio = t.height / tallest,
                             onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
                         )
@@ -180,14 +177,27 @@ private fun TowerCard(tower: TowerSummary, rank: Int, ratio: Float, onClick: () 
             }
             .padding(start = 10.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
     ) {
-        // 順位（選んだ順の ①② と同じ印）
-        Text(
-            Fieldbook.orderMark(rank),
-            color = if (rank <= 3) Fieldbook.Survey else Fieldbook.Muted,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(36.dp),
-        )
+        // 順位。9 位までは選んだ順の ①② と同じ丸数字、10 位からは丸数字がないので測量の字で数字だけ（幅 36dp に収める）
+        if (rank <= 9) {
+            Text(
+                Fieldbook.orderMark(rank),
+                color = if (rank <= 3) Fieldbook.Survey else Fieldbook.Muted,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(36.dp),
+            )
+        } else {
+            Text(
+                "$rank",
+                fontFamily = Fieldbook.Data,
+                color = Fieldbook.Muted,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.width(36.dp),
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(heightText, fontFamily = Fieldbook.Data, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, color = Fieldbook.Ink)
@@ -198,13 +208,13 @@ private fun TowerCard(tower: TowerSummary, rank: Int, ratio: Float, onClick: () 
                 Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(4.dp).background(Fieldbook.Road, RoundedCornerShape(2.dp)))
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                "パーツ ${tower.partCount} 本 ・ $author ・ ${formatDate(tower.createdAt)}",
-                fontFamily = Fieldbook.Data,
-                fontSize = 10.5.sp,
-                color = Fieldbook.Muted,
-                maxLines = 1,
-            )
+            // 作者名が長くても日時が消えないよう、作者だけ「…」で詰める
+            val metaStyle = TextStyle(fontFamily = Fieldbook.Data, fontSize = 10.5.sp, color = Fieldbook.Muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("パーツ ${tower.partCount} 本 ・ ", style = metaStyle, maxLines = 1, softWrap = false)
+                Text(author, style = metaStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(" ・ ${formatDate(tower.createdAt)}", style = metaStyle, maxLines = 1, softWrap = false)
+            }
         }
     }
 }
