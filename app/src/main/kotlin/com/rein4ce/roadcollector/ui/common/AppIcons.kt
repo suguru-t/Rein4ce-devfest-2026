@@ -45,7 +45,44 @@ object AppIcons {
         )
     }
 
-    // ---- 靴（横から見たハイキングブーツ。つま先が左、足首の筒が右） ----
+    // ---- 足跡（左右の足裏を少しずらして並べる。それぞれ足裏の楕円＋かかとの小さい楕円） ----
+
+    private const val KAPPA = 0.5523f
+
+    /** 楕円（4 本のベジェ曲線で近似） */
+    private fun PathBuilder.ellipse(cx: Float, cy: Float, rx: Float, ry: Float) {
+        val kx = rx * KAPPA
+        val ky = ry * KAPPA
+        moveTo(cx, cy - ry)
+        curveTo(cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy)
+        curveTo(cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry)
+        curveTo(cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy)
+        curveTo(cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry)
+        close()
+    }
+
+    /** 足跡 1 つ。[shrink] は線画のときに線の太さぶん内側に寄せる量 */
+    private fun PathBuilder.footprint(cx: Float, top: Float, shrink: Float = 0f) {
+        ellipse(cx, top + 4.4f, 3.1f - shrink, 4.4f - shrink) // 足裏
+        ellipse(cx, top + 11.6f, 2.3f - shrink, 1.9f - shrink) // かかと
+    }
+
+    val Footprints: ImageVector by lazy {
+        icon("Footprints") {
+            filled { footprint(7.2f, 2f) } // 左足（上）
+            filled { footprint(16.8f, 8.5f) } // 右足（下）
+        }
+    }
+
+    val FootprintsOutline: ImageVector by lazy {
+        icon("FootprintsOutline") {
+            val s = STROKE / 2
+            outlined { footprint(7.2f, 2f + s, s) }
+            outlined { footprint(16.8f, 8.5f + s, s) }
+        }
+    }
+
+    // ---- 靴（横から見たハイキングブーツ。つま先が左、足首の筒が右）。今はタブでは足跡を使っている ----
 
     private fun PathBuilder.bootBody() {
         moveTo(2f, 17.5f)
@@ -153,11 +190,28 @@ object AppIcons {
 
     private const val BLOCK = 9.6f
 
+    /** 三角の積み木（頂点が上、底辺が下）。[shrink] は線画のときに内側に寄せる量 */
+    private fun PathBuilder.triangle(cx: Float, top: Float, w: Float, h: Float, r: Float = 1.2f, shrink: Float = 0f) {
+        // 角を少し丸めた三角。shrink は角の丸みを増やすことで近似する
+        val rr = r + shrink
+        val halfW = w / 2 - shrink * 1.2f
+        val t = top + shrink * 1.5f
+        val b = top + h - shrink
+        moveTo(cx - rr * 0.6f, t + rr)
+        curveTo(cx - rr * 0.2f, t, cx + rr * 0.2f, t, cx + rr * 0.6f, t + rr)
+        lineTo(cx + halfW - rr * 0.4f, b - rr * 1.4f)
+        curveTo(cx + halfW + rr * 0.3f, b - rr * 0.3f, cx + halfW, b, cx + halfW - rr, b)
+        lineTo(cx - halfW + rr, b)
+        curveTo(cx - halfW, b, cx - halfW - rr * 0.3f, b - rr * 0.3f, cx - halfW + rr * 0.4f, b - rr * 1.4f)
+        close()
+    }
+
+    /** 積む：□・○・△ の積み木（下に四角と丸、上に三角） */
     val Blocks: ImageVector by lazy {
         icon("Blocks") {
             filled { block(1.5f, 12.4f, BLOCK) }
-            filled { block(12.9f, 12.4f, BLOCK) }
-            filled { block(7.2f, 2f, BLOCK) }
+            filled { ellipse(17.7f, 17.2f, 4.8f, 4.8f) }
+            filled { triangle(12f, 1.8f, 11.4f, 9.8f) }
         }
     }
 
@@ -166,8 +220,8 @@ object AppIcons {
             // 線が太いぶん、少し内側に
             val i = STROKE / 2
             outlined { block(1.5f + i, 12.4f + i, BLOCK - STROKE) }
-            outlined { block(12.9f + i, 12.4f + i, BLOCK - STROKE) }
-            outlined { block(7.2f + i, 2f + i, BLOCK - STROKE) }
+            outlined { ellipse(17.7f, 17.2f, 4.8f - i, 4.8f - i) }
+            outlined { triangle(12f, 1.8f, 11.4f, 9.8f, shrink = i) }
         }
     }
 }
