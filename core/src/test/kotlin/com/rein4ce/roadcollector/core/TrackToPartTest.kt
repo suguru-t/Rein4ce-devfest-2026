@@ -118,14 +118,14 @@ class TrackToPartTest {
 
     @Test
     fun `gps jumps at the start are dropped by the speed filter`() {
-        // 記録開始直後に位置が定まらず、1 秒ごとに 20 m 飛ぶ点が 5 つ → そのあと普通に 300 m 歩く
+        // 記録開始直後に位置が定まらず、1 秒ごとに東西 40 m に飛ぶ点が 5 つ → そのあと普通に 300 m 歩く
         val straight = walk(listOf(0.0 to 0.0, 0.0 to 300.0))
         val t0 = straight.first().timeMs
         val lat0 = straight.first().lat
         val lng0 = straight.first().lng
         val jumps = (5 downTo 1).map { k ->
-            // 東西に 20 m ずつ交互に飛ぶ（0.00018° ≈ 20 m）
-            TrackPoint(lat0, lng0 + (if (k % 2 == 0) 0.00018 else -0.00018), accuracyM = 8f, timeMs = t0 - k * 1_000L)
+            // 東西に 40 m ずつ交互に飛ぶ（0.00044° ≈ 40 m）。最後の飛びから歩き始めまでも 40 m / 5 秒 = 8 m/s で歩けない
+            TrackPoint(lat0, lng0 + (if (k % 2 == 0) 0.00044 else -0.00044), accuracyM = 8f, timeMs = t0 - k * 1_000L)
         }
         val track = jumps + straight
 
