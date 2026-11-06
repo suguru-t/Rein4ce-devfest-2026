@@ -41,6 +41,8 @@ object Fieldbook {
     val RoadCasing = Color(0xFF6E2A10)
     val Survey = Color(0xFF1F5FA8)
     val SelectedPaper = Color(0xBFFFFFFF)
+    /** 削除など、取り消せない操作の赤（野帳の赤鉛筆） */
+    val Danger = Color(0xFFB3412F)
 
     /** 測量の数値（L=760 m など）に使う字 */
     val Data = FontFamily.Monospace

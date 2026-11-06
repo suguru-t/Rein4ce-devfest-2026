@@ -56,6 +56,15 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.os.SystemClock
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -253,18 +262,49 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 @Composable
 private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
+    // 採集画面の結果ダイアログと同じ、野帳の紙のダイアログ。どれを消すのか分かるように図も出す
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("パーツを削除") },
+        shape = RoundedCornerShape(8.dp),
+        containerColor = Fieldbook.Paper,
+        titleContentColor = Fieldbook.Ink,
+        textContentColor = Fieldbook.Ink,
+        title = { Text("パーツを削除", fontWeight = FontWeight.Bold) },
         text = {
-            Text(
-                "「${part.displayName}」を削除します。" +
-                    if (isSample) "見本は「見本を戻す」でいつでも戻せます。"
-                    else "採集したパーツは元に戻せません。",
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                FieldbookPart(part, modifier = Modifier.size(132.dp))
+                Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "採集したパーツは、削除すると元に戻せません。",
+                    fontSize = 13.sp,
+                    color = Fieldbook.Muted,
+                )
+            }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("削除") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("削除", color = Fieldbook.Danger, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
+        },
+    )
+}
+
+/** 長押しメニューの 1 行：アイコンと字を同じ色で。押せないときは薄く */
+@Composable
+private fun FieldbookMenuItem(text: String, icon: ImageVector, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        onClick = onClick,
+        enabled = enabled,
+        colors = MenuDefaults.itemColors(
+            textColor = color,
+            leadingIconColor = color,
+            disabledTextColor = Fieldbook.Muted.copy(alpha = 0.45f),
+            disabledLeadingIconColor = Fieldbook.Muted.copy(alpha = 0.45f),
+        ),
     )
 }
 
@@ -322,16 +362,19 @@ private fun PartCard(
     ) {
         Box {
             FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
-                DropdownMenuItem(
-                    text = { Text("先頭へ") },
-                    onClick = onMoveToTop,
-                    enabled = !isFirst,
-                )
-                DropdownMenuItem(
-                    text = { Text("削除…", color = Color(0xFFB3412F)) },
-                    onClick = onDelete,
-                )
+            // 長押しのメニュー。野帳の紙と細い枠線で、ほかの画面とそろえる
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = onMenuDismiss,
+                shape = RoundedCornerShape(6.dp),
+                containerColor = Fieldbook.Paper,
+                tonalElevation = 0.dp,
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Fieldbook.Mark),
+            ) {
+                FieldbookMenuItem("先頭へ", Icons.Filled.KeyboardArrowUp, Fieldbook.Ink, enabled = !isFirst, onClick = onMoveToTop)
+                HorizontalDivider(color = Fieldbook.GridMajor, modifier = Modifier.padding(horizontal = 10.dp))
+                FieldbookMenuItem("削除…", Icons.Filled.Delete, Fieldbook.Danger, onClick = onDelete)
             }
             if (order != null) {
                 Text(
