@@ -60,6 +60,34 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `isLoaded turns true only after loading finishes`() = runTest {
+        val f = file()
+        write(f, SampleParts.all.take(2))
+
+        val repo = repository(f)
+        // 読み込みはまだ走っていない。手持ちは空に見えるが、画面はこれを「0 個」と扱ってはいけない
+        assertFalse(repo.isLoaded.value)
+        assertTrue(repo.parts.value.isEmpty())
+
+        advanceUntilIdle()
+        assertTrue(repo.isLoaded.value)
+        assertEquals(SampleParts.all.take(2), repo.parts.value)
+    }
+
+    @Test
+    fun `isLoaded turns true even when the saved file is broken`() = runTest {
+        val f = file()
+        f.writeText("{ これは JSON ではない")
+
+        val repo = repository(f)
+        advanceUntilIdle()
+
+        // 読めなければ見本で始め直し、読み込みは終わったことになる（画面が「読み込み中…」のまま止まらない）
+        assertTrue(repo.isLoaded.value)
+        assertEquals(SampleParts.all, repo.parts.value)
+    }
+
+    @Test
     fun `a part added before loading finishes is kept with the saved ones`() = runTest {
         val f = file()
         val saved = SampleParts.all.take(2)
