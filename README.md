@@ -9,8 +9,8 @@
 
 いまできること：
 
-1. **採集**：「デモ散歩」を再生するとサンプル軌跡が流れてパーツになる。実機なら「記録開始」で GPS 記録（画面ロック中も続く）
-2. **手持ち**：同梱サンプル 5 種類＋採集したパーツ。最大 5 個選んで「積む」
+1. **採集**：「デモ散歩」を再生するとサンプル軌跡が流れてパーツになる。「ファイルから再生」で実機で録った GPX / JSON も流せる。実機なら「記録開始」で GPS 記録（画面ロック中も続く）
+2. **コレクション**（旧：手持ち）：同梱の見本 5 種類＋採集したパーツ。最大 5 本選んで「積む」。長押しで並べ替え中（ドラッグで並べ替え・× で削除）、虫めがねで拡大
 3. **積む**：ドラッグで位置、15° 回転、「置く」で落下。全部静止したら次へ。落ちたら消える。5 個置き切ったら高さ確定
 4. **みんな**：サーバの `/towers` 一覧。完成したタワーは「サーバに送信」で共有ページ URL が返る
 
@@ -26,6 +26,10 @@
 
 実機で GPS を試すときは、権限ダイアログで「アプリの使用中のみ許可」でよい（バックグラウンド権限は使わない）。
 エミュレータで歩くには Extended Controls → Location で GPX を再生するか、アプリ内の「デモ散歩」を使う。
+
+「デモ散歩」メニューの「ファイルから再生（GPX / JSON）」で、実機で録った軌跡ファイルを早回しで流せる（`core/io/TrackFileParser`）。
+GPX は `<trkpt lat lon><time>` を読む（精度は不明として扱う）。JSON は `TrackPoint` の配列（`[{"lat":…,"lng":…,"accuracyM":…,"timeMs":…}]`）か、`points` を持つオブジェクト（`{"points":[…]}`。`Track` 全体でも可）。
+デモ散歩・ファイル再生とも、時刻は「最後の点 = 今」にずらして流すので、パーツの採集日時は再生した日時になる。
 
 ### サーバの接続先
 
@@ -46,15 +50,16 @@ Cloud Run へのデプロイは [server/README.md](server/README.md)。
 ### テスト
 
 ```
-./gradlew :core:test     # 変換ロジック・物理・SVG
+./gradlew :core:test     # 変換ロジック・物理・SVG・軌跡ファイル読み込み
 ./gradlew :server:test   # サーバの API（保存・一覧・共有ページ・画像）
+./gradlew :app:testDebugUnitTest   # アプリの手持ちの保存（Android なしで動く）
 ```
 
 `core` は Android に依存しないので、変換ロジックと物理はここで素早く検証できる。
 
 ### 自動チェック（GitHub Actions）
 
-main への push とプルリクエストのたびに、`core` と `server` のテスト、`server` のビルド、`app` の APK ビルドが自動で走る（`.github/workflows/ci.yml`）。結果はリポジトリの Actions タブで見られる。
+main への push とプルリクエストのたびに、`core`・`server`・`app` のテスト、`server` のビルド、`app` の APK ビルドが自動で走る（`.github/workflows/ci.yml`）。結果はリポジトリの Actions タブで見られる。
 
 ビルドした APK は、各実行結果ページの Artifacts にある `app-debug.apk` からダウンロードできる（GitHub へのログインが必要。14 日間保存）。
 
@@ -66,7 +71,8 @@ main への push とプルリクエストのたびに、`core` と `server` の�
 ```
 core/   com.rein4ce.roadcollector.core
   model/     Part, Pt, Kind, TrackPoint, Tower, Placement  … チーム共通のデータ形式（変更時は全員に周知）
-  geo/       TrackFilter, Projection, Simplify(RDP), TrackToPart, ConversionParams   … B
+  geo/       TrackFilter, Projection, Simplify(RDP), TrackToPart, ConversionParams, TrackTime … B
+  io/        TrackFileParser（GPX / JSON の軌跡ファイル読み込み）                         … A
   physics/   PartGeometry, PartBodyFactory, StackWorld(dyn4j)                       … D
   sample/    SampleTracks(5 本の軌跡), SampleParts(同梱パーツ)
   svg/       TowerSvg（共有ページ用の絵）
@@ -90,7 +96,7 @@ server/ com.rein4ce.roadcollector.server                                        
 
 ### 各担当の「次にやること」
 
-- **A（採集）**：実機で歩いて `ConversionParams` の数値（精度 30 m、最小移動 5 m、ε 15 m）を調整。GPX / JSON の読み込みを `DemoWalkPlayer` に追加。Maps API キーを入れて地図表示を確認
+- **A（採集）**：Android 実機で歩いて `ConversionParams` の数値（最低 150 m、精度 30 m、最小移動 5 m、最大速度 5 m/s、ε 10 m（GPS が粗いときは精度に合わせて大きくする）、頂点 24 個）を確認。特に Android の精度値で ε がどこまで上がるか（結果ダイアログに出る）。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みと、iPhone の GPX 6 本での調整は済み。Issue #1）
 - **B（変換・手持ち）**：`TrackToPart.classify` の精度（実データで棒/L/U/輪/ジグザグがどう出るか）。手持ち画面の見た目、削除、並び替え
 - **C（サーバ）**：`TowerStore` の Firestore 版を Cloud Run にデプロイして確認。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
 - **D（ゲーム）**：操作感（ドラッグ感度、回転の刻み）、台の幅、摩擦などの調整。静止判定の待ち時間。対戦モード（交互置き or 非同期スコアバトル）
@@ -100,7 +106,7 @@ server/ com.rein4ce.roadcollector.server                                        
 ```kotlin
 data class Part(
     val id: String,
-    val points: List<Pt>,     // 正規化済み。バウンディングボックス中心が原点、長辺 1.0、y 上向き。最大 12 個
+    val points: List<Pt>,     // 正規化済み。バウンディングボックス中心が原点、長辺 1.0、y 上向き。最大 24 個
     val thickness: Float,     // 太さ（長辺に対する比率、初期値 0.15）
     val closed: Boolean,      // 輪なら true
     val kind: Kind,           // BAR / L / U / RING / ZIGZAG / OTHER（表示用）
@@ -114,9 +120,9 @@ data class Part(
 
 ## 検証状況（正直に。2026-11-06 時点）
 
-- `core`（変換・物理・サンプル・SVG）：ユニットテスト 11 本が通る
-- `app`：エミュレータ（Android 17）で「デモ散歩 → 手持ち → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。**実機での GPS 記録と、Maps API キーを入れたときの地図表示はまだ確認していない**
-- `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する。保存先の Firestore 版は、手元から本物の Firestore につないで「保存 → 再起動 → 読み出し」まで確認済み。**Cloud Run にはまだデプロイしていない**（本番はまだメモリ版）
+- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 34 本が通る
+- `app`：手持ちの保存と並び順のユニットテスト 19 本が通る。エミュレータ（Android 17）で「デモ散歩 → コレクション → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
+- `server`：API のテスト 11 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する。保存先の Firestore 版は、手元から本物の Firestore につないで「保存 → 再起動 → 読み出し」まで確認済み。**Cloud Run にはまだデプロイしていない**（本番はまだメモリ版）
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）
 - `gradle/libs.versions.toml` の版はすべて公開済みのもの。Studio が新しい版を勧めてきたら上げて構わない
 

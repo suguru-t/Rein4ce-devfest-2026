@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.ui.collect
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,13 +13,18 @@ import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
+import com.rein4ce.roadcollector.core.geo.TrackFilter
 import com.rein4ce.roadcollector.core.geo.TrackToPart
+import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 採集画面の状態。
@@ -40,14 +46,22 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     var outcome: Outcome? by mutableStateOf(null)
         private set
 
-    var isDemoPlaying: Boolean by mutableStateOf(false)
+    /** 再生中のものの呼び名（「デモ散歩」「ファイル」）。再生していなければ null */
+    var playingLabel: String? by mutableStateOf(null)
         private set
+
+    val isDemoPlaying: Boolean get() = playingLabel != null
 
     private var demoJob: Job? = null
 
-    /** 距離 [m]（表示用。フィルタ前の生データなので目安） */
-    fun distanceM(pts: List<TrackPoint>): Double =
-        Projection.pathLength(Projection.toMeters(pts))
+    /**
+     * 距離 [m]（表示用）。パーツの distanceM と同じく TrackFilter を通してから測るので、
+     * 見出しの「L=」と結果ダイアログの「L=」が同じ値になる。
+     */
+    fun distanceM(pts: List<TrackPoint>): Double {
+        val p = ConversionParams.DEFAULT
+        return Projection.pathLength(Projection.toMeters(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps)))
+    }
 
     fun startRecording() {
         val ctx = getApplication<Application>()
@@ -60,23 +74,42 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     fun stopAndConvert() {
         val ctx = getApplication<Application>()
         demoJob?.cancel()
-        isDemoPlaying = false
+        playingLabel = null
         LocationRecordingService.stop(ctx)
         val pts = TrackRecorder.stop()
         convert(pts)
     }
 
-    fun playDemo(track: SampleTracks.SampleTrack) {
+    fun playDemo(track: SampleTracks.SampleTrack) = playPoints("デモ散歩") { track.points }
+
+    /** 実機で録った GPX / JSON ファイルを読んで、デモ散歩と同じように流す。 */
+    fun playFile(uri: Uri) = playPoints("ファイル") {
+        val ctx = getApplication<Application>()
+        val text = withContext(Dispatchers.IO) {
+            ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+        } ?: throw IllegalArgumentException("ファイルを開けません")
+        TrackFileParser.parse(text)
+    }
+
+    private fun playPoints(label: String, load: suspend () -> List<TrackPoint>) {
         if (isRecording.value) return
         demoJob?.cancel()
         demoJob = viewModelScope.launch {
-            isDemoPlaying = true
+            playingLabel = label
             try {
-                DemoWalkPlayer.play(track)
+                val points = try {
+                    load()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    outcome = Outcome.Rejected("読み込めませんでした：${e.message ?: e.javaClass.simpleName}")
+                    return@launch
+                }
+                DemoWalkPlayer.play(points)
                 val pts = TrackRecorder.stop()
                 convert(pts)
             } finally {
-                isDemoPlaying = false
+                playingLabel = null
             }
         }
     }
