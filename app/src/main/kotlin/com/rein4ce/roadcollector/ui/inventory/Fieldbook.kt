@@ -4,12 +4,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -44,6 +48,14 @@ object Fieldbook {
     /** 削除など、取り消せない操作の赤（野帳の赤鉛筆） */
     val Danger = Color(0xFFB3412F)
 
+    /** 方位磁針の針の赤（北） */
+    val Needle = Color(0xFFD63A2A)
+    val NeedleEdge = Color(0xFF8E2418)
+
+    /** パーツ 1 本ぶんの紙片（方眼の上に置いた白い紙）と、その縁 */
+    val Card = Color(0xFFFBFCF9)
+    val CardEdge = Color(0xFFB8C5B3)
+
     /** 測量の数値（L=760 m など）に使う字 */
     val Data = FontFamily.Monospace
 
@@ -72,15 +84,48 @@ fun Modifier.fieldbookGrid(): Modifier = drawBehind {
     }
 }
 
-/** 選んだパーツの破線の枠（測量の図面で範囲を囲む線のイメージ） */
-fun Modifier.dashedOutline(color: Color, width: Dp = 1.5.dp, dash: Dp = 4.dp): Modifier = drawBehind {
+/** 選んだパーツの破線の枠（測量の図面で範囲を囲む線のイメージ）。[corner] でカードの角丸に合わせる */
+fun Modifier.dashedOutline(color: Color, width: Dp = 1.5.dp, dash: Dp = 4.dp, corner: Dp = 0.dp): Modifier = drawBehind {
     val w = width.toPx()
-    drawRect(
+    drawRoundRect(
         color = color,
         topLeft = Offset(w / 2, w / 2),
         size = Size(size.width - w, size.height - w),
+        cornerRadius = CornerRadius(corner.toPx()),
         style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), dash.toPx() * 0.75f))),
     )
+}
+
+/**
+ * 方位磁針の針：北が赤、南が白（墨の縁）。真ん中に軸、北の先の左に小さな赤い「N」。
+ * パーツも記録中の軌跡も北が上のまま描くので、針はいつも上を向く。
+ *
+ * @param center 針の中心 [px]
+ * @param length 針の長さ（北の先から南の先まで）[px]
+ */
+fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: Float, labelStyle: TextStyle) {
+    val half = length / 2
+    val w = length * 0.2f
+    val edge = (length * 0.045f).coerceAtLeast(1f)
+    val north = Path().apply {
+        moveTo(center.x, center.y - half)
+        lineTo(center.x + w, center.y)
+        lineTo(center.x - w, center.y)
+        close()
+    }
+    val south = Path().apply {
+        moveTo(center.x, center.y + half)
+        lineTo(center.x + w, center.y)
+        lineTo(center.x - w, center.y)
+        close()
+    }
+    drawPath(south, Color.White)
+    drawPath(south, Fieldbook.Ink, style = Stroke(width = edge, join = StrokeJoin.Round))
+    drawPath(north, Fieldbook.Needle)
+    drawPath(north, Fieldbook.NeedleEdge, style = Stroke(width = edge, join = StrokeJoin.Round))
+    drawCircle(Fieldbook.Ink, radius = length * 0.075f, center = center)
+    val n = measurer.measure("N", labelStyle.copy(color = Fieldbook.Needle, fontWeight = FontWeight.Bold))
+    drawText(n, topLeft = Offset(center.x - w - n.size.width - length * 0.04f, center.y - half - n.size.height * 0.15f))
 }
 
 /**
@@ -118,17 +163,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         drawPart(part, center, scalePx, color = Fieldbook.Road)
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
-        val nx = ox + s - 13f * u
-        drawText(measurer, "N", topLeft = Offset(nx - 3.5f * u, oy + 7f * u), style = label.copy(fontWeight = FontWeight.Bold))
-        drawPath(
-            Path().apply {
-                moveTo(nx, oy + 20f * u)
-                lineTo(nx - 3.5f * u, oy + 27f * u)
-                lineTo(nx + 3.5f * u, oy + 27f * u)
-                close()
-            },
-            Fieldbook.Ink,
-        )
+        drawCompassNeedle(measurer, center = Offset(ox + s - 14f * u, oy + 22f * u), length = 26f * u, labelStyle = label)
 
         // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
         val len = normalizedLength(part)

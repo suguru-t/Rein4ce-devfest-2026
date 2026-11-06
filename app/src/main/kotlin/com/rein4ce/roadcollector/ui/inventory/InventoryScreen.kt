@@ -181,8 +181,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             modifier = Modifier.weight(1f),
             // 並べ替え中の「×」がカードの左上からはみ出すので、上と左右に少し余白
             contentPadding = PaddingValues(start = 6.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(arranged, key = { it.id }) { part ->
                 // ReorderableItem が、並びが変わったときにカードを滑らかに動かす（animateItem）
@@ -391,12 +391,19 @@ private fun PartCard(
                 scaleY = s
                 rotationZ = angle
                 shadowElevation = if (isDragging) 10.dp.toPx() else 0f
+                shape = CardShape
             }
+            // 1 本ずつ、方眼の上に置いた白い紙片にして、隣との境目を分かりやすくする。
+            // 選んだパーツは青い破線、持ち上げているパーツは真っ白
             .then(
                 when {
-                    isDragging -> Modifier.background(Color.White)
-                    selected && !editing -> Modifier.background(Fieldbook.SelectedPaper).dashedOutline(Fieldbook.Survey)
+                    isDragging -> Modifier.background(Color.White, CardShape)
+                    selected && !editing -> Modifier
+                        .background(Fieldbook.Card, CardShape)
+                        .dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
                     else -> Modifier
+                        .background(Fieldbook.Card, CardShape)
+                        .border(1.dp, Fieldbook.CardEdge, CardShape)
                 },
             )
             // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
@@ -463,7 +470,7 @@ private fun PartCard(
             }
         }
         Text(
-            "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ $date",
+            "L=${part.distanceM} m・頂点 ${part.points.size}・$date",
             fontFamily = Fieldbook.Data,
             fontSize = 10.5.sp,
             color = Fieldbook.Muted,
@@ -472,6 +479,9 @@ private fun PartCard(
         )
     }
 }
+
+/** パーツ 1 本ぶんの紙片の形（角を少しだけ丸める） */
+private val CardShape = RoundedCornerShape(4.dp)
 
 /** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
 private fun formatDate(epochMs: Long): String =
