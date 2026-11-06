@@ -20,9 +20,19 @@
 
 1. Android Studio（Narwhal 以降）で、このフォルダを開く
 2. Studio が作る `local.properties` に `local.properties.example` の 2 行を足す
-   - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画）
+   - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画。下の「地図（Maps API キー）」を参照）
    - `SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app`（本番サーバ。下の「サーバの接続先」を参照）
 3. Run。エミュレータでも実機でも可（minSdk 26）
+
+### 地図（Maps API キー）
+
+採集画面の地図は Google Maps で、`MAPS_API_KEY` が無いと軌跡だけを Canvas に描く。キーは A が管理している 1 つをチームで共有する（Slack で A から受け取って `local.properties` に書く。**リポジトリには入れない**）。
+
+- デバッグ署名はチーム共通の鍵 `app/debug.keystore`（パスワードは Android 標準と同じ `android`）。全員と GitHub Actions のビルドが同じ署名になるので、キーの「Android アプリ」制限にはこの鍵の SHA-1 だけ登録してある。自分の PC で作った鍵は使わない
+- 同じ署名なので、手元のビルドと Actions の APK を同じ端末に入れ替えてもアンインストールは要らない
+- **共通の鍵になる前のビルド（2026-11-06 以前）が入っている端末・エミュレータは、最初の 1 回だけアンインストールしてから入れる**（署名が変わるため）。アンインストールするとコレクション（集めたパーツ）も消えるので、残したいものがあれば先にタワーをサーバに送るなどしておく
+- キーは「API の制限」で Maps SDK for Android だけに絞ってある（リポジトリが公開で、Actions の APK からキーを取り出せるため。地図の表示は課金されない）
+- 鍵を作り直したときは、Google Cloud Console のキーの制限に新しい SHA-1 を登録し直す（`keytool -list -v -keystore app/debug.keystore -storepass android` で出る）
 
 実機で GPS を試すときは、権限ダイアログで「アプリの使用中のみ許可」でよい（バックグラウンド権限は使わない）。
 エミュレータで歩くには Extended Controls → Location で GPX を再生するか、アプリ内の「デモ散歩」を使う。
@@ -63,8 +73,8 @@ main への push とプルリクエストのたびに、`core`・`server`・`app
 
 ビルドした APK は、各実行結果ページの Artifacts にある `app-debug.apk` からダウンロードできる（GitHub へのログインが必要。14 日間保存）。
 
-- この APK は本番サーバにつながる。地図は表示されず、軌跡を Canvas で描く（`MAPS_API_KEY` なし）
-- 手元でビルドしたアプリが入っている端末では、署名が違うので、いったんアンインストールしてから入れる
+- この APK は本番サーバにつながる。リポジトリの Secrets に `MAPS_API_KEY` が入っていれば地図も出る（無ければ軌跡を Canvas で描く）
+- 署名はチーム共通の `app/debug.keystore` なので、手元でビルドしたアプリが入っている端末にもそのまま上書きで入る
 
 ## 構成と担当
 
