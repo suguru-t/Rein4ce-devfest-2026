@@ -66,7 +66,6 @@ import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
-import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import kotlin.math.max
 
@@ -97,10 +96,10 @@ fun CollectScreen(
         if (granted) vm.startRecording()
     }
 
+    // 方眼の地はアプリ全体（AppNav の Scaffold）で 1 枚敷いているので、ここでは描かない（二重になって端で線がずれる）
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         // 見出し：左に画面名、右に測量の数値（手持ちの「採集 n ・ 見本 n」と同じ位置・字）
