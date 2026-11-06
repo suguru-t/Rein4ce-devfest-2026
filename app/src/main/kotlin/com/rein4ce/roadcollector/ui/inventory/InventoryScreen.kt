@@ -33,6 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -196,6 +199,8 @@ private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> 
         modifier = Modifier
             .fillMaxWidth()
             .then(if (selected) Modifier.background(Fieldbook.SelectedPaper).dashedOutline(Fieldbook.Survey) else Modifier)
+            // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
+            .semantics { if (order != null) stateDescription = "$order 番目に積む" }
             .combinedClickable(
                 // 読み上げ（TalkBack）で、タップと長押しの意味が伝わるように
                 onClickLabel = if (selected) "選択を外す" else "選択",
@@ -213,7 +218,7 @@ private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> 
                     color = Fieldbook.Survey,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 6.dp, top = 2.dp),
+                    modifier = Modifier.padding(start = 6.dp, top = 2.dp).clearAndSetSemantics {},
                 )
             }
         }
@@ -237,5 +242,6 @@ private fun PartCard(part: Part, order: Int?, isSample: Boolean, onClick: () -> 
     }
 }
 
+/** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
 private fun formatDate(epochMs: Long): String =
-    if (epochMs <= 0L) "見本" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
+    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
