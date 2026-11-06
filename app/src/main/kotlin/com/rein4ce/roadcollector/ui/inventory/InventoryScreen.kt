@@ -14,6 +14,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +67,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,7 +93,7 @@ import java.util.Locale
  * - 長押しのまま動かすと並べ替え（素早く払えばスクロール）。長押しで並べ替え中に入るときも、そのまま動かせる
  * - タップしても選択は変わらない。「完了」か戻るで普段の状態に戻る
  *
- * 名前の右の虫めがねで、パーツを大きく見られる（普段も並べ替え中も）。
+ * 名前の右の虫めがねで、パーツを大きく見られる（普段も並べ替え中も）。そこから名前を付けられる（RenameDialog.kt）。
  *
  * 見た目は「測量野帳」（Fieldbook.kt）。
  */
@@ -127,13 +130,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val missingSamples = SampleParts.all.count { s -> parts.none { it.id == s.id } }
     // 削除の確認ダイアログを出しているパーツ（null なら出していない）
     var pendingDelete by remember { mutableStateOf<Part?>(null) }
-    // 虫めがねで大きく見ているパーツ（null なら見ていない）
-    var zoomed by remember { mutableStateOf<Part?>(null) }
+    // 虫めがねで大きく見ているパーツと、名前を付けているパーツの id（null なら開いていない）。
+    // id で持つのは、名前を付けたあと、大きく見る画面に新しい名前で戻るため
+    var zoomedId by remember { mutableStateOf<String?>(null) }
+    var renamingId by remember { mutableStateOf<String?>(null) }
 
+    // 方眼の地はアプリ全体（AppNav の Scaffold）で 1 枚敷いているので、ここでは描かない（二重になって端で線がずれる）
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）
@@ -205,7 +210,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             }
                         },
                         onDeleteClick = { pendingDelete = part },
-                        onZoom = { zoomed = part },
+                        onZoom = { zoomedId = part.id },
                         dragHandle = Modifier.longPressDraggableHandle(
                             onDragStarted = {
                                 draggingId = part.id
@@ -216,7 +221,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             onDragStopped = {
                                 val now = arranged.indexOfFirst { it.id == part.id }
                                 draggingId = null
-                                if (now != dragStartIndex) saveArranged(arranged)
+                                if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
+                                // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
+                                // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
+                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
@@ -224,6 +232,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             CustomAccessibilityAction("先頭へ") { moveTo(0); true }.takeIf { index > 0 },
                             CustomAccessibilityAction("前へ") { moveTo(index - 1); true }.takeIf { index > 0 },
                             CustomAccessibilityAction("後ろへ") { moveTo(index + 1); true }.takeIf { index < arranged.size - 1 },
+                            CustomAccessibilityAction("名前を付ける") { renamingId = part.id; true },
                             CustomAccessibilityAction("削除") { pendingDelete = part; true },
                         ),
                     )
@@ -264,7 +273,21 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
     }
 
-    zoomed?.let { part -> ZoomDialog(part, onDismiss = { zoomed = null }) }
+    // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
+    val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
+    val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
+    if (renaming != null) {
+        RenameDialog(
+            part = renaming,
+            onSave = { name ->
+                repository.rename(renaming.id, name)
+                renamingId = null
+            },
+            onDismiss = { renamingId = null },
+        )
+    } else if (zoomed != null) {
+        ZoomDialog(zoomed, onRename = { renamingId = zoomed.id }, onDismiss = { zoomedId = null })
+    }
 
     pendingDelete?.let { part ->
         DeleteDialog(
@@ -340,9 +363,9 @@ private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boo
     }
 }
 
-/** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す */
+/** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -365,6 +388,9 @@ private fun ZoomDialog(part: Part, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("閉じる", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onRename) { Text("名前を付ける", color = Fieldbook.Survey) }
         },
     )
 }
@@ -505,13 +531,14 @@ private fun PartCard(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            // 名前は 10 文字まで（命名 API・名前を付けるダイアログと同じ）。長い名前は字を少し小さくして 1 行に収める。
+            // それでも入らない幅の端末では「…」で切る（虫めがねで全部見られる）
+            BasicText(
                 part.displayName,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Fieldbook.Ink,
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
                 modifier = Modifier.padding(start = 6.dp).weight(1f),
             )
             // 虫めがね：押すと大きく見られる（タップの「選ぶ」とは別）

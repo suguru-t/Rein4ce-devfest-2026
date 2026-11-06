@@ -1,20 +1,48 @@
 package com.rein4ce.roadcollector.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -22,9 +50,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
+import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
+import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 
 /**
  * 4 画面のタブ。担当分けに合わせて 1 画面 = 1 パッケージ。
@@ -33,13 +64,16 @@ import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
  *   inventory … B：手持ちパーツ（ui/inventory）
  *   stack     … D：積み上げゲーム（ui/game）
  *   gallery   … C：サーバ連携（ui/gallery, net/）
+ *
+ * @property icon        選択中に出す「塗り」のアイコン
+ * @property iconOutline それ以外のときに出す「線画」のアイコン
  */
-sealed class Dest(val route: String, val label: String, val icon: ImageVector) {
-    // アイコンは material-icons の標準セット（追加依存なし）。好みで material-icons-extended に替えてよい
-    data object Collect : Dest("collect", "採集", Icons.Filled.Place)
-    data object Inventory : Dest("inventory", "コレクション", Icons.AutoMirrored.Filled.List)
-    data object Stack : Dest("stack", "積む", Icons.Filled.Build)
-    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share)
+sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
+    // 足跡・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
+    data object Collect : Dest("collect", "採集", AppIcons.Footprints, AppIcons.FootprintsOutline)
+    data object Inventory : Dest("inventory", "コレクション", AppIcons.Bag, AppIcons.BagOutline)
+    data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
+    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
 
     companion object {
         val all = listOf(Collect, Inventory, Stack, Gallery)
@@ -61,19 +95,10 @@ fun AppNav() {
     }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                Dest.all.forEach { dest ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { go(dest) },
-                        icon = { Icon(dest.icon, contentDescription = dest.label) },
-                        label = { Text(dest.label) },
-                    )
-                }
-            }
-        },
+        // 地はアプリ全体で方眼紙。タブバーは透明なので、浮いたピルの下に方眼が透けて見える
+        modifier = Modifier.fieldbookGrid(),
+        containerColor = Color.Transparent,
+        bottomBar = { TabBar(currentDestination, onGo = ::go) },
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -87,3 +112,85 @@ fun AppNav() {
         }
     }
 }
+
+/**
+ * 下のタブバー。地は透明で、4 つのアイコンを 1 つの丸いピル（錠剤型）で囲んで浮かせる。
+ * Instagram のタブのように文字なし・アイコンだけで、選択中は「塗り」、それ以外は「線画」（大きさと色は同じ墨色）。
+ * 選択中の後ろには薄い丸、タップしたタブはひと呼吸だけ縮んで戻る。
+ * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡す。
+ */
+@Composable
+private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 10.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .shadow(elevation = 6.dp, shape = PillShape, ambientColor = Fieldbook.Ink, spotColor = Fieldbook.Ink)
+                // 紙色を少し透かして、下の方眼が見えるように
+                .background(Fieldbook.Paper.copy(alpha = 0.88f), PillShape)
+                .border(1.dp, Fieldbook.GridMajor, PillShape)
+                .clip(PillShape),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Dest.all.forEach { dest ->
+                val isSelected = current?.hierarchy?.any { it.route == dest.route } == true
+                // 押したタブは少し大きいまま（1.18 倍）。選ばれた瞬間はひと呼吸縮んでから、バネで弾んで大きくなる
+                val scale = remember { Animatable(if (isSelected) SelectedScale else 1f) }
+                LaunchedEffect(isSelected) {
+                    if (isSelected) {
+                        scale.snapTo(0.85f)
+                        scale.animateTo(SelectedScale, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                    } else {
+                        scale.animateTo(1f, spring(stiffness = Spring.StiffnessMedium))
+                    }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .semantics {
+                            role = Role.Tab
+                            selected = isSelected
+                            contentDescription = dest.label
+                        }
+                        // 波紋は出さない（Instagram と同じく、アイコンの弾みだけ）
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onGo(dest) },
+                ) {
+                    // 選択中の後ろに薄い楕円（横長。ピルの形と相似）
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 60.dp, height = 40.dp)
+                                .background(Fieldbook.Ink.copy(alpha = 0.08f), CircleShape),
+                        )
+                    }
+                    Icon(
+                        imageVector = if (isSelected) dest.icon else dest.iconOutline,
+                        contentDescription = null,
+                        tint = Fieldbook.Ink,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .graphicsLayer {
+                                scaleX = scale.value
+                                scaleY = scale.value
+                            },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** ピルの形（高さ 56dp の半分の角丸） */
+private val PillShape = RoundedCornerShape(28.dp)
+
+/** 押したタブのアイコンの大きさ（元の何倍か） */
+private const val SelectedScale = 1.18f
