@@ -142,3 +142,26 @@ class PartRoutesTest {
         assertEquals("🌙月夜の長い長い小道", cut)
     }
 }
+
+/** どの命名の部品を使うかの切り替え。本物の Gemini は作らない（認証のない CI でも通るように） */
+class PartNamerSelectionTest {
+
+    private fun envOf(vararg pairs: Pair<String, String>): (String) -> String? = mapOf(*pairs)::get
+
+    @Test
+    fun `手元の既定と PART_NAMER=off は命名なし`() {
+        kotlin.test.assertSame(DisabledPartNamer, PartNamer.fromEnvironment(envOf()))
+        kotlin.test.assertSame(DisabledPartNamer, PartNamer.fromEnvironment(envOf("PART_NAMER" to "off", "K_SERVICE" to "x")))
+    }
+
+    @Test
+    fun `Gemini を使う設定でもプロジェクト ID が分からなければ、落ちずに命名なしで動く`() {
+        // GOOGLE_CLOUD_PROJECT なし。手元・CI にはメタデータサーバもない
+        kotlin.test.assertSame(DisabledPartNamer, PartNamer.fromEnvironment(envOf("PART_NAMER" to "gemini")))
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun `PART_NAMER の打ち間違いは起動時に気づけるようにする`() {
+        PartNamer.fromEnvironment(envOf("PART_NAMER" to "gemni"))
+    }
+}

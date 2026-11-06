@@ -41,6 +41,7 @@ internal fun buildNamingPrompt(part: Part): String {
         appendLine("- 地名・人名・店名・実在の作品名は入れない")
         appendLine("- 絵文字・記号・かぎ括弧は使わない")
         appendLine("- 「〜のパーツ」「〜の道」で終わる名前ばかりにしない")
+        appendLine("- ありがちな名前は避け、意外性のある言葉選びにする")
         appendLine("- $NAMING_TONE")
     }.trimEnd()
 }

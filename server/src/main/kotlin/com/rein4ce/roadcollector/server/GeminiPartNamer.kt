@@ -4,6 +4,7 @@ import com.google.genai.Client
 import com.google.genai.types.GenerateContentConfig
 import com.google.genai.types.Schema
 import com.google.genai.types.ThinkingConfig
+import com.google.genai.types.ThinkingLevel
 import com.google.genai.types.Type
 import com.rein4ce.roadcollector.core.model.Part
 import java.net.URI
@@ -20,7 +21,11 @@ import kotlinx.serialization.json.Json
  *
  * - 認証は Application Default Credentials（Cloud Run はサービスアカウント、手元は
  *   `gcloud auth application-default login`）。API キーは使わない（AI Studio はクレジット対象外）
- * - 考える時間（thinking）はオフ。オンだと数秒かかり、3 秒の打ち切り（PartNamer.TIMEOUT_MS）を超える
+ * - モデルは gemini-3.5-flash-lite を global で使う。2026-11-06 の試し打ちで、名前付けには十分な質で、
+ *   12 回とも 1 秒以内だった。3.5-flash は時間帯によって 5〜8 秒かかり 429（混雑）も返した。
+ *   2.5-flash はこのプロジェクトでは使えず（404）、3.8-flash は遅く失敗が混ざった
+ *   （比較は docs/decisions.md の 10 番）。GEMINI_MODEL / GEMINI_LOCATION で替えられる
+ * - 考える時間（thinking）は最小（MINIMAL）。長く考えさせると 3 秒の打ち切り（PartNamer.TIMEOUT_MS）を超える
  * - 返事は {"name": "..."} の JSON に固定して、読み取りを安定させる
  * - 長さの切り詰めや空の判定は nameSafely / cleanName がやるので、ここでは読み取るだけ
  */
@@ -37,8 +42,9 @@ class GeminiPartNamer(
     }
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-2.5-flash"
-        const val DEFAULT_LOCATION = "asia-northeast1"
+        const val DEFAULT_MODEL = "gemini-3.5-flash-lite"
+        /** 3.5-flash-lite は東京（asia-northeast1）にはなく、global でだけ使える */
+        const val DEFAULT_LOCATION = "global"
 
         private val CONFIG: GenerateContentConfig = GenerateContentConfig.builder()
             .responseMimeType("application/json")
@@ -49,8 +55,9 @@ class GeminiPartNamer(
                     .required(listOf("name"))
                     .build()
             )
-            .thinkingConfig(ThinkingConfig.builder().thinkingBudget(0).build())
-            .temperature(1.0f) // 毎回少し違う名前が出るように
+            .thinkingConfig(ThinkingConfig.builder().thinkingLevel(ThinkingLevel.Known.MINIMAL).build())
+            // 1.8 まで上げても名前のばらつきはあまり増えなかったので 1.0。ばらつきは指示文（「意外性」の 1 行）で出す
+            .temperature(1.0f)
             .maxOutputTokens(64)
             .build()
 

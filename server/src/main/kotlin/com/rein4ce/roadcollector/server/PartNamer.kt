@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory
  *
  * 実装：
  * - [DisabledPartNamer]：いつも null。手元で GCP の設定がないとき
- * - GeminiPartNamer：Vertex AI の Gemini を呼ぶ（これから作る）
+ * - [GeminiPartNamer]：Vertex AI の Gemini を呼ぶ
  *
  * どれを使うかは [PartNamer.fromEnvironment] が決める。
  */
@@ -41,11 +41,26 @@ interface PartNamer {
                 null, "" -> !env("K_SERVICE").isNullOrBlank()
                 else -> error("PART_NAMER は gemini か off（指定値: $explicit）")
             }
-            if (useGemini) {
-                // TODO(C): GeminiPartNamer ができたらここで返す。それまでは命名なし（503）で安全に動かす
-                log.warn("GeminiPartNamer は未実装のため、命名は無効（DisabledPartNamer）で動きます")
+            if (!useGemini) {
+                log.info("PartNamer: off（命名なし。POST /parts/name は 503）")
+                return DisabledPartNamer
             }
-            return DisabledPartNamer
+            // 設定が足りなくてもサーバは起動させる（命名だけ無効にして 503 を返す）
+            val projectId = GeminiPartNamer.resolveProjectId(env)
+            if (projectId == null) {
+                log.error("PartNamer: Gemini を使う設定だがプロジェクト ID が分からないので、命名なしで動きます（GOOGLE_CLOUD_PROJECT を設定する）")
+                return DisabledPartNamer
+            }
+            val location = env("GEMINI_LOCATION")?.takeIf { it.isNotBlank() } ?: GeminiPartNamer.DEFAULT_LOCATION
+            val model = env("GEMINI_MODEL")?.takeIf { it.isNotBlank() } ?: GeminiPartNamer.DEFAULT_MODEL
+            return try {
+                GeminiPartNamer.create(projectId, location, model).also {
+                    log.info("PartNamer: Gemini（project=$projectId, location=$location, model=$model）")
+                }
+            } catch (e: Exception) {
+                log.error("PartNamer: Gemini の準備に失敗したので、命名なしで動きます: ${e.message}", e)
+                DisabledPartNamer
+            }
         }
     }
 }
