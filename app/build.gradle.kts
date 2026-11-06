@@ -12,8 +12,11 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-// Maps API キー：local.properties → 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）の順に見る
-val mapsApiKey: String = (localProps.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY"))?.trim().orEmpty()
+// Maps API キー：local.properties → 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）の順に見る。
+// local.properties に「MAPS_API_KEY=」の空の行だけがあるときも、環境変数を見に行く
+val mapsApiKey: String = (
+    localProps.getProperty("MAPS_API_KEY")?.takeIf { it.isNotBlank() } ?: System.getenv("MAPS_API_KEY")
+    )?.trim().orEmpty()
 val serverBaseUrl: String = localProps.getProperty("SERVER_BASE_URL")?.trim().orEmpty()
     .ifEmpty { "https://road-collector-415368216017.asia-northeast1.run.app" }
 
