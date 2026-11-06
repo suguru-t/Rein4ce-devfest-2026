@@ -27,7 +27,7 @@ import io.ktor.server.routing.post
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON
  *   GET  /towers/{id}/image.svg  タワーの絵（SVG）
  *
- *   TODO(C): POST /parts/name  Vertex AI（Gemini）でパーツ命名
+ *   POST /parts/name           パーツに名前を付ける（Gemini）→ { name }。失敗は 503。PartRoutes.kt
  *   TODO(C): 対戦方式が決まったら /challenges
  */
 fun Route.towerRoutes(store: TowerStore) {

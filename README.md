@@ -89,6 +89,8 @@ app/    com.rein4ce.roadcollector
 server/ com.rein4ce.roadcollector.server                                                  … C
   Application.kt  Ktor 起動（PORT 環境変数）
   Routes.kt       GET /, /health, /towers, POST /towers, GET /towers/{id}, /towers/{id}/image.svg
+  PartRoutes.kt   POST /parts/name（パーツの命名。失敗は 503）
+  PartNamer.kt    命名の部品。Gemini 版と、命名なし（手元の既定）
   TowerStore.kt   いまはメモリ。Firestore に置き換える
   SharePage.kt    OGP 付き共有ページ
 ```
