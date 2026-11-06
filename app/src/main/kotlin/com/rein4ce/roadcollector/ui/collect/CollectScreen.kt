@@ -228,7 +228,7 @@ fun CollectScreen(
             },
             confirmButton = {
                 TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }) {
-                    Text("手持ちを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+                    Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
