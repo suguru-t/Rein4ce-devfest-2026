@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
@@ -38,12 +39,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -62,7 +61,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -86,15 +85,14 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * B 担当：手持ちパーツ一覧。タップで選択（最大 5 本）→「積む」へ。
+ * B 担当：手持ちパーツ一覧。カードの左上の丸で選び（最大 5 本）→「積む」へ。
+ * カードをタップすると大きく見られて、そこから名前を付けられる（RenameDialog.kt）。
  *
  * 長押しで「並べ替え中」になる（iPhone のホーム画面の「アプリを並べ替え中」と同じ）：
  * - カードが小さく揺れ、左上の「×」で削除（確認あり）
  * - 長押しのまま動かすと並べ替え（素早く払えばスクロール）。長押しで並べ替え中に入るときも、そのまま動かせる
  * - タップしても選択は変わらない。「完了」か戻るで普段の状態に戻る
- *
- * 名前の右の虫めがねで、パーツを大きく見られる（普段も並べ替え中も）。そこから名前を付けられる（RenameDialog.kt）。
- *
+ * *
  * 見た目は「測量野帳」（Fieldbook.kt）。
  */
 @Composable
@@ -130,7 +128,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val missingSamples = SampleParts.all.count { s -> parts.none { it.id == s.id } }
     // 削除の確認ダイアログを出しているパーツ（null なら出していない）
     var pendingDelete by remember { mutableStateOf<Part?>(null) }
-    // 虫めがねで大きく見ているパーツと、名前を付けているパーツの id（null なら開いていない）。
+    // 大きく見ているパーツと、名前を付けているパーツの id（null なら開いていない）。
     // id で持つのは、名前を付けたあと、大きく見る画面に新しい名前で戻るため
     var zoomedId by remember { mutableStateOf<String?>(null) }
     var renamingId by remember { mutableStateOf<String?>(null) }
@@ -155,7 +153,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 if (editing) {
                     "長押しのまま動かして並べ替え ・ × で削除"
                 } else {
-                    "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで並べ替え／削除"
+                    "タップで大きく見る ・ ○で選ぶ（${GameSession.MAX_PARTS} 本まで）・ 長押しで並べ替え"
                 },
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
@@ -200,9 +198,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         // 隣どうしで逆向きに揺らすと、iPhone のようにばらばらに揺れて見える
                         jiggleDirection = if (index % 2 == 0) 1f else -1f,
                         reduceMotion = reduceMotion,
-                        onClick = {
-                            // 並べ替え中のタップでは選択を変えない（長押しで並べ替え中に入ったあとに届くタップもここで止まる）
-                            if (editing) return@PartCard
+                        // 5 本選んだら、まだ選んでいないカードの丸は押せない
+                        canSelect = order != null || validSelected.size < GameSession.MAX_PARTS,
+                        // タップ：大きく見る（並べ替え中は何もしない。長押しで並べ替え中に入ったあとに届くタップもここで止まる）
+                        onClick = { if (!editing) zoomedId = part.id },
+                        onToggleSelect = {
                             if (part.id in selectedIds) {
                                 selectedIds.remove(part.id)
                             } else if (validSelected.size < GameSession.MAX_PARTS) {
@@ -210,7 +210,6 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             }
                         },
                         onDeleteClick = { pendingDelete = part },
-                        onZoom = { zoomedId = part.id },
                         dragHandle = Modifier.longPressDraggableHandle(
                             onDragStarted = {
                                 draggingId = part.id
@@ -428,9 +427,12 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
 }
 
 /**
- * パーツ 1 本のカード。枠は付けず、方眼の上に図と注記だけを置く（選んだときだけ白地と破線の枠）。
+ * パーツ 1 本のカード。方眼の上に置いた白い紙片に、図と注記を載せる（選んだときは青い破線の枠）。
+ * - タップすると大きく見る（[onClick]）
+ * - 左上の丸を押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
  * @param order 選んだ順（＝積む順）。選んでいなければ null
- * @param editing 並べ替え中なら、揺らして左上に「×」を出す（選んだ順の ①② は出さない）
+ * @param canSelect 選べるか（5 本選んだあとの、まだ選んでいないカードは false）
+ * @param editing 並べ替え中なら、揺らして左上に「×」を出す（選ぶ丸は出さない）
  */
 @Composable
 private fun PartCard(
@@ -441,9 +443,10 @@ private fun PartCard(
     editing: Boolean,
     jiggleDirection: Float,
     reduceMotion: Boolean,
+    canSelect: Boolean,
     onClick: () -> Unit,
+    onToggleSelect: () -> Unit,
     onDeleteClick: () -> Unit,
-    onZoom: () -> Unit,
     dragHandle: Modifier,
     a11yActions: List<CustomAccessibilityAction>,
 ) {
@@ -487,7 +490,7 @@ private fun PartCard(
                         .border(1.dp, Fieldbook.CardEdge, CardShape)
                 },
             )
-            // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
+            // 読み上げでも「何番目に積むか」が伝わるように
             .semantics {
                 if (order != null && !editing) stateDescription = "$order 番目に積む"
                 customActions = a11yActions
@@ -496,20 +499,20 @@ private fun PartCard(
             .clickable(
                 enabled = !editing,
                 // 読み上げ（TalkBack）で、タップの意味が伝わるように
-                onClickLabel = if (selected) "選択を外す" else "選択",
+                onClickLabel = "大きく見る",
                 onClick = onClick,
             )
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Box {
             FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-            if (order != null && !editing) {
-                Text(
-                    Fieldbook.orderMark(order),
-                    color = Fieldbook.Survey,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 6.dp, top = 2.dp).clearAndSetSemantics {},
+            if (!editing) {
+                SelectMark(
+                    order = order,
+                    enabled = canSelect,
+                    name = part.displayName,
+                    onToggle = onToggleSelect,
+                    modifier = Modifier.align(Alignment.TopStart),
                 )
             }
             if (editing && !isDragging) {
@@ -530,27 +533,16 @@ private fun PartCard(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // 名前は 10 文字まで（命名 API・名前を付けるダイアログと同じ）。長い名前は字を少し小さくして 1 行に収める。
-            // それでも入らない幅の端末では「…」で切る（虫めがねで全部見られる）
-            BasicText(
-                part.displayName,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 6.dp).weight(1f),
-            )
-            // 虫めがね：押すと大きく見られる（タップの「選ぶ」とは別）
-            IconButton(onClick = onZoom, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = "「${part.displayName}」を大きく見る",
-                    tint = Fieldbook.Muted,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
+        // 名前は 10 文字まで（命名 API・名前を付けるダイアログと同じ）。長い名前は字を少し小さくして 1 行に収める。
+        // それでも入らない幅の端末では「…」で切る（タップして大きく見れば全部見られる）
+        BasicText(
+            part.displayName,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
+            modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
+        )
         Text(
             "L=${part.distanceM} m・頂点 ${part.points.size}・$date",
             fontFamily = Fieldbook.Data,
@@ -559,6 +551,42 @@ private fun PartCard(
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
+    }
+}
+
+/**
+ * カードの左上の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
+ * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
+ */
+@Composable
+private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val selected = order != null
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(44.dp)
+            .toggleable(value = selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics {
+                contentDescription = "「$name」を積むのに選ぶ"
+                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "5 本選んだので選べない"
+            },
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(if (selected) Fieldbook.Survey else Color.White.copy(alpha = 0.92f))
+                .border(
+                    BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
+                    CircleShape,
+                ),
+        ) {
+            if (order != null) {
+                Text("$order", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
+            }
+        }
     }
 }
 
