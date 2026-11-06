@@ -1,20 +1,28 @@
 package com.rein4ce.roadcollector.collect
 
+import com.rein4ce.roadcollector.core.geo.TrackTime
+import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import kotlinx.coroutines.delay
 
 /**
- * 歩かなくてもデモできるように、サンプル軌跡を早回しで TrackRecorder に流す。
+ * 歩かなくてもデモできるように、軌跡を早回しで TrackRecorder に流す。
  * 審査員は歩けないので、これがデモの命綱。
  *
- * 実機で録った GPX / JSON を読み込む機能は、このクラスに足すのが自然。
+ * 流す軌跡はサンプル（[SampleTracks]）か、実機で録った GPX / JSON ファイル
+ * （[com.rein4ce.roadcollector.core.io.TrackFileParser] で読んだ点列）。
+ * どちらも時刻を「最後の点 = 今」にずらして流すので、できたパーツの採集日時は今になる。
  */
 object DemoWalkPlayer {
 
-    suspend fun play(track: SampleTracks.SampleTrack, durationMs: Long = 3_000L) {
+    suspend fun play(track: SampleTracks.SampleTrack, durationMs: Long = 3_000L) =
+        play(track.points, durationMs)
+
+    suspend fun play(points: List<TrackPoint>, durationMs: Long = 3_000L) {
+        val shifted = TrackTime.shiftToEndAt(points, endMs = System.currentTimeMillis())
         TrackRecorder.start()
-        val perPoint = (durationMs / track.points.size.coerceAtLeast(1)).coerceAtLeast(1L)
-        for (p in track.points) {
+        val perPoint = (durationMs / shifted.size.coerceAtLeast(1)).coerceAtLeast(1L)
+        for (p in shifted) {
             TrackRecorder.add(p)
             delay(perPoint)
         }

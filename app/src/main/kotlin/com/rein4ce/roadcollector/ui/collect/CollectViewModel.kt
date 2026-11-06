@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.ui.collect
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,12 +14,16 @@ import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.geo.TrackToPart
+import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 採集画面の状態。
@@ -66,13 +71,32 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         convert(pts)
     }
 
-    fun playDemo(track: SampleTracks.SampleTrack) {
+    fun playDemo(track: SampleTracks.SampleTrack) = playPoints { track.points }
+
+    /** 実機で録った GPX / JSON ファイルを読んで、デモ散歩と同じように流す。 */
+    fun playFile(uri: Uri) = playPoints {
+        val ctx = getApplication<Application>()
+        val text = withContext(Dispatchers.IO) {
+            ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+        } ?: throw IllegalArgumentException("ファイルを開けません")
+        TrackFileParser.parse(text)
+    }
+
+    private fun playPoints(load: suspend () -> List<TrackPoint>) {
         if (isRecording.value) return
         demoJob?.cancel()
         demoJob = viewModelScope.launch {
             isDemoPlaying = true
             try {
-                DemoWalkPlayer.play(track)
+                val points = try {
+                    load()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    outcome = Outcome.Rejected("読み込めませんでした：${e.message ?: e.javaClass.simpleName}")
+                    return@launch
+                }
+                DemoWalkPlayer.play(points)
                 val pts = TrackRecorder.stop()
                 convert(pts)
             } finally {
