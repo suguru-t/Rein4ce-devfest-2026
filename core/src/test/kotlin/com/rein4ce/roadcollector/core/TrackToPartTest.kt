@@ -95,7 +95,7 @@ class TrackToPartTest {
 
     @Test
     fun `gps jitter on a straight walk does not become a wiggle`() {
-        // まっすぐ 400 m。±2 m の揺れは ε 8 m より小さいので、形に残らない
+        // まっすぐ 400 m。±2 m の揺れは ε 10 m より小さいので、形に残らない
         val part = (TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0))) as TrackToPart.Result.Success).part
         assertEquals(2, part.points.size)
         assertEquals(Kind.BAR, part.kind)
@@ -103,17 +103,47 @@ class TrackToPartTest {
 
     @Test
     fun `accurate gps keeps the base epsilon`() {
-        // 精度 ±3 m の記録は、ε 8 m のまま細かく残す
+        // 精度 ±3 m の記録は、ε 10 m のまま細かく残す
         val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0), accuracyM = 3f)) as TrackToPart.Result.Success
-        assertEquals(8.0, r.stats.epsilonM, 1e-9)
+        assertEquals(10.0, r.stats.epsilonM, 1e-9)
+    }
+
+    @Test
+    fun `a walk between 150 and 200 m becomes a part`() {
+        // 東へ 100 m、北へ 70 m（約 170 m）。以前の最低 200 m では弾かれていた長さ
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 100.0 to 0.0, 100.0 to 70.0)))
+        assertTrue("$r", r is TrackToPart.Result.Success)
+        assertEquals(Kind.L, (r as TrackToPart.Result.Success).part.kind)
+    }
+
+    @Test
+    fun `gps jumps at the start are dropped by the speed filter`() {
+        // 記録開始直後に位置が定まらず、1 秒ごとに 20 m 飛ぶ点が 5 つ → そのあと普通に 300 m 歩く
+        val straight = walk(listOf(0.0 to 0.0, 0.0 to 300.0))
+        val t0 = straight.first().timeMs
+        val lat0 = straight.first().lat
+        val lng0 = straight.first().lng
+        val jumps = (5 downTo 1).map { k ->
+            // 東西に 20 m ずつ交互に飛ぶ（0.00018° ≈ 20 m）
+            TrackPoint(lat0, lng0 + (if (k % 2 == 0) 0.00018 else -0.00018), accuracyM = 8f, timeMs = t0 - k * 1_000L)
+        }
+        val track = jumps + straight
+
+        val withFilter = TrackToPart.convert(track) as TrackToPart.Result.Success
+        val withoutFilter = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(maxSpeedMps = Double.MAX_VALUE)) as TrackToPart.Result.Success
+
+        // 速度フィルタで飛びが落ちて、まっすぐ（棒）になる。フィルタなしだと飛びが形に残る
+        assertEquals(Kind.BAR, withFilter.part.kind)
+        assertEquals(2, withFilter.part.points.size)
+        assertTrue("without=${withoutFilter.part.points.size}", withoutFilter.part.points.size > 2)
     }
 
     @Test
     fun `rough gps is simplified to its accuracy`() {
         // まっすぐ 400 m を、±6 m 揺れる粗い GPS（精度 15 m）で記録したもの。
-        // ε 8 m のままだと揺れが 11 個の頂点になる（揺れがもっと大きいと頂点の上限で ε が勝手に上がるので、この程度で試す）
+        // 細かい ε（8 m）に固定したままだと揺れがいくつも頂点になる（揺れがもっと大きいと頂点の上限で ε が勝手に上がるので、この程度で試す）
         val track = walk(listOf(0.0 to 0.0, 0.0 to 400.0), noiseM = 6.0, accuracyM = 15f)
-        val fixed = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(epsilonFollowsAccuracy = false)) as TrackToPart.Result.Success
+        val fixed = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(epsilonFollowsAccuracy = false, epsilonM = 8.0)) as TrackToPart.Result.Success
         val adaptive = TrackToPart.convert(track) as TrackToPart.Result.Success
 
         // ε を精度（15 m）に合わせると、揺れが形にならず、名札もまっすぐ（棒）になる
@@ -125,9 +155,9 @@ class TrackToPartTest {
 
     @Test
     fun `unknown accuracy keeps the base epsilon`() {
-        // GPX など、精度が分からない（0）点だけなら、ε 8 m のまま
+        // GPX など、精度が分からない（0）点だけなら、ε 10 m のまま
         val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0), accuracyM = 0f)) as TrackToPart.Result.Success
-        assertEquals(8.0, r.stats.epsilonM, 1e-9)
+        assertEquals(10.0, r.stats.epsilonM, 1e-9)
     }
 
     /**
