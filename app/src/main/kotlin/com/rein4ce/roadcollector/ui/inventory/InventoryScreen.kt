@@ -126,7 +126,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
     val validSelected = selectedIds.filter { id -> parts.any { it.id == id } }
     // 選択中か（積むパーツを選んでいる）。前回の選択は残してあり、「選択」を押すとそのまま出る。
-    // 「キャンセル」か戻るで、選択を消して普段に戻る（写真アプリと同じ）
+    // 「キャンセル」か戻るで、選択を消して普段に戻る（写真アプリと同じ）。
+    // ただし消すのはこの画面の選択（selectedIds）だけ。積む画面に渡した選択（GameSession.selected）には触らない
+    // （触ると、積んでいる途中のゲームが最初からやり直しになる）。なので、キャンセルしたあと別のタブから戻ると、
+    // selectedIds が GameSession.selected から作り直されて、「選択」で積む画面に渡した選択がまた出る
     var selecting by remember { mutableStateOf(false) }
     fun cancelSelecting() {
         selectedIds.clear()
