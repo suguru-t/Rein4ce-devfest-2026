@@ -33,6 +33,8 @@ dependencies {
     implementation(libs.logback.classic)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.ktor.server.test.host)
 }
 
 // Jib：Docker 無しでコンテナイメージを作って Artifact Registry に push する。

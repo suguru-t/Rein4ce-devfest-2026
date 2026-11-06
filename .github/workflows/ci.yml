@@ -1,4 +1,5 @@
-# main への push とプルリクエストのたびに、core のテスト・server のビルド・app の APK ビルドを走らせる。
+# main への push とプルリクエストのたびに、core と server のテスト・server のビルド・app の APK ビルドを走らせる。
+# （:server:build は :server:test を含む）
 # ビルドした APK は、実行結果ページの Artifacts から app-debug.apk としてダウンロードできる（14 日間保存）。
 name: CI
 
@@ -32,7 +33,7 @@ jobs:
           cache: gradle
 
       # local.properties が無いので、MAPS_API_KEY は空（地図なし）、SERVER_BASE_URL は本番の Cloud Run になる
-      - name: core のテスト・server のビルド・app の APK ビルド
+      - name: core と server のテスト・server のビルド・app の APK ビルド
         run: ./gradlew --no-daemon :core:test :server:build :app:assembleDebug
 
       - name: APK をアップロード
