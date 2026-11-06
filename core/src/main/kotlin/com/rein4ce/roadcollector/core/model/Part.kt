@@ -49,8 +49,11 @@ data class Part(
     val walkedAt: Long = 0L,
     val name: String? = null,
 ) {
+    /** 名前が付いているか。空文字は「名前なし」と同じに扱う（名前の有無はここだけで判定する） */
+    val hasName: Boolean get() = !name.isNullOrBlank()
+
     /** 画面に出す名前。名前がまだないときは、分類（L字など）ではなく歩いた距離で呼ぶ */
-    val displayName: String get() = name ?: "$distanceM m の散歩"
+    val displayName: String get() = name?.takeIf { hasName } ?: "$distanceM m の散歩"
 
     companion object {
         const val DEFAULT_THICKNESS = 0.15f
