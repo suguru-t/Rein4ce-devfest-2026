@@ -167,47 +167,62 @@ class PartRepositoryTest {
     }
 
     @Test
-    fun `move to top is saved and survives a restart`() = runTest {
+    fun `an arranged order is saved and survives a restart`() = runTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
         repo.add(walk)
+        val arranged = listOf(SampleParts.all[2].id, walk.id) + SampleParts.all.map { it.id }.filter { it != SampleParts.all[2].id }
 
-        assertTrue(repo.moveToTop(SampleParts.all[2].id, now = 5_000L))
+        repo.setOrder(arranged)
         advanceUntilIdle()
-        assertEquals(mapOf(SampleParts.all[2].id to 5_000L), repo.movedToTopAt.value)
+        assertEquals(arranged, repo.order.value)
 
         // アプリを開き直しても残る（parts.json とは別のファイル）
         val again = repository(f)
         advanceUntilIdle()
-        assertEquals(mapOf(SampleParts.all[2].id to 5_000L), again.movedToTopAt.value)
+        assertEquals(arranged, again.order.value)
         assertTrue(File(tmp.root, "parts_order.json").exists())
     }
 
     @Test
-    fun `deleting a part forgets its move to top`() = runTest {
+    fun `setOrder drops unknown ids and duplicates`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+
+        repo.setOrder(listOf("nothing-here", SampleParts.all[1].id, SampleParts.all[1].id, SampleParts.all[0].id))
+        assertEquals(listOf(SampleParts.all[1].id, SampleParts.all[0].id), repo.order.value)
+    }
+
+    @Test
+    fun `deleting a part removes it from the arranged order`() = runTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
         repo.add(walk)
-        repo.moveToTop(walk.id, now = 5_000L)
+        repo.setOrder(listOf(walk.id) + SampleParts.all.map { it.id })
         repo.remove(walk.id)
         advanceUntilIdle()
 
-        assertTrue(repo.movedToTopAt.value.isEmpty())
+        assertEquals(SampleParts.all.map { it.id }, repo.order.value)
         val again = repository(f)
         advanceUntilIdle()
-        assertTrue(again.movedToTopAt.value.isEmpty())
+        assertEquals(SampleParts.all.map { it.id }, again.order.value)
     }
 
     @Test
-    fun `move to top of a missing part does nothing`() = runTest {
+    fun `the old move-to-top file is ignored without breaking loading`() = runTest {
         val f = file()
+        write(f, SampleParts.all)
+        // #20 の形式（id → 時刻の表）。今は id の列なので読めないが、読み込みは終わって並べ替えなしから始まる
+        File(tmp.root, "parts_order.json").writeText("""{"sample-ring":1793963153833}""")
+
         val repo = repository(f)
         advanceUntilIdle()
-
-        assertFalse(repo.moveToTop("nothing-here", now = 5_000L))
-        assertTrue(repo.movedToTopAt.value.isEmpty())
+        assertTrue(repo.isLoaded.value)
+        assertTrue(repo.order.value.isEmpty())
+        assertEquals(SampleParts.all, repo.parts.value)
     }
 
     @Test

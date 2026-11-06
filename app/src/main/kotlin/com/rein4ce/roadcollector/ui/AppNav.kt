@@ -71,7 +71,7 @@ import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
     // 足跡・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
     data object Collect : Dest("collect", "採集", AppIcons.Footprints, AppIcons.FootprintsOutline)
-    data object Inventory : Dest("inventory", "手持ち", AppIcons.Bag, AppIcons.BagOutline)
+    data object Inventory : Dest("inventory", "コレクション", AppIcons.Bag, AppIcons.BagOutline)
     data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
     data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
 
