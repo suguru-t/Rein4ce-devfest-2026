@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 
@@ -24,6 +26,7 @@ class PartRepository(context: Context) {
     private val file = File(context.filesDir, "parts.json")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val serializer = ListSerializer(Part.serializer())
+    private val writeLock = Mutex()
 
     private val _parts = MutableStateFlow<List<Part>>(emptyList())
     val parts: StateFlow<List<Part>> = _parts
@@ -45,6 +48,7 @@ class PartRepository(context: Context) {
         }
     }
 
+    /** 採集したパーツを足す。並び順（新しい順）は手持ち画面が採集日時で決めるので、保存の順番には意味を持たせない */
     fun add(part: Part) {
         _parts.update { it + part }
         persist()
@@ -55,16 +59,33 @@ class PartRepository(context: Context) {
         persist()
     }
 
-    fun resetToSamples() {
-        _parts.value = SampleParts.all
+    /** 削除したサンプルだけを足し戻す。採集したパーツには触らない */
+    fun restoreMissingSamples() {
+        _parts.update { list ->
+            val have = list.mapTo(HashSet()) { it.id }
+            list + SampleParts.all.filterNot { it.id in have }
+        }
         persist()
     }
 
+    /**
+     * parts.json に保存する。
+     * - 書き込みは 1 本ずつ順番に行い、書く直前の最新の状態を書く（古い状態が後から上書きして、消したパーツが復活しないように）
+     * - 一時ファイルに書いてから差し替える（書き込み中にアプリが落ちても parts.json が壊れないように）
+     */
     private fun persist() {
-        val snapshot = _parts.value
         scope.launch {
-            runCatching { file.writeText(AppJson.encodeToString(serializer, snapshot)) }
-                .onFailure { Log.e(TAG, "failed to save parts.json", it) }
+            writeLock.withLock {
+                runCatching {
+                    val json = AppJson.encodeToString(serializer, _parts.value)
+                    val tmp = File(file.parentFile, "${file.name}.tmp")
+                    tmp.writeText(json)
+                    if (!tmp.renameTo(file)) {
+                        file.writeText(json)
+                        tmp.delete()
+                    }
+                }.onFailure { Log.e(TAG, "failed to save parts.json", it) }
+            }
         }
     }
 

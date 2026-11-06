@@ -49,7 +49,11 @@ data class Part(
     val walkedAt: Long = 0L,
     val name: String? = null,
 ) {
-    val displayName: String get() = name ?: kind.label
+    /** 名前が付いているか。空文字は「名前なし」と同じに扱う（名前の有無はここだけで判定する） */
+    val hasName: Boolean get() = !name.isNullOrBlank()
+
+    /** 画面に出す名前。名前がないときは分類名 */
+    val displayName: String get() = name?.takeIf { hasName } ?: kind.label
 
     companion object {
         const val DEFAULT_THICKNESS = 0.15f
