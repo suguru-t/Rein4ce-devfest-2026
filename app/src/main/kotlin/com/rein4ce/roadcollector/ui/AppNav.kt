@@ -1,17 +1,36 @@
 package com.rein4ce.roadcollector.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -22,6 +41,7 @@ import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 
 /**
@@ -59,19 +79,7 @@ fun AppNav() {
     }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                Dest.all.forEach { dest ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == dest.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { go(dest) },
-                        icon = { Icon(dest.icon, contentDescription = dest.label) },
-                        label = { Text(dest.label) },
-                    )
-                }
-            }
-        },
+        bottomBar = { TabBar(currentDestination, onGo = ::go) },
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -82,6 +90,49 @@ fun AppNav() {
             composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
             composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
             composable(Dest.Gallery.route) { GalleryScreen() }
+        }
+    }
+}
+
+/**
+ * 下のタブバー。YouTube や Slack のように、アイコンだけの平らなバー（丸いハイライトや文字は出さない）。
+ * 選択中は墨色、それ以外は薄い灰色。色は野帳（Fieldbook）にそろえる。
+ * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡す。
+ */
+@Composable
+private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().background(Fieldbook.Paper)) {
+        HorizontalDivider(color = Fieldbook.GridMajor, thickness = 1.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .height(56.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Dest.all.forEach { dest ->
+                val isSelected = current?.hierarchy?.any { it.route == dest.route } == true
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .semantics {
+                            role = Role.Tab
+                            selected = isSelected
+                            contentDescription = dest.label
+                        }
+                        .clickable { onGo(dest) },
+                ) {
+                    Icon(
+                        imageVector = dest.icon,
+                        contentDescription = null,
+                        tint = if (isSelected) Fieldbook.Ink else Fieldbook.Mark,
+                        modifier = Modifier.size(if (isSelected) 28.dp else 26.dp),
+                    )
+                }
+            }
         }
     }
 }
