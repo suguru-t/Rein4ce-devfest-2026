@@ -387,12 +387,20 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
         title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(4.dp))) {
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
                     if (mapPlace != null) {
-                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる
-                        PlaceMap(mapPlace, modifier = Modifier.matchParentSize())
+                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
                     }
-                    FieldbookPart(part, modifier = Modifier.matchParentSize())
+                    Column {
+                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                        }
+                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -578,6 +586,9 @@ private fun PartCard(
         )
     }
 }
+
+/** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
+private const val MAP_LOGO_STRIP_DP = 28f
 
 /** パーツ 1 本ぶんの紙片の形（角を少しだけ丸める） */
 private val CardShape = RoundedCornerShape(4.dp)

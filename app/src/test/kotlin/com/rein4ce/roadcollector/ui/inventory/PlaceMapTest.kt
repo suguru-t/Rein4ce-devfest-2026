@@ -31,6 +31,16 @@ class PlaceMapTest {
     }
 
     @Test
+    fun `the map center moves south by half the logo strip`() {
+        val place = PartPlace(lat = 35.7496, lng = 139.8049, sizeM = 300.0)
+        val target = cameraTarget(place, figureDp = 300f, belowDp = 28f)
+        // 図の 1dp は 300 m ÷ (300dp × 98/150) ≈ 1.53 m。帯の半分 14dp ≈ 21.4 m 南
+        val southM = (place.lat - target.latitude) * 110_574.0
+        assertEquals(14.0 * 300.0 / (300.0 * 98.0 / 150.0), southM, 1e-3) // 1 mm 以内（図の割合は Float）
+        assertEquals(place.lng, target.longitude, 0.0)
+    }
+
+    @Test
     fun `the figure leaves 26 of 150 on each side`() {
         assertEquals(98f / 150f, FIGURE_ROAD_RATIO, 1e-6f)
     }
