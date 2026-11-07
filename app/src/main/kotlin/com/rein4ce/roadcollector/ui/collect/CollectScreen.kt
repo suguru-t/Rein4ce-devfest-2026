@@ -47,29 +47,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -81,7 +77,6 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
-import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
@@ -144,7 +139,8 @@ fun CollectScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TitleBlocks(modifier = Modifier.padding(start = 4.dp, end = 12.dp))
+            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
+            TitleBlocks(modifier = Modifier.zIndex(1f).padding(start = 4.dp, end = 12.dp))
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
             Row(
@@ -304,66 +300,6 @@ fun CollectScreen(
 
 /** 記録中の赤。野帳の赤鉛筆のイメージで、少し落ち着いた色 */
 private val RecordingRed = Color(0xFFC0392B)
-
-/**
- * 題字「ミチツミ」の字。アプリのアイコンのように見えるよう、太い丸ゴシック M PLUS Rounded 1c Black（OFL）を
- * この 3 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
- */
-/** 題字のブロックの上の字の色（起動画面の題字と同じ） */
-private val TitleLetter = Color(0xFFF3F6F0)
-
-private val TitleRounded = FontFamily(Font(R.font.mplus_rounded_michitsumi, FontWeight.Black))
-
-/** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
-private class TitleBlock(val char: Char, val color: Color, val tiltDeg: Float, val liftDp: Float)
-
-/**
- * 題字「ミチツミ」を、積み木を積んでいる途中の絵にする。
- * 1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べる。最後の 1 つは浮かせて（影も濃く）「置く直前」に見せる
- */
-private val TitleBlocks = listOf(
-    TitleBlock('ミ', Color(0xFFE07A2A), tiltDeg = -5f, liftDp = 0f),
-    TitleBlock('チ', Color(0xFF2A9D8F), tiltDeg = 3f, liftDp = 1f),
-    TitleBlock('ツ', Color(0xFFF2C14E), tiltDeg = -2f, liftDp = 0f),
-    TitleBlock('ミ', Color(0xFF4A4E69), tiltDeg = 8f, liftDp = -9f),
-)
-
-@Composable
-private fun TitleBlocks(modifier: Modifier = Modifier) {
-    val density = LocalDensity.current
-    val shape = RoundedCornerShape(7.dp)
-    Row(
-        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        for (block in TitleBlocks) {
-            val lifted = block.liftDp < 0f
-            Box(
-                modifier = Modifier
-                    // 浮かせた分の場所を上に取っておく（傾けた角が見出しの外にはみ出さないように少し余裕も）
-                    .padding(top = 10.dp)
-                    .size(32.dp)
-                    .graphicsLayer {
-                        rotationZ = block.tiltDeg
-                        translationY = with(density) { block.liftDp.dp.toPx() }
-                    }
-                    .shadow(if (lifted) 6.dp else 2.dp, shape, clip = false)
-                    .background(block.color, shape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    block.char.toString(),
-                    fontFamily = TitleRounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = with(density) { 21.dp.toSp() },
-                    // 題字はロゴなので、ダークモードでも白い字のまま（紙の色に合わせて暗くしない）
-                    color = TitleLetter,
-                )
-            }
-        }
-    }
-}
 
 private data class StatusLine(val text: String, val color: Color)
 

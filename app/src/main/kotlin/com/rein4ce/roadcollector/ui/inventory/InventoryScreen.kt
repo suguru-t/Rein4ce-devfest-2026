@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -93,6 +94,7 @@ import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
@@ -213,7 +215,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 style = noteStyle,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
-                modifier = Modifier.weight(1f),
+                // 字の幅だけ紙の色を敷く（ui/common/PaperBand。見出しの字が方眼の線にかぶって読みにくいため）
+                modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).paperBand(),
             )
             // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
             // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
@@ -431,12 +434,15 @@ private fun CollectionMeter(
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 見出しの字は、行ごとに字の幅だけ紙の色を敷く（方眼の線にかぶって読みにくいため。ui/common/PaperBand）。
+            // 見出し全体に敷くと、数字の右のすき間など字のない所まで方眼が消えて不自然になる
             Text(
                 "コレクション",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
                 color = Fieldbook.Muted,
+                modifier = Modifier.paperBand(),
             )
             Spacer(Modifier.weight(1f))
             if (editing) {
@@ -446,7 +452,7 @@ private fun CollectionMeter(
         // 1 km 未満は m、1 km からは km で出す（totalDistance）。
         // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
         val shown = totalDistance(shownM.toInt())
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
             Text(
                 if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
@@ -469,6 +475,7 @@ private fun CollectionMeter(
             style = noteStyle,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
+            modifier = Modifier.paperBand(),
         )
     }
 }
