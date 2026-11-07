@@ -43,13 +43,16 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
  * 設定（採集画面の右上の歯車から開く）。選ぶとすぐに効き、スマホの中に保存する。
+ *
+ * 最初の画面は、項目の名前と今の設定だけの一覧（長くならないように）。項目を押すと、同じ枠の中で
+ * 選ぶ画面に切り替わる（見出しの帯の左の「＜」・戻る・枠の外で一覧に戻る。「×」は設定ごと閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：なめらか・ふつう・止める・出さない
- * - 採集：記録中は画面を消さない、AI に名前を考えてもらう
- * - みんなのタワー：ニックネーム（作者名）
- * - アプリについて（設定の中で切り替える。見出しの帯の左の「＜」か、戻るで設定に戻る）
+ * - 採集：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
+ * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
+ * - アプリについて
  *
- * 閉じるのは、枠の下の丸い「×」か、枠の外を押したとき（戻るでも閉じる）。説明の文は「です・ます」で書く
+ * 説明の文は「です・ます」で書く
  */
 @Composable
 fun SettingsDialog(onDismiss: () -> Unit) {
@@ -60,22 +63,35 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val aiNaming by settings.aiNaming.collectAsStateWithLifecycle()
     val nickname by settings.nickname.collectAsStateWithLifecycle()
     val systemDark = isSystemInDarkTheme()
+    var page by remember { mutableStateOf(Page.LIST) }
     var editingNickname by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
+    val back = { page = Page.LIST }
 
-    // 「アプリについて」は、同じ枠の中で中身を切り替える（「＜」・戻る・枠の外で設定に戻る。「×」は設定ごと閉じる）
+    // 同じ枠の中で中身を切り替える（窓を開き直さないので、ちらつかない）
     FramedDialog(
-        title = if (showAbout) "アプリについて" else "設定",
-        onDismiss = { if (showAbout) showAbout = false else onDismiss() },
+        title = page.title,
+        onDismiss = { if (page == Page.LIST) onDismiss() else back() },
         onClose = onDismiss,
-        onBack = if (showAbout) ({ showAbout = false }) else null,
+        onBack = if (page == Page.LIST) null else back,
     ) {
-        if (showAbout) {
-            AboutContent()
-            return@FramedDialog
-        }
-        Section("画面の明るさ") {
-            Column(modifier = Modifier.selectableGroup()) {
+        when (page) {
+            Page.LIST -> {
+                Section("見た目") {
+                    LinkRow(Page.THEME.title, theme.label) { page = Page.THEME }
+                    LinkRow(Page.MOTION.title, motion.label) { page = Page.MOTION }
+                }
+                Section("採集") {
+                    LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
+                    LinkRow(Page.AI.title, onOff(aiNaming)) { page = Page.AI }
+                }
+                Section("みんなのタワー") {
+                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
+                }
+                Section(null, divider = false) {
+                    LinkRow(Page.ABOUT.title, null) { page = Page.ABOUT }
+                }
+            }
+            Page.THEME -> Column(modifier = Modifier.selectableGroup().padding(top = 8.dp)) {
                 for (m in ThemeMode.entries) {
                     Choice(
                         label = m.label,
@@ -86,38 +102,25 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     )
                 }
             }
-        }
-        Section("背景の天気の動き") {
-            Column(modifier = Modifier.selectableGroup()) {
+            Page.MOTION -> Column(modifier = Modifier.selectableGroup().padding(top = 8.dp)) {
                 for (m in WeatherMotion.entries) {
                     Choice(label = m.label, note = m.note, selected = m == motion, onSelect = { settings.setWeatherMotion(m) })
                 }
             }
-        }
-        Section("採集") {
-            Toggle(
-                label = "記録中は画面を消さない",
-                note = "地図を見ながら歩くときに。電池を多く使います",
+            Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
+                explanation = "記録している間だけ、画面を消さないようにします。地図を見ながら歩くときに。" +
+                    "画面がついたままになるので、電池を多く使います。記録を止めると、いつもどおり画面が消えるようになります。",
             )
-            Toggle(
-                label = "AI に名前を考えてもらう",
-                note = "パーツの形・距離・日時をサーバに送ります。歩いた場所は送りません",
+            Page.AI -> SwitchPage(
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
+                explanation = "採集したパーツに、AI（サーバの Gemini）が名前を考えます。コレクションの「名前を付ける」でも、" +
+                    "AI に考えてもらえます。そのとき、パーツの形・距離・日時をサーバに送ります。歩いた場所は送りません。" +
+                    "オフにすると何も送らず、名前は「○ m の散歩」のままになります（自分で付けられます）。",
             )
-        }
-        Section("みんなのタワー") {
-            LinkRow(
-                label = "ニックネーム",
-                value = nickname.ifBlank { "名無し" },
-                note = "送ったタワーに作者名として出ます（だれでも見られます）",
-                onClick = { editingNickname = true },
-            )
-        }
-        Section(null, divider = false) {
-            LinkRow(label = "アプリについて", value = null, note = "版・外に送るもの・使っている素材を見られます", onClick = { showAbout = true })
+            Page.ABOUT -> AboutContent()
         }
     }
 
@@ -128,6 +131,25 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             onDismiss = { editingNickname = false },
         )
     }
+}
+
+/** 設定の中の画面。[title] は見出しの帯と、一覧の項目の名前 */
+private enum class Page(val title: String) {
+    LIST("設定"),
+    THEME("画面の明るさ"),
+    MOTION("背景の天気の動き"),
+    KEEP_ON("記録中は画面を消さない"),
+    AI("AI に名前を考えてもらう"),
+    ABOUT("アプリについて"),
+}
+
+private fun onOff(on: Boolean) = if (on) "オン" else "オフ"
+
+/** オン・オフを切り替える画面：スイッチの行と、その下にくわしい説明 */
+@Composable
+private fun SwitchPage(checked: Boolean, onChange: (Boolean) -> Unit, explanation: String) {
+    Toggle(label = if (checked) "オン" else "オフ", note = null, checked = checked, onChange = onChange)
+    Text(explanation, style = noteStyle, fontSize = 14.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
 }
 
 /** ひとまとまりの項目。[title] があれば上に小さな見出し、[divider] なら下に区切りの線（いちばん下は付けない） */
@@ -194,17 +216,17 @@ private fun Toggle(label: String, note: String?, checked: Boolean, onChange: (Bo
     }
 }
 
-/** 押すと別の画面が開く項目の 1 行。右に今の値と「›」 */
+/** 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定と「›」 */
 @Composable
-private fun LinkRow(label: String, value: String?, note: String?, onClick: () -> Unit) {
+private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 52.dp)
             .clickable(onClick = onClick, role = Role.Button),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Labels(label, note, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
+        Text(label, fontSize = 16.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
         if (value != null) {
             Spacer(Modifier.width(8.dp))
             Text(value, fontSize = 15.sp, color = Fieldbook.Muted, maxLines = 1)
