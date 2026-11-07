@@ -494,6 +494,59 @@ class StackViewModelTest {
         assertEquals(1, vm.fallenCount) // 2 回数えない
     }
 
+    // ---- #42：カメラに入れる範囲 ----
+
+    @Test
+    fun `the camera focus covers the platform and everywhere the next part can be moved`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true, null)
+        val focus = vm.cameraFocus
+        assertTrue(focus.minX <= -vm.dragLimit && focus.maxX >= vm.dragLimit) // 左右の端まで動かしても入る
+        assertTrue(focus.maxY >= vm.spawnY()) // 出てくる高さ
+        assertTrue(focus.minY <= -0.3f + 1e-6f) // 台の下面
+    }
+
+    @Test
+    fun `the camera focus does not change while aiming or while the part falls`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true, null)
+        val before = vm.cameraFocus
+        vm.dragBy(1f)
+        vm.rotate(45f)
+        assertSame(before, vm.cameraFocus) // 狙っている間は変えない（指で動かしている最中に倍率が変わらない）
+        // 真ん中に戻してから寝かせて置く（台に乗せて、塔を高くするため）
+        vm.dragBy(-1f)
+        vm.rotate(-45f)
+        placeFlat(vm)
+        repeat(20) { vm.tick(1.0 / 60) }
+        assertEquals(StackViewModel.Phase.Settling, vm.phase)
+        assertSame(before, vm.cameraFocus) // 落下中も変えない
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        assertTrue(vm.cameraFocus.maxY > before.maxY) // 止まったら、塔の上に出てくる次のパーツの高さまで広げる
+    }
+
+    @Test
+    fun `after finishing the camera focus no longer includes the next part`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true, null)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        assertTrue(vm.cameraFocus.maxY < vm.spawnY() - 1f)
+        assertTrue(vm.cameraFocus.maxX < vm.dragLimit)
+    }
+
+    @Test
+    fun `a part falling below the platform is not followed by the camera`() {
+        // 1 個目を台の外に置き、台より下を落ちている途中で時間切れにして、次のパーツへ進む
+        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.7))
+        vm.updateInventory(listOf(a, b), true, null)
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals(0, vm.fallenCount) // まだ落ちきってはいない
+        assertTrue("minY=${vm.cameraFocus.minY}", vm.cameraFocus.minY >= -0.3f - 1e-6f)
+    }
+
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
     private val shortTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.3)
 
