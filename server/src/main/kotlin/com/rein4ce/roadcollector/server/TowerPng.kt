@@ -6,8 +6,7 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.svg.TowerSvg
 import java.awt.Color
 import java.awt.RenderingHints
-import java.awt.geom.Ellipse2D
-import java.awt.geom.Rectangle2D
+import java.awt.geom.Path2D
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
@@ -76,21 +75,18 @@ object TowerPng {
             for (pl in tower.placements) {
                 val part = partsById[pl.partId] ?: continue
                 g.color = Color.decode(TowerSvg.colorOf(part.kind))
-                val shapes = PartGeometry.shapes(part, 1.0)
+                // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つのパスにまとめて塗る（継ぎ目に線が出ない）
+                val path = Path2D.Double(Path2D.WIND_NON_ZERO)
+                for (poly in PartGeometry.shapes(part, 1.0)) {
+                    poly.points.forEachIndexed { i, v ->
+                        if (i == 0) path.moveTo(v.x * scale, -v.y * scale) else path.lineTo(v.x * scale, -v.y * scale)
+                    }
+                    path.closePath()
+                }
                 val saved = g.transform
                 g.translate(sx(pl.x.toDouble()), sy(pl.y.toDouble()))
                 g.rotate(-pl.angleRad.toDouble()) // y 下向きなので回転も反転
-                for (s in shapes.segs) {
-                    val segSaved = g.transform
-                    g.translate(s.cx * scale, -s.cy * scale)
-                    g.rotate(-s.angle)
-                    g.fill(Rectangle2D.Double(-s.length * scale / 2, -s.thickness * scale / 2, s.length * scale, s.thickness * scale))
-                    g.transform = segSaved
-                }
-                for (j in shapes.joints) {
-                    val r = j.radius * scale
-                    g.fill(Ellipse2D.Double(j.cx * scale - r, -j.cy * scale - r, r * 2, r * 2))
-                }
+                g.fill(path)
                 g.transform = saved
             }
         } finally {
