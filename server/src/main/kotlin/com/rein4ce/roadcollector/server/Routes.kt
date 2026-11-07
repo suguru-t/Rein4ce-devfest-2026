@@ -19,6 +19,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
  *   GET  /                     動作確認
  *   GET  /health               ヘルスチェック（/healthz は Cloud Run の予約パスで届かないため使わない）
  *   GET  /towers               一覧（新しい順）
- *   POST /towers               保存 → { id, url }
+ *   POST /towers               保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON
  *   GET  /towers/{id}/image.svg  タワーの絵（SVG）。共有ページの中に描く
  *   GET  /towers/{id}/image.png  タワーの絵（PNG、1200×630）。共有ページの og:image（LINE / X のプレビュー）
@@ -51,9 +52,18 @@ fun Route.towerRoutes(store: TowerStore) {
     }
 
     post("/towers") {
-        val tower = call.receive<Tower>()
-        if (tower.parts.isEmpty() || tower.placements.isEmpty()) {
-            call.respond(HttpStatusCode.BadRequest, "parts and placements are required")
+        // 誰でも叩ける URL なので、壊れたタワーは保存前に 400 で断る（TowerValidation.kt）。
+        // 読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする
+        val tower = try {
+            call.receive<Tower>()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            call.respond(HttpStatusCode.BadRequest, "body must be a Tower")
+            return@post
+        }
+        tower.validationError()?.let { reason ->
+            call.respond(HttpStatusCode.BadRequest, reason)
             return@post
         }
         val saved = store.add(tower)
