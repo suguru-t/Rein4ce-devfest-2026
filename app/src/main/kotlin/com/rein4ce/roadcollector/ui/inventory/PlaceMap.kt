@@ -41,10 +41,11 @@ fun PlaceMap(place: PartPlace, belowDp: Float, modifier: Modifier = Modifier) {
         }
         GoogleMap(
             cameraPositionState = camera,
-            properties = remember {
+            // ダークモードでは、明るさを反転した地図に（上に重ねる紙の色も暗くなるので、暗くうすい地図になる）
+            properties = remember(Fieldbook.dark) {
                 MapProperties(
                     mapType = MapType.NORMAL,
-                    mapStyleOptions = MapStyleOptions(FADED_STYLE),
+                    mapStyleOptions = MapStyleOptions(if (Fieldbook.dark) FADED_DARK_STYLE else FADED_STYLE),
                     isBuildingEnabled = false,
                     isIndoorEnabled = false,
                 )
@@ -108,6 +109,16 @@ private const val EARTH_CIRCUMFERENCE_M = 40_075_016.686
 private const val FADED_STYLE = """
 [
   {"stylers": [{"saturation": -100}]},
+  {"elementType": "labels.icon", "stylers": [{"visibility": "off"}]},
+  {"featureType": "poi", "elementType": "labels", "stylers": [{"visibility": "off"}]},
+  {"featureType": "transit", "elementType": "labels", "stylers": [{"visibility": "off"}]}
+]
+"""
+
+/** [FADED_STYLE] の明るさを反転したもの（ダークモード用） */
+private const val FADED_DARK_STYLE = """
+[
+  {"stylers": [{"saturation": -100}, {"invert_lightness": true}]},
   {"elementType": "labels.icon", "stylers": [{"visibility": "off"}]},
   {"featureType": "poi", "elementType": "labels", "stylers": [{"visibility": "off"}]},
   {"featureType": "transit", "elementType": "labels", "stylers": [{"visibility": "off"}]}

@@ -42,6 +42,8 @@ import kotlin.random.Random
  *   細い光の筋、うすい虹色の輪と六角形のレンズのきらめき。スマホを傾けると太陽ときらめきが少し動く
  * - 天気が分からないとき：何も描かない
  *
+ * ダークモードでは、雨粒を明るい青に、空・雲の色を夜の色にして、画面いっぱいに広がる光をおさえる（[Fieldbook.dark]）。
+ *
  * 「動きを減らす」設定（アニメーションをオフ）の人には、止まった絵を出す。雷の光る演出は、光の点滅が苦手な人がいるので入れていない。
  *
  * 電池のため、描き直す回数を抑える：ゆっくり動く空（くもり・霧・晴れ）は 1 秒に 30 回、雨・雪は 60 回まで
@@ -285,9 +287,12 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             radius = radius,
             center = center,
         )
-        bloom(w * 1.0f, SunWarm, 0.3f * pulse) // 空いっぱいに広がる暖かい光
-        bloom(210.dp.toPx(), SunWarm, 0.55f * pulse) // 太陽のまわりの暖かいまぶしさ
-        bloom(140.dp.toPx(), SunCream, 0.9f * pulse) // まぶしさ
+        // ダークモードでは、太陽の光を全体に弱める。右上の「L=○ m」と歯車は明るい字なので、白く飛んだ光の上では読めなくなるため
+        // （暗い紙が白っぽくかすまないようにもなる）
+        val glow = if (Fieldbook.dark) 0.4f else 1f
+        bloom(w * 1.0f, SunWarm, 0.3f * pulse * glow) // 空いっぱいに広がる暖かい光
+        bloom(210.dp.toPx(), SunWarm, 0.55f * pulse * glow) // 太陽のまわりの暖かいまぶしさ
+        bloom(140.dp.toPx(), SunCream, 0.9f * pulse * glow) // まぶしさ
         // 細くうすい光の筋（白っぽい）
         val spin = t * 1.5f
         val disc = 30.dp.toPx()
@@ -305,8 +310,8 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             drawPath(
                 ray,
                 brush = Brush.radialGradient(
-                    0f to SunCream.copy(alpha = 0.7f),
-                    0.6f to SunCream.copy(alpha = 0.25f),
+                    0f to SunCream.copy(alpha = 0.7f * glow),
+                    0.6f to SunCream.copy(alpha = 0.25f * glow),
                     1f to SunCream.copy(alpha = 0f),
                     center = sun,
                     radius = length,
@@ -317,11 +322,11 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         val core = disc * 3f
         drawCircle(
             brush = Brush.radialGradient(
-                0f to Color.White,
-                0.22f to Color.White,
-                0.4f to Color.White.copy(alpha = 0.8f),
-                0.6f to SunCream.copy(alpha = 0.4f),
-                0.8f to SunCream.copy(alpha = 0.12f),
+                0f to Color.White.copy(alpha = glow),
+                0.22f to Color.White.copy(alpha = glow),
+                0.4f to Color.White.copy(alpha = 0.8f * glow),
+                0.6f to SunCream.copy(alpha = 0.4f * glow),
+                0.8f to SunCream.copy(alpha = 0.12f * glow),
                 1f to SunCream.copy(alpha = 0f),
                 center = sun,
                 radius = core,
@@ -452,20 +457,20 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         private const val SPLASHES = 14
 
         /** 雨粒の色：紙の上で見える、青みのある墨 */
-        private val RainInk = Color(0xFF4F6F96)
+        private val RainInk: Color get() = if (Fieldbook.dark) Color(0xFF8FB4E0) else Color(0xFF4F6F96)
 
         /** 雪の粒のふちと影 */
         private val SnowEdge = Color(0xFF5F86A8)
         private val SnowShadow = Color(0xFF2F4A62)
 
         /** 雲の下側の影、雲の白、くもりの空の色、雲 1 つをつくる丸の数 */
-        private val CloudShade = Color(0xFF55606B)
-        private val CloudWhite = Color(0xFFFBFCFD)
-        private val Overcast = Color(0xFFB9C3CC)
+        private val CloudShade: Color get() = if (Fieldbook.dark) Color(0xFF0B0F12) else Color(0xFF55606B)
+        private val CloudWhite: Color get() = if (Fieldbook.dark) Color(0xFF9AA5B0) else Color(0xFFFBFCFD)
+        private val Overcast: Color get() = if (Fieldbook.dark) Color(0xFF34404B) else Color(0xFFB9C3CC)
         private const val PUFFS = 6
 
         /** 空の色、太陽のまわりのクリーム色のまぶしさ、空いっぱいの暖かい光 */
-        private val Sky1 = Color(0xFFAED3F1)
+        private val Sky1: Color get() = if (Fieldbook.dark) Color(0xFF203854) else Color(0xFFAED3F1)
         private val SunCream = Color(0xFFFFF4D6)
         private val SunWarm = Color(0xFFFFE3A3)
 
@@ -488,7 +493,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         )
 
         /** 霧のもや（方眼紙の地の色。線を隠す） */
-        private val FogPaper = Fieldbook.Paper
+        private val FogPaper: Color get() = Fieldbook.Paper
     }
 }
 

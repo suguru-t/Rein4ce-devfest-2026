@@ -641,7 +641,7 @@ private fun PartCard(
             // 選んだパーツは青い破線、持ち上げているパーツは真っ白
             .then(
                 when {
-                    isDragging -> Modifier.background(Color.White, CardShape)
+                    isDragging -> Modifier.background(Fieldbook.Card, CardShape)
                     selected -> Modifier
                         .background(Fieldbook.Card, CardShape)
                         .dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
@@ -785,7 +785,7 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(if (selected) Fieldbook.Survey else Color.White.copy(alpha = 0.92f))
+                .background(if (selected) Fieldbook.Survey else Fieldbook.Card.copy(alpha = 0.92f))
                 .border(
                     BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
                     CircleShape,

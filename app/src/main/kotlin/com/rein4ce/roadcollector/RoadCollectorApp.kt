@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector
 import android.app.Application
 import android.content.Context
 import com.rein4ce.roadcollector.collect.LocationRecordingService
+import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
 
@@ -19,8 +20,13 @@ class RoadCollectorApp : Application() {
     lateinit var weatherService: WeatherService
         private set
 
+    /** アプリの設定（画面の明るさなど） */
+    lateinit var settings: AppSettings
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        settings = AppSettings(this)
         partRepository = PartRepository(this)
         weatherService = WeatherService(this, partRepository)
         LocationRecordingService.createNotificationChannel(this)
