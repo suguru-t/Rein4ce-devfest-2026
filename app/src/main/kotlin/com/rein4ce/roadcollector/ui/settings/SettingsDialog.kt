@@ -116,9 +116,8 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.AI -> SwitchPage(
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
-                explanation = "採集したパーツに、AI（サーバの Gemini）が名前を考えます。コレクションの「名前を付ける」でも、" +
-                    "AI に考えてもらえます。そのとき、パーツの形・距離・日時をサーバに送ります。歩いた場所は送りません。" +
-                    "オフにすると何も送らず、名前は「○ m の散歩」のままになります（自分で付けられます）。",
+                explanation = "採集したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
+                    "オフにすると何も送りません。",
             )
             Page.ABOUT -> AboutContent()
         }
