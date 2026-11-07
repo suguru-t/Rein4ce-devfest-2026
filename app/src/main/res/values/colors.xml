@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFF3E6</color>
+    <!-- 起動画面とウィンドウの地。野帳の紙の色（Fieldbook.Paper と同じ）。ダークは values-night -->
+    <color name="paper">#F3F6F0</color>
+    <!-- アプリの設定で「ライト」「ダーク」を選んだときの起動画面の地（端末のダークテーマに関係なく、この色） -->
+    <color name="paper_day">#F3F6F0</color>
+    <color name="paper_night">#161B17</color>
 </resources>

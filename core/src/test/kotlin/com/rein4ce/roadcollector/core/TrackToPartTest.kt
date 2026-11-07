@@ -208,13 +208,21 @@ class TrackToPartTest {
     }
 
     @Test
-    fun `a ride faster than walking is rejected as too fast`() {
-        // 同じ道を 4 m / 1 秒 = 4 m/s（時速 14 km。自転車）。GPS の飛びの上限 5 m/s には引っかからない
-        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0), stepMs = 1_000L))
+    fun `a jog is accepted`() {
+        // 同じ道を 4 m / 1.2 秒 = 3.33 m/s（時速 12 km。ジョギング）。上限（時速 14 km）より遅いので通る
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0), stepMs = 1_200L))
+        require(r is TrackToPart.Result.Success) { "should convert: $r" }
+        assertTrue("fastest ${r.stats.fastestMps}", requireNotNull(r.stats.fastestMps) > 3.0)
+    }
+
+    @Test
+    fun `a bicycle ride is rejected as too fast`() {
+        // 同じ道を 4 m / 0.9 秒 = 4.44 m/s（時速 16 km。自転車）。GPS の飛びの上限 5 m/s には引っかからない
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0), stepMs = 900L))
         assertTrue("should be too fast: $r", r is TrackToPart.Result.TooFast)
         r as TrackToPart.Result.TooFast
         assertEquals(ConversionParams.DEFAULT.walkMaxSpeedMps, r.limitMps, 0.0)
-        assertTrue("fastest ${r.fastestMps}", r.fastestMps > 3.5 && r.fastestMps < 5.0)
+        assertTrue("fastest ${r.fastestMps}", r.fastestMps > 3.9 && r.fastestMps < 5.0)
     }
 
     @Test
@@ -228,10 +236,10 @@ class TrackToPartTest {
 
     @Test
     fun `a short dash across a street does not reject the walk`() {
-        // 歩き 300 m（225 秒）の途中に、20 m を 5 秒で渡る（4 m/s）区間を 1 つ入れる。30 秒の窓で見れば歩きの範囲
+        // 歩き 300 m（225 秒）の途中に、20 m を 4 秒で渡る（5 m/s）区間を 1 つ入れる。30 秒の窓で見れば歩きの範囲
         val slow = walk(listOf(0.0 to 0.0, 150.0 to 0.0))
         val dashStart = slow.last().timeMs
-        val dash = walk(listOf(150.0 to 0.0, 170.0 to 0.0), stepMs = 1_000L, seed = 7).drop(1)
+        val dash = walk(listOf(150.0 to 0.0, 170.0 to 0.0), stepMs = 800L, seed = 7).drop(1)
             .map { it.copy(timeMs = it.timeMs - 1_760_000_000_000L + dashStart) }
         val rest = walk(listOf(170.0 to 0.0, 300.0 to 0.0, 300.0 to 120.0), seed = 9).drop(1)
             .map { it.copy(timeMs = it.timeMs - 1_760_000_000_000L + dash.last().timeMs) }

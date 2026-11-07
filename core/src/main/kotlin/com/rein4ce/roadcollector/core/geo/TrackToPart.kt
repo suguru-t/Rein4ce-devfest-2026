@@ -15,7 +15,7 @@ import kotlin.math.max
  * 1. フィルタ（精度・最小移動・最大速度）
  * 2. メートル座標へ投影
  * 3. 距離チェック
- * 3'. 速さチェック（歩きより速い区間があれば、車・自転車・走りとみなしてパーツにしない）
+ * 3'. 速さチェック（歩き・ジョギングより速い区間があれば、車・自転車とみなしてパーツにしない）
  * 4. Douglas-Peucker で簡略化（頂点上限あり）
  * 5. 輪の判定
  * 6. 正規化（中心を原点、長辺 1.0）
@@ -29,7 +29,7 @@ object TrackToPart {
          */
         data class Success(val part: Part, val stats: Stats, val place: PartPlace) : Result()
         data class TooShort(val distanceM: Double, val minDistanceM: Double) : Result()
-        /** 歩きより速い区間があった（車・自転車・走り）。[fastestMps] は 30 秒平均の最高速度、[limitMps] は歩きの上限 */
+        /** 歩き・ジョギングより速い区間があった（車・自転車）。[fastestMps] は 30 秒の窓で測った最高速度、[limitMps] は上限 */
         data class TooFast(val fastestMps: Double, val limitMps: Double) : Result()
         data class TooFewPoints(val pointCount: Int) : Result()
     }
@@ -59,7 +59,7 @@ object TrackToPart {
         val distance = Projection.pathLength(xy)
         if (distance < params.minDistanceM) return Result.TooShort(distance, params.minDistanceM)
 
-        // 歩きだけをパーツにする。速さは GPS の揺れでばらつくので、30 秒の窓の直線距離 ÷ 時間の最高で見る
+        // 自分の足で動いた軌跡だけをパーツにする。速さは GPS の揺れでばらつくので、30 秒の窓の直線距離 ÷ 時間の最高で見る
         val fastest = TrackSpeed.fastestWindowMps(filtered, params.walkSpeedWindowMs)
         if (fastest != null && fastest > params.walkMaxSpeedMps) return Result.TooFast(fastest, params.walkMaxSpeedMps)
 
@@ -115,7 +115,7 @@ object TrackToPart {
     /**
      * 使える点が 2 つ未満だったときの理由。
      * 車や電車でずっと速い（飛びの上限 [ConversionParams.maxSpeedMps] を超え続ける）と、速度フィルタが点をほぼ全部落として
-     * 「位置情報が足りない」に見えてしまう。そのときは飛びの判定を外した点列で速さを測り、歩きより速ければ「速すぎ」と返す
+     * 「位置情報が足りない」に見えてしまう。そのときは飛びの判定を外した点列で速さを測り、上限より速ければ「速すぎ」と返す
      */
     private fun tooFewOrTooFast(points: List<TrackPoint>, count: Int, params: ConversionParams): Result {
         val unfiltered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM, maxSpeedMps = Double.MAX_VALUE)

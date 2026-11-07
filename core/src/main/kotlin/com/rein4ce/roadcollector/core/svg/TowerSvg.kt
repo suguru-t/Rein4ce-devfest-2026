@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.core.svg
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.physics.PartGeometry
+import com.rein4ce.roadcollector.core.physics.StackWorld
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
@@ -22,7 +23,7 @@ object TowerSvg {
         Kind.OTHER -> "#8D99AE"
     }
 
-    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = 1.4): String {
+    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = StackWorld.PLATFORM_WIDTH): String {
         val partsById = tower.parts.associateBy { it.id }
 
         // 表示範囲：台を含み、タワー全体が入るように
@@ -49,27 +50,20 @@ object TowerSvg {
         sb.append("""<rect width="100%" height="100%" fill="#FFF8F2"/>""")
         // 台
         sb.append(
-            """<rect x="${f(sx(-platformWidth / 2))}" y="${f(sy(0.0))}" width="${f(platformWidth * scale)}" height="${f(0.3 * scale)}" fill="#4A4E69" rx="4"/>""",
+            """<rect x="${f(sx(-platformWidth / 2))}" y="${f(sy(0.0))}" width="${f(platformWidth * scale)}" height="${f(StackWorld.PLATFORM_THICKNESS * scale)}" fill="#4A4E69" rx="4"/>""",
         )
         // パーツ
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
             val color = colorOf(part.kind)
-            val shapes = PartGeometry.shapes(part, 1.0)
             val cx = sx(pl.x.toDouble())
             val cy = sy(pl.y.toDouble())
             val deg = -Math.toDegrees(pl.angleRad.toDouble()) // SVG は y 下向きなので回転も反転
-            sb.append("""<g transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})">""")
-            for (s in shapes.segs) {
-                val segDeg = -Math.toDegrees(s.angle)
-                sb.append(
-                    """<rect x="${f(-s.length * scale / 2)}" y="${f(-s.thickness * scale / 2)}" width="${f(s.length * scale)}" height="${f(s.thickness * scale)}" fill="$color" transform="translate(${f(s.cx * scale)} ${f(-s.cy * scale)}) rotate(${f(segDeg)})"/>""",
-                )
+            // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つの path にまとめて塗る（継ぎ目に線が出ない）
+            val d = PartGeometry.shapes(part, 1.0).joinToString(" ") { poly ->
+                poly.points.joinToString(" L ", prefix = "M ", postfix = " Z") { "${f(it.x * scale)} ${f(-it.y * scale)}" }
             }
-            for (j in shapes.joints) {
-                sb.append("""<circle cx="${f(j.cx * scale)}" cy="${f(-j.cy * scale)}" r="${f(j.radius * scale)}" fill="$color"/>""")
-            }
-            sb.append("</g>")
+            sb.append("""<path d="$d" fill="$color" transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})"/>""")
         }
         // 高さ
         sb.append(

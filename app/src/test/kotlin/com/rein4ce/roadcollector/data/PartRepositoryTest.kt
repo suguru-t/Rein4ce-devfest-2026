@@ -174,6 +174,47 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `the AI name is saved on a part that has no name yet`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+
+        assertEquals("晩秋のまっすぐ", repo.nameIfUnnamed(walk.id, " 晩秋のまっすぐ "))
+        advanceUntilIdle()
+        assertEquals("晩秋のまっすぐ", read(f).single { it.id == walk.id }.name)
+    }
+
+    @Test
+    fun `the AI name does not replace a name the user gave while waiting`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.rename(walk.id, "駅前の寄り道") // 名前が届く前に、自分で付けた
+
+        assertNull(repo.nameIfUnnamed(walk.id, "晩秋のまっすぐ"))
+        advanceUntilIdle()
+        assertEquals("駅前の寄り道", read(f).single { it.id == walk.id }.name)
+    }
+
+    @Test
+    fun `the AI name of a deleted or unknown part does nothing`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.remove(walk.id)
+        advanceUntilIdle()
+        val before = read(f)
+
+        assertNull(repo.nameIfUnnamed(walk.id, "晩秋のまっすぐ"))
+        assertNull(repo.nameIfUnnamed("nothing", "晩秋のまっすぐ"))
+        advanceUntilIdle()
+        assertEquals(before, read(f))
+    }
+
+    @Test
     fun `an arranged order is saved and survives a restart`() = runTest {
         val f = file()
         val repo = repository(f)

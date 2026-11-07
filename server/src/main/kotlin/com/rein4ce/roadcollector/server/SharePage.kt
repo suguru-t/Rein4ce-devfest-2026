@@ -13,7 +13,7 @@ object SharePage {
 
     fun render(tower: Tower, baseUrl: String): String {
         val title = "高さ ${String.format(Locale.US, "%.2f", tower.height)} m のタワー"
-        val desc = "${tower.parts.size} 個の散歩パーツで積みました — 道の採集家"
+        val desc = "${tower.parts.size} 個の散歩パーツで積みました — ミチツミ"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)
@@ -25,7 +25,7 @@ object SharePage {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} - 道の採集家</title>
+<title>${esc(title)} - ミチツミ</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">

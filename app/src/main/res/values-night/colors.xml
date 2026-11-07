@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 端末がダークテーマのとき：夜の野帳の紙の色（Fieldbook.Paper のダークと同じ） -->
+    <color name="paper">#161B17</color>
+</resources>

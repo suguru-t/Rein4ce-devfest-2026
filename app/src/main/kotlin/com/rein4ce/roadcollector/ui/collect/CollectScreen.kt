@@ -5,9 +5,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,12 +22,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,33 +54,44 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.Circle
+import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
-import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
+import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
+import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
+import com.rein4ce.roadcollector.ui.common.AppIcons
+import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.niceLength
+import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlin.math.max
 
 /**
@@ -88,9 +107,10 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
-    // 最近 30 秒の速さ。歩きより速いと、記録中の状態行で知らせる（止めてもパーツにならないので、早めに気づけるように）
+    // 最近 30 秒の速さ。上限に近づいたら（9 割から。8 割だとジョギング中ずっと出てしまう）状態行で知らせる。
+    // 上限を超えた状態が続くと TrackRecorder が記録を自動で止める
     val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
-    val tooFast = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps
+    val nearLimit = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps * 0.9
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -111,59 +131,50 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ。
-        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）。
-        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。それでも右の長さと近づく幅の端末では、
-        // 題字のほうを縮めて 1 行に収める（長さの字は折り返さない）
-        val density = LocalDensity.current
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText(
-                "michitsumi",
-                style = TextStyle(fontFamily = TitleSans, letterSpacing = (-0.5).sp, color = Fieldbook.Ink),
-                maxLines = 1,
-                autoSize = TextAutoSize.StepBased(
-                    minFontSize = with(density) { 20.dp.toSp() },
-                    maxFontSize = with(density) { 32.dp.toSp() },
-                    stepSize = with(density) { 1.dp.toSp() },
-                ),
-                modifier = Modifier.alignByBaseline().padding(start = 8.dp, end = 12.dp).weight(1f, fill = false),
-            )
-            Text(
-                "L=${distance.toInt()} m",
-                fontFamily = Fieldbook.Data,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Fieldbook.Ink,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.alignByBaseline(),
-            )
+        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さと設定の歯車。
+        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
+        // 歯車がはみ出さないよう、長さの字は残りの幅に入れ、入りきらないときだけ小さくする
+        var showSettings by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
+            TitleBlocks(modifier = Modifier.zIndex(1f).padding(start = 4.dp, end = 12.dp))
+            // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
+            val walkedM = distance.toInt()
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) { contentDescription = "歩いた長さ $walkedM メートル" },
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(AppIcons.Footprints, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(4.dp))
+                BasicText(
+                    "$walkedM m",
+                    style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
+                )
+            }
+            // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
+            Spacer(Modifier.width(10.dp))
+            IconButton(onClick = { showSettings = true }) {
+                Icon(Icons.Filled.Settings, contentDescription = "設定", tint = Fieldbook.Ink)
+            }
         }
+        if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
 
-        // 状態行：記録中・再生中のときだけ丸と文を出す（停止中は空の文）。
-        // 高さは文字の大きさに合わせて決まり、状態の有無では変えない（記録を始めた瞬間に地図が下にずれないように。
-        // 文字を大きくしている人でも字が切れないように、固定の高さにはしない）
+        // 状態：記録中・再生中のときだけ、地図の左上に札（丸と文）を重ねる。停止中は何も出さない。
+        // 地図の上に重ねるので、出たり消えたりしても地図は動かず、停止中に題字と地図のあいだが空かない
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
-            tooFast -> StatusLine("速すぎます（${CollectViewModel.kmh(recentSpeed!!)}）・歩きだけパーツになります", RecordingRed)
+            nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmhInt(vm.walkMaxSpeedMps)} km で止まります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> null
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (status != null) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(status.color),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(status?.text ?: "", fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
         }
         Spacer(Modifier.height(4.dp))
 
@@ -192,9 +203,11 @@ fun CollectScreen(
                         fontFamily = Fieldbook.Data,
                         fontSize = 10.sp,
                         color = Fieldbook.Muted,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                        // 左上は状態の札が出るので、左下に置く
+                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                     )
                 }
+                if (status != null) StatusChip(status, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             }
         }
 
@@ -241,7 +254,11 @@ fun CollectScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     FieldbookPart(o.part, modifier = Modifier.size(180.dp))
                     Spacer(Modifier.height(4.dp))
-                    Text(o.part.displayName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+                    PartNameLine(o)
+                    o.note?.let { note ->
+                        // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
+                        Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
+                    }
                     Text(
                         "L=${o.part.distanceM} m ・ 頂点 ${o.part.points.size} ・ ε ${"%.0f".format(o.stats.epsilonM)} m",
                         fontFamily = Fieldbook.Data,
@@ -273,17 +290,10 @@ fun CollectScreen(
                 TextButton(onClick = { vm.dismissOutcome() }) { Text("閉じる", color = Fieldbook.Muted) }
             },
         )
-        is CollectViewModel.Outcome.Rejected -> AlertDialog(
-            onDismissRequest = { vm.dismissOutcome() },
-            containerColor = Fieldbook.Paper,
-            titleContentColor = Fieldbook.Ink,
-            textContentColor = Fieldbook.Ink,
-            title = { Text("パーツになりませんでした", fontWeight = FontWeight.Bold) },
-            text = { Text(o.reason) },
-            confirmButton = {
-                TextButton(onClick = { vm.dismissOutcome() }) { Text("閉じる", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
-            },
-        )
+        // 設定と同じ形：灰色の帯の見出しと、枠の下の丸い「×」で閉じる（枠の外を押しても閉じる）
+        is CollectViewModel.Outcome.Rejected -> FramedDialog(title = "パーツになりませんでした", onDismiss = { vm.dismissOutcome() }) {
+            Text(o.reason, style = noteStyle, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 10.dp))
+        }
         null -> Unit
     }
 }
@@ -291,13 +301,62 @@ fun CollectScreen(
 /** 記録中の赤。野帳の赤鉛筆のイメージで、少し落ち着いた色 */
 private val RecordingRed = Color(0xFFC0392B)
 
-/**
- * 題字「michitsumi」の字。Google のロゴのような幾何学的なサンセリフにするため、Poppins SemiBold（OFL）を
- * この綴りの 7 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
- */
-private val TitleSans = FontFamily(Font(R.font.poppins_michitsumi, FontWeight.SemiBold))
-
 private data class StatusLine(val text: String, val color: Color)
+
+/**
+ * 地図の左上に重ねる状態の札（記録中・再生中・速めです）。紙の色の札に、色の丸と文。
+ * 少しあとから出たり変わったりするので、読み上げでも知らせる
+ */
+@Composable
+private fun StatusChip(status: StatusLine, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(Fieldbook.Paper.copy(alpha = 0.93f))
+            .border(1.dp, Fieldbook.CardEdge, shape)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
+        Spacer(Modifier.width(8.dp))
+        Text(status.text, fontSize = 12.sp, color = Fieldbook.Ink)
+    }
+}
+
+/**
+ * 「パーツができました」の名前の行。AI に名前を考えてもらっている間は「名前を考え中…」、届いたら名前を出す。
+ * 付かなかったら「○ m の散歩」のまま、あとで付けられることを添える（decisions.md の 5・7）
+ */
+@Composable
+private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
+    val asking = o.naming == CollectViewModel.Naming.ASKING
+    // 名前は少しあとから届くので、読み上げでも知らせる
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (asking) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Fieldbook.Muted)
+            Text(
+                if (asking) "名前を考え中…" else o.part.displayName,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (asking) Fieldbook.Muted else Fieldbook.Ink,
+            )
+        }
+        // 付かなかったときだけ、あとで付けられることを添える（届くまでに自分で名前を付けていたら出さない）
+        if (o.naming == CollectViewModel.Naming.FAILED && !o.part.hasName) {
+            Text(
+                notes("名前はコレクションから", "あとで付けられます"),
+                style = noteStyle,
+                fontSize = 11.sp,
+                color = Fieldbook.Muted,
+            )
+        }
+    }
+}
 
 /** 手持ちの「積む」ボタンと同じ見た目のボタン */
 @Composable
@@ -331,24 +390,99 @@ private fun DemoMenuButton(
             enabled = enabled,
             shape = RoundedCornerShape(6.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
+            border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
             modifier = Modifier.height(52.dp),
         ) {
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
+        // 見本は 1 本ずつ小さな図を添えて、名札（棒・L字…）と名前で選べるようにする
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(6.dp),
+            containerColor = Fieldbook.Paper,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, Fieldbook.CardEdge),
+        ) {
+            MenuHeading("見本の散歩")
             SampleTracks.all.forEach { track ->
+                val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
-                    text = { Text("${track.expectedKind.label}：${track.name}") },
+                    leadingIcon = { if (part != null) PartThumb(part, size = 30.dp) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                track.expectedKind.label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Fieldbook.Muted,
+                                modifier = Modifier.width(56.dp),
+                            )
+                            Text(track.name, fontSize = 15.sp, color = Fieldbook.Ink)
+                        }
+                    },
+                    colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
+                    contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                     onClick = { open = false; onPick(track) },
                 )
             }
-            HorizontalDivider()
+            HorizontalDivider(color = Fieldbook.GridMajor, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            MenuHeading("実機で録ったもの")
             DropdownMenuItem(
-                text = { Text("ファイルから再生（GPX / JSON）") },
+                leadingIcon = {
+                    // 書類の小さな印：野帳の線で描く
+                    Canvas(Modifier.size(30.dp)) {
+                        val w = 1.5.dp.toPx()
+                        val l = size.width * 0.3f
+                        val t = size.height * 0.15f
+                        val r = size.width * 0.7f
+                        val b = size.height * 0.85f
+                        val fold = size.width * 0.12f
+                        val path = Path().apply {
+                            moveTo(l, t); lineTo(r - fold, t); lineTo(r, t + fold); lineTo(r, b); lineTo(l, b); close()
+                            moveTo(r - fold, t); lineTo(r - fold, t + fold); lineTo(r, t + fold)
+                        }
+                        drawPath(path, Fieldbook.Ink, style = Stroke(width = w, join = StrokeJoin.Round))
+                        for (k in 1..3) {
+                            val y = t + (b - t) * (0.4f + 0.18f * k)
+                            drawLine(Fieldbook.Mark, Offset(l + fold, y), Offset(r - fold, y), w)
+                        }
+                    }
+                },
+                text = { Text("ファイルから再生", fontSize = 15.sp, color = Fieldbook.Ink) },
+                trailingIcon = { Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted) },
+                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink, trailingIconColor = Fieldbook.Muted),
+                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
                 onClick = { open = false; onPickFile() },
             )
         }
+    }
+}
+
+/** メニューの小さな見出し（野帳の注記の字。コレクションの「コレクション」と同じ作り） */
+@Composable
+private fun MenuHeading(text: String) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp,
+        color = Fieldbook.Muted,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
+    )
+}
+
+/** パーツの小さな図（メニューの見本用）。コレクションのカードと同じ、縁取りした道の色 */
+@Composable
+private fun PartThumb(part: Part, size: Dp) {
+    Canvas(Modifier.size(size)) {
+        val scalePx = this.size.minDimension * 0.78f
+        val center = Offset(this.size.width / 2, this.size.height / 2)
+        val edgePx = 1.2.dp.toPx()
+        drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = Fieldbook.RoadCasing)
+        drawPart(part, center, scalePx, color = Fieldbook.Road)
     }
 }
 
@@ -382,6 +516,8 @@ private fun TrackMap(points: List<TrackPoint>) {
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
+        // ダークモードなら、地図も暗い色にする
+        mapColorScheme = if (Fieldbook.dark) ComposeMapColorScheme.DARK else ComposeMapColorScheme.LIGHT,
     ) {
         if (points.size >= 2) {
             val latLngs = points.map { LatLng(it.lat, it.lng) }
