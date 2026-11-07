@@ -168,8 +168,10 @@ curl -s $U/towers
 ID='消したいタワーの id'
 curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE \
   -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  "https://firestore.googleapis.com/v1/projects/hackathon-2026-513703/databases/(default)/documents/towers/$ID"
-#   200 なら消えた。消す前に GET（-X DELETE を外す）で中身を見て、id を間違えていないか確かめる
+  "https://firestore.googleapis.com/v1/projects/hackathon-2026-513703/databases/(default)/documents/towers/$ID?currentDocument.exists=true"
+#   200 なら消えた。末尾の currentDocument.exists=true は「その id の文書があるときだけ消す」の条件で、
+#   id を打ち間違えると 404（No document to update）で止まる。これが無いと、無い id でも 200 が返って気づけない。
+#   消す前に GET（-X DELETE と末尾の条件を外す）で中身を見て、消したいタワーか確かめる
 
 # 3. 一覧から消えたこと
 curl -s $U/towers | grep -c "$ID"     # 0
@@ -177,6 +179,7 @@ curl -s $U/towers | grep -c "$ID"     # 0
 
 - コンソールからでもよい：Firestore → データ → `towers` → 文書の id → 「文書を削除」
 - 消したあとも、アプリの「みんな」は開き直す（取り直す）まで前の一覧を出す。共有ページと PNG は 404 になる
+- 共有 URL が LINE や X に貼られていた場合、そのプレビュー（題名と絵）は相手側に保存されているので、消してもしばらく残る。開くと 404 になる
 - 本番の `towers` を消すのはこの手順だけ。試し打ちのデータは、手元のサーバ（メモリ版）か `towers_localtest` で作り、本番には入れない
 
 ## F. 設定を変えるだけのとき（コードの変更なし）
@@ -216,4 +219,4 @@ gcloud artifacts docker tags delete asia-northeast1-docker.pkg.dev/hackathon-202
 gcloud run services update road-collector --region asia-northeast1 --min-instances=0
 ```
 
-Firestore の `towers_preview`・`towers_localtest` はコンソールから消す（本番の `towers` は消さない）。
+Firestore の `towers_preview`・`towers_localtest` はコンソールから消す（本番の `towers` は、E の「変なタワーが投稿されたとき」の手順以外では消さない）。
