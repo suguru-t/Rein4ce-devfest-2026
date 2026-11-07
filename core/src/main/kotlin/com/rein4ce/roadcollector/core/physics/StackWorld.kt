@@ -8,7 +8,9 @@ import org.dyn4j.geometry.Geometry
 import org.dyn4j.geometry.MassType
 import org.dyn4j.geometry.Polygon
 import org.dyn4j.geometry.Vector2
+import org.dyn4j.world.ValueMixer
 import org.dyn4j.world.World
+import kotlin.math.min
 
 /**
  * 積み上げゲームの物理ワールド。UI フレームワークに依存しない。
@@ -50,6 +52,7 @@ class StackWorld(
         s.maximumAtRestAngularVelocity = 0.1
         s.minimumAtRestTime = 0.8
         world.setGravity(0.0, -9.8)
+        world.valueMixer = GripMixer
 
         platform = Body().apply {
             val rect = Geometry.createRectangle(platformWidth, platformThickness)
@@ -63,9 +66,13 @@ class StackWorld(
         world.addBody(platform)
     }
 
-    /** パーツをワールドに追加して落下させる。 */
-    fun place(part: Part, x: Double, y: Double, angle: Double, scale: Double = 1.0): Body {
-        val body = PartBodyFactory.create(part, scale)
+    /**
+     * パーツをワールドに追加して落下させる。
+     *
+     * @param grip すべりやすさ（歩いたときの天気で決まる。[Grip.of]）
+     */
+    fun place(part: Part, x: Double, y: Double, angle: Double, scale: Double = 1.0, grip: Grip = Grip.NORMAL): Body {
+        val body = PartBodyFactory.create(part, scale, PartBodyFactory.DEFAULT_MATERIAL.copy(friction = grip.friction))
         body.rotate(angle)
         body.translate(x, y)
         world.addBody(body)
@@ -182,6 +189,26 @@ class StackWorld(
                 else -> Unit
             }
         }
+    }
+
+    /**
+     * 2 つの面が触れたときの摩擦の決め方。どちらも今までどおりの面なら、今までと同じ（掛けて平方根。dyn4j の決まり）。
+     * 滑りやすい面（雨・雪の日のパーツ。[Grip]）が触れる所は、滑りやすい方の値にする。
+     * 雪のパーツを乗せても、雪のパーツの上に乗せても滑る（掛けて平方根だと、相手の面に引っ張られて、ほとんど滑らなかった）
+     */
+    private object GripMixer : ValueMixer {
+        override fun mixFriction(friction1: Double, friction2: Double): Double =
+            if (friction1 < Grip.NORMAL.friction || friction2 < Grip.NORMAL.friction) {
+                min(friction1, friction2)
+            } else {
+                ValueMixer.DEFAULT_MIXER.mixFriction(friction1, friction2)
+            }
+
+        override fun mixRestitution(restitution1: Double, restitution2: Double): Double =
+            ValueMixer.DEFAULT_MIXER.mixRestitution(restitution1, restitution2)
+
+        override fun mixRestitutionVelocity(restitutionVelocity1: Double, restitutionVelocity2: Double): Double =
+            ValueMixer.DEFAULT_MIXER.mixRestitutionVelocity(restitutionVelocity1, restitutionVelocity2)
     }
 
     companion object {
