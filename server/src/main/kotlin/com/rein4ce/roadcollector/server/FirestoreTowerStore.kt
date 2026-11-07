@@ -72,7 +72,7 @@ class FirestoreTowerStore(
     override suspend fun count(): Int =
         towers.count().get().await().count.toInt()
 
-    override suspend fun summaries(): List<TowerSummary> =
+    override suspend fun summaries(owner: String?): List<TowerSummary> =
         summariesQuery().get().await()
             .documents
             .map { doc ->
@@ -82,11 +82,13 @@ class FirestoreTowerStore(
                     partCount = doc.getLong("partCount")?.toInt() ?: 0,
                     createdAt = doc.getLong("createdAt") ?: 0L,
                     author = doc.getString("author"),
+                    // 持ち主の印は Firestore から読むだけで、返事には「同じか」だけを入れる
+                    mine = isOwnedBy(doc.getString("ownerId"), owner),
                 )
             }
 
     /**
-     * 一覧のクエリ。新しい順に [TowerStore.SUMMARY_LIMIT] 件、取る項目は一覧用の 4 つだけ。
+     * 一覧のクエリ。新しい順に [TowerStore.SUMMARY_LIMIT] 件、取る項目は一覧用の 5 つだけ。
      * select を付けないと json（タワー全体）まで Firestore から届き、500 件で数 MB の無駄になる。
      */
     internal fun summariesQuery(): Query =
@@ -100,13 +102,15 @@ class FirestoreTowerStore(
         "partCount" to parts.size,
         "createdAt" to createdAt,
         "author" to author,
+        // 持ち主の印（アプリが端末ごとに作るハッシュ。古いアプリからは null）。一覧の「あなた」の判定に使う
+        "ownerId" to ownerId,
     )
 
     companion object {
         private val ID_PATTERN = Regex("^[a-z0-9]{1,32}$")
 
         /** 一覧で Firestore から取る項目。json は含めない */
-        val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author")
+        val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author", "ownerId")
 
         /**
          * @param projectId 保存先のプロジェクト。null なら Java クライアントの既定の決め方

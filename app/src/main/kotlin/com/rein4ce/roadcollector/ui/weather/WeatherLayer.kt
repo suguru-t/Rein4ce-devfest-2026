@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Duration.Companion.minutes
 
 /** 背景の天気を決めるときの、いま見ている画面 */
-enum class BackdropScreen { COLLECT, COLLECTION, OTHER }
+enum class BackdropScreen { COLLECT, COLLECTION, GALLERY, OTHER }
 
 /**
  * コレクションで大きく見ているパーツの id（見ていなければ null）。コレクションの画面が入れて、背景の天気がそれを見る。
@@ -30,7 +30,8 @@ object BackdropFocus {
  * アプリ全体の方眼紙に降らせる天気。見ている画面に合わせて決める：
  * - **採集**：今の天気（スマホの最後の位置、無ければ最後に歩いた場所）。画面を開いている間、15 分ごとに聞き直す
  * - **コレクション**：大きく見ているパーツを歩いたときの天気。見ていないときは、最後に歩いたパーツの天気
- * - **積む・みんな**：降らせない
+ * - **みんな**：採集と同じ今の天気（タワーを歩いたときの天気はサーバに無いので、今の天気を出す）
+ * - **積む**：降らせない
  *
  * 設定（採集画面の歯車）の「背景の天気の動き」で、なめらか・ふつう・止める・出さないを選べる。
  * 記録中（デモ再生中も）は、どの画面でも止まった絵にする。記録中は採集画面を開いたまま歩くことが多く、GPS と一緒に電池を使い続けないため。
@@ -50,7 +51,9 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     // 設定（歯車）の「背景の天気の動き」
     val motion by app.settings.weatherMotion.collectAsStateWithLifecycle()
 
-    if (screen == BackdropScreen.COLLECT) {
+    val showsCurrent = screen == BackdropScreen.COLLECT || screen == BackdropScreen.GALLERY
+    if (showsCurrent) {
+        // 採集とみんなを行き来しても聞き直しは増えない（WeatherService が 15 分以内なら聞き直さない）
         LaunchedEffect(Unit) {
             while (true) {
                 service.refreshCurrent()
@@ -60,7 +63,7 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     }
 
     val weather = when (screen) {
-        BackdropScreen.COLLECT -> current
+        BackdropScreen.COLLECT, BackdropScreen.GALLERY -> current
         BackdropScreen.COLLECTION -> (focus ?: latestWalk(parts)?.id)?.let { repository.weatherOf(it, saved) }
         BackdropScreen.OTHER -> null
     }

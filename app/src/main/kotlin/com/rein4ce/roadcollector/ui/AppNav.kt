@@ -32,7 +32,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +51,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -55,14 +59,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
-import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
+import com.rein4ce.roadcollector.ui.settings.HowToDialog
 import com.rein4ce.roadcollector.ui.weather.BackdropScreen
 import com.rein4ce.roadcollector.ui.weather.WeatherLayer
 import kotlin.math.roundToInt
@@ -80,7 +85,8 @@ import kotlin.math.roundToInt
  */
 sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
     // 足跡・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
-    data object Collect : Dest("collect", "採集", AppIcons.Footprints, AppIcons.FootprintsOutline)
+    // 画面の名前は「記録」（「記録開始」のボタンや設定の「記録」とそろえる。前は「採集」。route とコードの名前はそのまま）
+    data object Collect : Dest("collect", "記録", AppIcons.Footprints, AppIcons.FootprintsOutline)
     data object Inventory : Dest("inventory", "コレクション", AppIcons.Bag, AppIcons.BagOutline)
     data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
     data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
@@ -118,6 +124,7 @@ fun AppNav() {
         val backdrop = when (currentDestination?.route) {
             Dest.Collect.route -> BackdropScreen.COLLECT
             Dest.Inventory.route -> BackdropScreen.COLLECTION
+            Dest.Gallery.route -> BackdropScreen.GALLERY
             else -> BackdropScreen.OTHER
         }
         WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
@@ -135,6 +142,19 @@ fun AppNav() {
                 composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
                 composable(Dest.Gallery.route) { GalleryScreen() }
             }
+        }
+
+        // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
+        // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
+        // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
+        val settings = RoadCollectorApp.from(context).settings
+        val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
+        var howToClosed by rememberSaveable { mutableStateOf(false) }
+        if (!howToSeen && !howToClosed) {
+            HowToDialog(onClose = { dontShowAgain ->
+                if (dontShowAgain) settings.setHowToSeen(true)
+                howToClosed = true
+            })
         }
     }
 }

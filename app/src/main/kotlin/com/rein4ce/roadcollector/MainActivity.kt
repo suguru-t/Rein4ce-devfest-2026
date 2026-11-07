@@ -27,11 +27,14 @@ import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.ui.AppNav
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.theme.JapaneseText
 import com.rein4ce.roadcollector.ui.theme.RoadCollectorTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 字を日本語として描く（#46）。画面の設定が変わると Android が端末の言語に戻すので、画面を作るたびに入れ直す
+        JapaneseText.apply()
         // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐって採集画面に入るように見せる
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash -> enterThroughGate(splash) }

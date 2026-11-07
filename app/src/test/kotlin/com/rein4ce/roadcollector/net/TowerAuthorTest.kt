@@ -28,4 +28,12 @@ class TowerAuthorTest {
     fun `an author already set is kept`() {
         assertEquals("先に入れた名前", withAuthor(tower.copy(author = "先に入れた名前"), "みちつみ").author)
     }
+
+    @Test
+    fun `the owner mark goes in, and nothing goes in without one`() {
+        val mark = "c".repeat(64)
+        assertEquals(mark, withOwner(tower, mark).ownerId)
+        assertNull(withOwner(tower, null).ownerId)
+        assertNull(withOwner(tower, "").ownerId)
+    }
 }

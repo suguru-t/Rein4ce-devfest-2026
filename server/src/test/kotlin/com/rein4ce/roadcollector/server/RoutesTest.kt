@@ -21,6 +21,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
 
@@ -105,6 +106,59 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, png.status)
         assertTrue(png.contentType()?.match(ContentType.Image.PNG) == true)
         assertContains(png.headers[HttpHeaders.CacheControl].orEmpty(), "max-age")
+    }
+
+    @Test
+    fun `持ち主の印を送ると自分のタワーに mine が付き、印そのものは返らない`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val me = "a".repeat(64)
+        val other = "b".repeat(64)
+
+        val mineRes = client.postTower(sampleTower().copy(ownerId = me))
+        assertEquals(HttpStatusCode.Created, mineRes.status)
+        val mine = AppJson.decodeFromString(TowerCreated.serializer(), mineRes.bodyAsText())
+        client.postTower(sampleTower()) // 古いアプリから（印なし）
+
+        suspend fun summaries(owner: String?): List<TowerSummary> {
+            val body = client.get("/towers") { owner?.let { header(OWNER_HEADER, it) } }.bodyAsText()
+            return AppJson.decodeFromString(ListSerializer(TowerSummary.serializer()), body)
+        }
+        // 自分の印：自分のだけ true
+        assertEquals(mapOf(mine.id to true), summaries(me).filter { it.mine }.associate { it.id to it.mine })
+        // 他人の印・印なし・変な印：全部 false
+        assertTrue(summaries(other).none { it.mine })
+        assertTrue(summaries(null).none { it.mine })
+        assertTrue(summaries("not-a-hash").none { it.mine })
+        // 一覧にも 1 基の JSON にも、印そのものは出ない
+        val listRes = client.get("/towers") { header(OWNER_HEADER, me) }
+        val listBody = listRes.bodyAsText()
+        assertFalse(me in listBody, "一覧に印が出ている")
+        // 人によって答えが違うので、途中のキャッシュに共有させない
+        assertContains(listRes.headers[HttpHeaders.CacheControl].orEmpty(), "private")
+        val json = client.get("/towers/${mine.id}") { header(HttpHeaders.Accept, "application/json") }.bodyAsText()
+        assertFalse(me in json, "1 基の JSON に印が出ている")
+        assertEquals(null, AppJson.decodeFromString(Tower.serializer(), json).ownerId)
+    }
+
+    @Test
+    fun `共有ページに作者名が出る（無ければ出ない）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+
+        val named = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower().copy(author = "C <3")).bodyAsText())
+        val namedHtml = client.get("/towers/${named.id}").bodyAsText()
+        // 説明（og:description とページの本文）に名前。HTML の特殊文字はエスケープされる
+        assertContains(namedHtml, "C &lt;3 さんが 2 個の散歩パーツで積みました")
+
+        val anon = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower()).bodyAsText())
+        val anonHtml = client.get("/towers/${anon.id}").bodyAsText()
+        assertContains(anonHtml, "content=\"2 個の散歩パーツで積みました")
+
+        // 「〜さん」で終わる名前に「さん」を重ねない。向きを変える字（U+202E）や制御文字は落とす
+        val san = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower().copy(author = "みち‮さん\u0007")).bodyAsText())
+        val sanHtml = client.get("/towers/${san.id}").bodyAsText()
+        assertContains(sanHtml, "みちさん が 2 個の散歩パーツで積みました")
+        assertFalse("‮" in sanHtml)
+        assertEquals("みちさん", SharePage.cleanAuthor("  みち‮さん\u0007 "))
     }
 
     @Test
