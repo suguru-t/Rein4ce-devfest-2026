@@ -311,6 +311,9 @@ private val RecordingRed = Color(0xFFC0392B)
  * 題字「ミチツミ」の字。アプリのアイコンのように見えるよう、太い丸ゴシック M PLUS Rounded 1c Black（OFL）を
  * この 3 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
  */
+/** 題字のブロックの上の字の色（起動画面の題字と同じ） */
+private val TitleLetter = Color(0xFFF3F6F0)
+
 private val TitleRounded = FontFamily(Font(R.font.mplus_rounded_michitsumi, FontWeight.Black))
 
 /** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
@@ -356,7 +359,8 @@ private fun TitleBlocks(modifier: Modifier = Modifier) {
                     fontFamily = TitleRounded,
                     fontWeight = FontWeight.Black,
                     fontSize = with(density) { 21.dp.toSp() },
-                    color = Fieldbook.Paper,
+                    // 題字はロゴなので、ダークモードでも白い字のまま（紙の色に合わせて暗くしない）
+                    color = TitleLetter,
                 )
             }
         }

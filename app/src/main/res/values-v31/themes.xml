@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 以降：起動画面（スプラッシュ）は、紙の色の地に、積み木のアイコンとそのすぐ下の題字「ミチツミ」（splash_icon）。
+         画面のいちばん下に出すブランド画像は位置を変えられないので使わない -->
+    <style name="Theme.RoadCollector" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
+        <item name="android:windowSplashScreenBackground">@color/paper</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    </style>
+</resources>

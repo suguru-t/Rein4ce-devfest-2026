@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 画面は全部 Compose なので、XML テーマは最小限 -->
+    <!-- 画面は全部 Compose なので、XML テーマは最小限。地は野帳の紙の色（開いた直後に白く光らないように。ダークは暗い紙） -->
     <style name="Theme.RoadCollector" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
     </style>
 </resources>
