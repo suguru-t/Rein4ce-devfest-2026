@@ -158,7 +158,6 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
  * はね方は起動画面の「ミ」と同じ形（上がりは減速、下がりは加速）。[sign] は傾ける向き（ふだんの傾きと同じ向きに増す）
  */
 private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
-    launch { dx.animateTo(0f, tween(HOP_UP_MS)) }
     launch {
         turn.animateTo(8f * sign, tween(HOP_UP_MS, easing = EaseOutQuad))
         turn.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
