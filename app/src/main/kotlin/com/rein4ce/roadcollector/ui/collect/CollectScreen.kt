@@ -158,31 +158,14 @@ fun CollectScreen(
         }
         if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
 
-        // 状態行：記録中・再生中のときだけ丸と文を出す（停止中は空の文）。
-        // 高さは文字の大きさに合わせて決まり、状態の有無では変えない（記録を始めた瞬間に地図が下にずれないように。
-        // 文字を大きくしている人でも字が切れないように、固定の高さにはしない）
+        // 状態：記録中・再生中のときだけ、地図の左上に札（丸と文）を重ねる。停止中は何も出さない。
+        // 地図の上に重ねるので、出たり消えたりしても地図は動かず、停止中に題字と地図のあいだが空かない
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
-            // 1 行に収まる長さにする（2 行になると図が下に動く）
             nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmhInt(vm.walkMaxSpeedMps)} km で止まります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> null
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (status != null) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(status.color),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(status?.text ?: "", fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
         }
         Spacer(Modifier.height(4.dp))
 
@@ -211,9 +194,11 @@ fun CollectScreen(
                         fontFamily = Fieldbook.Data,
                         fontSize = 10.sp,
                         color = Fieldbook.Muted,
-                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                        // 左上は状態の札が出るので、左下に置く
+                        modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
                     )
                 }
+                if (status != null) StatusChip(status, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
             }
         }
 
@@ -368,6 +353,28 @@ private fun TitleBlocks(modifier: Modifier = Modifier) {
 }
 
 private data class StatusLine(val text: String, val color: Color)
+
+/**
+ * 地図の左上に重ねる状態の札（記録中・再生中・速めです）。紙の色の札に、色の丸と文。
+ * 少しあとから出たり変わったりするので、読み上げでも知らせる
+ */
+@Composable
+private fun StatusChip(status: StatusLine, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(Fieldbook.Paper.copy(alpha = 0.93f))
+            .border(1.dp, Fieldbook.CardEdge, shape)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
+        Spacer(Modifier.width(8.dp))
+        Text(status.text, fontSize = 12.sp, color = Fieldbook.Ink)
+    }
+}
 
 /**
  * 「パーツができました」の名前の行。AI に名前を考えてもらっている間は「名前を考え中…」、届いたら名前を出す。
