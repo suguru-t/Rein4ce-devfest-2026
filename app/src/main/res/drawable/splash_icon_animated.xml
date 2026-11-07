@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 起動画面のアイコンの動き（Android 12 以降）：最後の「ミ」のブロックが右の外から回りながら落ちてきて、
-     着いたところで大きく 1 回・小さく 1 回はねてから、採集画面の題字と同じ位置（少し浮いて傾いた「置く直前」）に収まる（約 0.46 秒）。
+<!-- 起動画面のアイコンの動き（Android 12 以降）：最後の「ミ」のブロックが右の外から回りながら落ちてきて、止まる位置の少し右に着き、
+     左へ進みながら弧を描いて大きく 1 回・小さく 1 回はねて、採集画面の題字と同じ位置（少し浮いて傾いた「置く直前」）に収まる（約 0.33 秒）。
+     はね上がる速さは、落ちてきた速さの半分ほど（ボールが床ではねるときと同じ割合）にして、落ちる速さとつながるようにしている。
      見えるのは直径 192dp の円の中だけなので、円の右の端から見え始める。
      絵は splash_icon（tools/make_splash_icon.py で作る。落ち始める位置 260・-70 と傾き 60 は、そこで渡した値と合わせる） -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -9,78 +10,54 @@
     <target android:name="drop">
         <aapt:attr name="android:animation">
             <set android:ordering="sequentially">
-                <!-- 右の外から、回りながら落ちてくる（横は一定の速さ、下へはだんだん速く） -->
+                <!-- 落ちる：右の外から、回りながら。横は一定の速さ、下へはだんだん速く。止まる位置の少し右（20dp）に着く -->
                 <set android:ordering="together">
-                    <objectAnimator
-                        android:propertyName="translateX"
-                        android:valueType="floatType"
-                        android:valueFrom="260"
-                        android:valueTo="0"
-                        android:duration="140"
+                    <objectAnimator android:propertyName="translateX" android:valueType="floatType"
+                        android:valueFrom="260" android:valueTo="20" android:duration="150"
                         android:interpolator="@android:interpolator/linear" />
-                    <objectAnimator
-                        android:propertyName="translateY"
-                        android:valueType="floatType"
-                        android:valueFrom="-70"
-                        android:valueTo="0"
-                        android:duration="140"
+                    <objectAnimator android:propertyName="translateY" android:valueType="floatType"
+                        android:valueFrom="-70" android:valueTo="0" android:duration="150"
                         android:interpolator="@android:interpolator/accelerate_quad" />
-                    <objectAnimator
-                        android:propertyName="rotation"
-                        android:valueType="floatType"
-                        android:valueFrom="60"
-                        android:valueTo="0"
-                        android:duration="140"
-                        android:interpolator="@android:interpolator/decelerate_quad" />
+                    <objectAnimator android:propertyName="rotation" android:valueType="floatType"
+                        android:valueFrom="60" android:valueTo="10" android:duration="150"
+                        android:interpolator="@android:interpolator/linear" />
                 </set>
-                <!-- 着いたところで、大きくはね上がる（少し傾く） -->
+                <!-- 大きくはねる：左へ進みながら弧を描く（上がるときはだんだん遅く、下りるときはだんだん速く） -->
                 <set android:ordering="together">
-                    <objectAnimator
-                        android:propertyName="translateY"
-                        android:valueType="floatType"
-                        android:valueFrom="0"
-                        android:valueTo="-16"
-                        android:duration="100"
-                        android:interpolator="@android:interpolator/decelerate_quad" />
-                    <objectAnimator
-                        android:propertyName="rotation"
-                        android:valueType="floatType"
-                        android:valueFrom="0"
-                        android:valueTo="-8"
-                        android:duration="100"
-                        android:interpolator="@android:interpolator/decelerate_quad" />
+                    <objectAnimator android:propertyName="translateX" android:valueType="floatType"
+                        android:valueFrom="20" android:valueTo="6" android:duration="110"
+                        android:interpolator="@android:interpolator/linear" />
+                    <set android:ordering="sequentially">
+                        <objectAnimator android:propertyName="translateY" android:valueType="floatType"
+                            android:valueFrom="0" android:valueTo="-12" android:duration="55"
+                            android:interpolator="@android:interpolator/decelerate_quad" />
+                        <objectAnimator android:propertyName="translateY" android:valueType="floatType"
+                            android:valueFrom="-12" android:valueTo="0" android:duration="55"
+                            android:interpolator="@android:interpolator/accelerate_quad" />
+                    </set>
+                    <set android:ordering="sequentially">
+                        <objectAnimator android:propertyName="rotation" android:valueType="floatType"
+                            android:valueFrom="10" android:valueTo="-6" android:duration="55"
+                            android:interpolator="@android:interpolator/decelerate_quad" />
+                        <objectAnimator android:propertyName="rotation" android:valueType="floatType"
+                            android:valueFrom="-6" android:valueTo="0" android:duration="55"
+                            android:interpolator="@android:interpolator/accelerate_quad" />
+                    </set>
                 </set>
+                <!-- 小さくはねて、止まる位置に収まる -->
                 <set android:ordering="together">
-                    <objectAnimator
-                        android:propertyName="translateY"
-                        android:valueType="floatType"
-                        android:valueFrom="-16"
-                        android:valueTo="0"
-                        android:duration="100"
-                        android:interpolator="@android:interpolator/accelerate_quad" />
-                    <objectAnimator
-                        android:propertyName="rotation"
-                        android:valueType="floatType"
-                        android:valueFrom="-8"
-                        android:valueTo="0"
-                        android:duration="100"
-                        android:interpolator="@android:interpolator/accelerate_quad" />
+                    <objectAnimator android:propertyName="translateX" android:valueType="floatType"
+                        android:valueFrom="6" android:valueTo="0" android:duration="70"
+                        android:interpolator="@android:interpolator/linear" />
+                    <set android:ordering="sequentially">
+                        <objectAnimator android:propertyName="translateY" android:valueType="floatType"
+                            android:valueFrom="0" android:valueTo="-3.5" android:duration="35"
+                            android:interpolator="@android:interpolator/decelerate_quad" />
+                        <objectAnimator android:propertyName="translateY" android:valueType="floatType"
+                            android:valueFrom="-3.5" android:valueTo="0" android:duration="35"
+                            android:interpolator="@android:interpolator/accelerate_quad" />
+                    </set>
                 </set>
-                <!-- もう一度、小さくはねて収まる -->
-                <objectAnimator
-                    android:propertyName="translateY"
-                    android:valueType="floatType"
-                    android:valueFrom="0"
-                    android:valueTo="-5"
-                    android:duration="60"
-                    android:interpolator="@android:interpolator/decelerate_quad" />
-                <objectAnimator
-                    android:propertyName="translateY"
-                    android:valueType="floatType"
-                    android:valueFrom="-5"
-                    android:valueTo="0"
-                    android:duration="60"
-                    android:interpolator="@android:interpolator/accelerate_quad" />
             </set>
         </aapt:attr>
     </target>
