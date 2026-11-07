@@ -26,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -36,8 +35,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -58,6 +55,7 @@ internal fun nameLength(name: String): Int = name.trim().let { it.codePointCount
  * - 「AI に考えてもらう」で、サーバの命名 API（Gemini）に名前を考えてもらい、入力欄に入れる。保存するかは自分で決める。
  *   考えられなかったときは、入力欄はそのままにして知らせる（decisions.md の 7）。送るのは形・距離・日時だけ（8）
  *
+ * @param aiOn    「AI に考えてもらう」を出すか。設定（採集画面の歯車）で AI の名前付けをオフにしていたら false
  * @param suggest 名前を考えてもらう。考えられなければ null（テストやプレビューでは差し替える）
  */
 @Composable
@@ -65,6 +63,7 @@ internal fun RenameDialog(
     part: Part,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
+    aiOn: Boolean,
     suggest: suspend (Part) -> String? = ApiClient::namePart,
 ) {
     val fallback = "${part.distanceM} m の散歩"
@@ -77,7 +76,6 @@ internal fun RenameDialog(
     LaunchedEffect(Unit) { focus.requestFocus() }
     // AI に名前を考えてもらっているところ（ダイアログを閉じると取りやめる）
     val scope = rememberCoroutineScope()
-    val aiOn by RoadCollectorApp.from(LocalContext.current).settings.aiNaming.collectAsStateWithLifecycle()
     var asking by remember { mutableStateOf(false) }
     var aiResult by remember { mutableStateOf<AiResult?>(null) }
     fun ask() {
@@ -148,7 +146,7 @@ internal fun RenameDialog(
                     ),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                // 設定（採集画面の歯車）で AI の名前付けをオフにしていたら、ボタンを出さない
+                // 設定で AI の名前付けをオフにしていたら、ボタンを出さない
                 if (aiOn) {
                     AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
                     Text(
