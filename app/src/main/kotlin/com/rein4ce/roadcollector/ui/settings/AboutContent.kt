@@ -19,7 +19,7 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
- * アプリについて（設定の枠の中で切り替えて出す）。版、外に送るもの（プライバシー）、使っている素材とライセンス。
+ * アプリについて（設定の枠の中で切り替えて出す）。バージョン（ver 0.1.0 の形）、外に送るもの（プライバシー）、使っている素材とライセンス。
  * 素材の出どころは app/fonts/README.md と README の「天気データ」も参照
  */
 @Composable
@@ -33,7 +33,7 @@ internal fun ColumnScope.AboutContent() {
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
     )
     Text(
-        "版 ${BuildConfig.VERSION_NAME}",
+        "ver ${BuildConfig.VERSION_NAME}",
         fontFamily = Fieldbook.Data,
         fontSize = 13.sp,
         color = Fieldbook.Muted,
