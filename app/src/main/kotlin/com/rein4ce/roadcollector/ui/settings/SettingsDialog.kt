@@ -47,9 +47,9 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * - 背景の天気の動き：なめらか・ふつう・止める・出さない
  * - 採集：記録中は画面を消さない、AI に名前を考えてもらう
  * - みんなのタワー：ニックネーム（作者名）
- * - アプリについて
+ * - アプリについて（設定の中で切り替える。見出しの帯の左の「＜」か、戻るで設定に戻る）
  *
- * 閉じるのは、枠の下の丸い「×」か、枠の外を押したとき（戻るでも閉じる）
+ * 閉じるのは、枠の下の丸い「×」か、枠の外を押したとき（戻るでも閉じる）。説明の文は「です・ます」で書く
  */
 @Composable
 fun SettingsDialog(onDismiss: () -> Unit) {
@@ -63,14 +63,24 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     var editingNickname by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
 
-    FramedDialog(title = "設定", onDismiss = onDismiss) {
+    // 「アプリについて」は、同じ枠の中で中身を切り替える（「＜」・戻る・枠の外で設定に戻る。「×」は設定ごと閉じる）
+    FramedDialog(
+        title = if (showAbout) "アプリについて" else "設定",
+        onDismiss = { if (showAbout) showAbout = false else onDismiss() },
+        onClose = onDismiss,
+        onBack = if (showAbout) ({ showAbout = false }) else null,
+    ) {
+        if (showAbout) {
+            AboutContent()
+            return@FramedDialog
+        }
         Section("画面の明るさ") {
             Column(modifier = Modifier.selectableGroup()) {
                 for (m in ThemeMode.entries) {
                     Choice(
                         label = m.label,
                         // 端末の設定がいまどちらかも出す（選んだときにどちらになるか分かるように）
-                        note = if (m == ThemeMode.SYSTEM) (if (systemDark) "いまはダーク" else "いまはライト") else null,
+                        note = if (m == ThemeMode.SYSTEM) (if (systemDark) "いまはダークです" else "いまはライトです") else null,
                         selected = m == theme,
                         onSelect = { settings.setThemeMode(m) },
                     )
@@ -87,13 +97,13 @@ fun SettingsDialog(onDismiss: () -> Unit) {
         Section("採集") {
             Toggle(
                 label = "記録中は画面を消さない",
-                note = "地図を見ながら歩くとき用。電池を多く使う",
+                note = "地図を見ながら歩くときに。電池を多く使います",
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
             )
             Toggle(
                 label = "AI に名前を考えてもらう",
-                note = "パーツの形・距離・日時をサーバに送る。歩いた場所は送らない",
+                note = "パーツの形・距離・日時をサーバに送ります。歩いた場所は送りません",
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
             )
@@ -102,12 +112,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             LinkRow(
                 label = "ニックネーム",
                 value = nickname.ifBlank { "名無し" },
-                note = "送ったタワーに作者名として出る（だれでも見られる）",
+                note = "送ったタワーに作者名として出ます（だれでも見られます）",
                 onClick = { editingNickname = true },
             )
         }
         Section(null, divider = false) {
-            LinkRow(label = "アプリについて", value = null, note = "版・外に送るもの・使っている素材", onClick = { showAbout = true })
+            LinkRow(label = "アプリについて", value = null, note = "版・外に送るもの・使っている素材を見られます", onClick = { showAbout = true })
         }
     }
 
@@ -118,7 +128,6 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             onDismiss = { editingNickname = false },
         )
     }
-    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 }
 
 /** ひとまとまりの項目。[title] があれば上に小さな見出し、[divider] なら下に区切りの線（いちばん下は付けない） */

@@ -61,7 +61,7 @@ internal fun NicknameDialog(current: String, onSave: (String) -> Unit, onDismiss
                 supportingText = {
                     Row(Modifier.fillMaxWidth()) {
                         Text(
-                            if (tooLong) notes("$max 文字までです") else notes("空なら名無し"),
+                            if (tooLong) notes("$max 文字までです") else notes("空なら名無しになります"),
                             style = noteStyle,
                             modifier = Modifier.weight(1f).padding(end = 8.dp),
                         )
