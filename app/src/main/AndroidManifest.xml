@@ -26,10 +26,13 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
 
+        <!-- 画面は縦向きだけ。どの画面も縦長で作っていて、横にすると地図やカードが大きくなりすぎるため。
+             （Android 16 以降のタブレットや、開いた折りたたみスマホのような大きな画面では、この指定は無視されることがある） -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
