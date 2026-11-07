@@ -93,7 +93,16 @@ class MainActivity : ComponentActivity() {
             startDelay = 180
             duration = 140
         }
+        // 起動画面のアイコンの動き（最後の「ミ」が落ちてはねる）が終わるまで待ってから、門をくぐる
+        val animStart = splash.iconAnimationStart
+        val animDuration = splash.iconAnimationDuration
+        val wait = if (animStart != null && animDuration != null) {
+            (animStart.toEpochMilli() + animDuration.toMillis() - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
+        } else {
+            0L
+        }
         AnimatorSet().apply {
+            startDelay = wait
             playTogether(zoom, fade)
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) = splash.remove()
@@ -108,7 +117,10 @@ class MainActivity : ComponentActivity() {
          * tools/make_splash_icon.py の大きさ・位置で決まるので、作り直したら合わせる
          */
         const val GATE_DX_DP = 0f
-        const val GATE_DY_DP = -36f
+        const val GATE_DY_DP = -27.3f
+
+        /** 起動画面のアイコンの動きを待つのは、長くてもこれだけ [ms]（起動が遅くなりすぎないように） */
+        const val MAX_WAIT_MS = 700L
 
         /** 穴が画面いっぱいより大きくなるまで、アイコンを大きくする倍率 */
         const val GATE_ZOOM = 40f

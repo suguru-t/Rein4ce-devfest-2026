@@ -6,9 +6,10 @@
 使い方（fonttools が要る。pip install fonttools）:
   python3 tools/make_splash_icon.py app/src/main/res/font/mplus_rounded_michitsumi.ttf \
       app/src/main/res/drawable/ic_launcher_foreground.xml app/src/main/res/drawable/splash_icon.xml \
-      1.55 34 4 7.5 23 -9 6 -16
+      1.55 34 4 7.5 23 0 6 -12 -130
   数字は順に：アイコンの倍率、題字のブロックの大きさ [dp]、ブロックの間、角の丸み、字の大きさ、最後のブロックを浮かせる量（負で上）、
-  アイコンと題字の間、全体を上下にずらす量（負で上）
+  アイコンと題字の間、全体を上下にずらす量（負で上）、最後のブロックが落ち始める高さ（負で上。splash_icon_animated で 0 まで落とす）。
+  最後のブロックは「drop」という名前のグループに入れてあり、動かす絵（splash_icon_animated.xml）が落としてはねさせる
 """
 import sys, re
 from fontTools.ttLib import TTFont
@@ -16,7 +17,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.pens.boundsPen import BoundsPen
 font_path, icon_path, out_path = sys.argv[1:4]
-ICON_SCALE, SIZE, GAP, R, FONT, LIFT, SPACE, OFFSET = (float(v) for v in sys.argv[4:12])
+ICON_SCALE, SIZE, GAP, R, FONT, LIFT, SPACE, OFFSET, DROP_START = (float(v) for v in sys.argv[4:13])
 font = TTFont(font_path); gs = font.getGlyphSet(); cmap = font.getBestCmap()
 C = 144.0  # 起動画面のアイコンの絵は 288×288dp。見えるのはまん中の直径 192dp の円の中だけ
 def f(v): return ("%.2f" % v).rstrip("0").rstrip(".")
@@ -34,7 +35,7 @@ def glyph_path(ch, cx, cy):
 icon_xml = open(icon_path, encoding="utf-8").read()
 icon_paths = re.findall(r'<path\s+android:fillColor="([^"]+)"\s+android:pathData="([^"]+)"\s*/>', icon_xml)
 art_w, art_h, art_cx, art_top = 54.0, 68.0, 54.0, 22.0
-title_h = SIZE - LIFT  # 浮かせた分（LIFT は負）も高さに入れる
+title_h = SIZE - min(LIFT, 0.0)  # 浮かせた分（LIFT は負）も高さに入れる
 total = art_h * ICON_SCALE + SPACE + title_h
 top = C - total / 2 + OFFSET  # アイコンの上側（L 字）は細いので、全体を少し上に寄せると円に大きく収まる
 tx = C - art_cx * ICON_SCALE; ty = top - art_top * ICON_SCALE
@@ -49,19 +50,26 @@ for color, d in icon_paths:
 out.append('    </group>')
 blocks = [("ミ", "#E07A2A", -5, 0), ("チ", "#2A9D8F", 3, 1), ("ツ", "#F2C14E", -2, 0), ("ミ", "#4A4E69", 8, LIFT)]
 x0 = C - (4 * SIZE + 3 * GAP) / 2
-cy0 = top + art_h * ICON_SCALE + SPACE - LIFT + SIZE / 2
+cy0 = top + art_h * ICON_SCALE + SPACE - min(LIFT, 0.0) + SIZE / 2
 far = 0.0
 for i, (ch, color, tilt, lift) in enumerate(blocks):
     x = x0 + i * (SIZE + GAP); cy = cy0 + lift; y = cy - SIZE / 2; cx = x + SIZE / 2
     lifted = lift < 0
+    last = i == len(blocks) - 1
+    if last:
+        # 最後のブロックは、上（DROP_START）から落ちてくる。動かすのは splash_icon_animated.xml
+        out.append('    <group android:name="drop" android:translateY="%s">' % f(DROP_START))
     out.append('    <group android:rotation="%s" android:pivotX="%s" android:pivotY="%s">' % (f(tilt), f(cx), f(cy)))
     dy, a = (SIZE * 0.12, 0.22) if lifted else (SIZE * 0.04, 0.14)
     out.append('        <path android:fillColor="#000000" android:fillAlpha="%s" android:pathData="%s"/>' % (f(a), rrect(x, y + dy, SIZE, SIZE, R)))
     out.append('        <path android:fillColor="%s" android:pathData="%s"/>' % (color, rrect(x, y, SIZE, SIZE, R)))
     out.append('        <path android:fillColor="#F3F6F0" android:pathData="%s"/>' % glyph_path(ch, cx, cy))
     out.append('    </group>')
+    if last:
+        out.append('    </group>')
     for (px, py) in [(x + R, y + SIZE + dy), (x + SIZE - R, y + SIZE + dy), (x, y + R), (x + SIZE, y + SIZE - R)]:
         far = max(far, ((px - C) ** 2 + (py - C) ** 2) ** 0.5)
 out.append('</vector>')
 open(out_path, "w", encoding="utf-8").write("\n".join(out) + "\n")
 print("art top %.1f, title center %.1f, farthest block point from center %.1f dp (must be < 96)" % (top, cy0, far))
+print("gate (hole) center from the middle: dx 0, dy %.1f dp  -> MainActivity の GATE_DY_DP" % (top + 37 * ICON_SCALE - C))

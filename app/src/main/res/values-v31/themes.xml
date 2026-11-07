@@ -7,6 +7,8 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">@bool/light_bars</item>
         <item name="android:windowSplashScreenBackground">@color/paper</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <!-- 最後の「ミ」が落ちてきて小さくはねる（splash_icon_animated、0.6 秒） -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_animated</item>
+        <item name="android:windowSplashScreenAnimationDuration">600</item>
     </style>
 </resources>

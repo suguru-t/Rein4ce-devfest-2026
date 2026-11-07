@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 起動画面のアイコンの動き（Android 12 以降）：最後の「ミ」のブロックが上から落ちてきて、題字の並びに着地し、小さく 1 回はねる（0.6 秒）。
+     絵は splash_icon（tools/make_splash_icon.py で作る。落ち始める高さ -130 は、そこで渡した値と合わせる） -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:drawable="@drawable/splash_icon">
+    <target android:name="drop">
+        <aapt:attr name="android:animation">
+            <set android:ordering="sequentially">
+                <!-- 落ちる（だんだん速く） -->
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:valueType="floatType"
+                    android:valueFrom="-130"
+                    android:valueTo="0"
+                    android:duration="380"
+                    android:interpolator="@android:interpolator/accelerate_quad" />
+                <!-- 小さくはねて -->
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:valueType="floatType"
+                    android:valueFrom="0"
+                    android:valueTo="-9"
+                    android:duration="110"
+                    android:interpolator="@android:interpolator/decelerate_quad" />
+                <!-- 着地する -->
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:valueType="floatType"
+                    android:valueFrom="-9"
+                    android:valueTo="0"
+                    android:duration="110"
+                    android:interpolator="@android:interpolator/accelerate_quad" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>
