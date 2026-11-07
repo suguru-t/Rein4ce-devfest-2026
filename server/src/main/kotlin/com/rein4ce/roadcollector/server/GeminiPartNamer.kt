@@ -31,7 +31,7 @@ import kotlinx.serialization.json.Json
  *   （比較は docs/decisions.md の 10 番）。GEMINI_MODEL / GEMINI_LOCATION で替えられる
  * - 考える時間（thinking）は最小（MINIMAL）。長く考えさせると 3 秒の打ち切り（PartNamer.TIMEOUT_MS）を超える
  * - 返事は {"name": "..."} の JSON に固定して、読み取りを安定させる
- * - 長さの切り詰めや空の判定は nameSafely / cleanName がやるので、ここでは読み取るだけ
+ * - 長さの判定や空の判定は nameSafely / cleanName がやるので、ここでは読み取るだけ
  * - HTTP の期限と再試行は SDK 側にも設定する（[httpOptions]）。nameSafely が 3 秒で待つのをやめても、
  *   SDK の通信や再試行（既定は 5 回まで）はそのままでは裏で続くため
  */
@@ -42,9 +42,14 @@ class GeminiPartNamer(
 
     // SDK の async 版でも、リクエストを組み立てる段階の認証トークンの更新は呼び出し元のスレッドで同期的に走る。
     // Ktor の処理スレッドを塞がないよう IO 用のスレッドで呼ぶ（更新を 3 秒で打ち切れるようにする対策ではない）
-    override suspend fun name(part: Part): String? = withContext(Dispatchers.IO) {
+    override suspend fun name(part: Part): String? = generate(buildNamingPrompt(part))
+
+    /** 長すぎたときの聞き直し。前の案を見せて「短く」と頼む（NamingPrompt） */
+    override suspend fun retryName(part: Part, tooLong: String): String? = generate(buildNamingPrompt(part, tooLong))
+
+    private suspend fun generate(prompt: String): String? = withContext(Dispatchers.IO) {
         val response = client.async.models
-            .generateContent(model, buildNamingPrompt(part), CONFIG)
+            .generateContent(model, prompt, CONFIG)
             // 時間切れで nameSafely がキャンセルすると、この future はキャンセルされる。
             // ただし SDK はそれを HTTP の中断には伝えないので、通信の打ち切りは httpOptions の期限に頼る
             .await()

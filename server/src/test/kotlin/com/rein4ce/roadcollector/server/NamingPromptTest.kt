@@ -36,8 +36,19 @@ class NamingPromptTest {
         assertContains(prompt, "道の形：何度も折れ曲がった道（ジグザグ）。横に長い。3 回曲がった")
         assertContains(prompt, "歩いた距離：820 m")
         assertContains(prompt, "歩いた時間：晩秋の夕方")
-        assertContains(prompt, "日本語で 10 文字以内")
+        assertContains(prompt, "日本語で 8 文字くらい。長くても 10 文字まで（11 文字以上は使えない）")
         assertContains(prompt, "地名・人名・店名・実在の作品名は入れない")
+        assertContains(prompt, NAMING_TONE)
+        assertFalse(prompt.contains("長すぎました"), "最初の質問には聞き直しの行は無い")
+    }
+
+    @Test
+    fun `聞き直しの指示文には、前の案と文字数が入る`() {
+        val prompt = buildNamingPrompt(zigzag, tooLong = "夕暮れの七曲りブロック")
+
+        assertContains(prompt, "前に考えてもらった「夕暮れの七曲りブロック」は 11 文字で長すぎました。10 文字以内の別の名前にしてください。")
+        // 元の手がかりとルールもそのまま入っている
+        assertContains(prompt, "歩いた距離：820 m")
         assertContains(prompt, NAMING_TONE)
     }
 

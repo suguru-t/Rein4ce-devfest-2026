@@ -22,7 +22,10 @@ internal const val NAMING_TONE = "雰囲気は自由。詩的でも、ゆるく�
 
 private val JST: ZoneId = ZoneId.of("Asia/Tokyo")
 
-internal fun buildNamingPrompt(part: Part): String {
+/**
+ * @param tooLong 聞き直しのとき、前に返ってきた長すぎる名前。見せたうえで「短く」と頼む（同じ質問を繰り返すより短くなりやすい）
+ */
+internal fun buildNamingPrompt(part: Part, tooLong: String? = null): String {
     val facts = buildList {
         add("道の形：${describeShape(part)}")
         add("歩いた距離：${describeDistance(part.distanceM)}")
@@ -35,7 +38,8 @@ internal fun buildNamingPrompt(part: Part): String {
         facts.forEach { appendLine("- $it") }
         appendLine()
         appendLine("ルール：")
-        appendLine("- 日本語で ${PartNamer.MAX_NAME_LENGTH} 文字以内")
+        // 上限ちょうどを頼むと、たまに 11〜12 文字で返ってくる（「夕暮れの七曲りブロック」）。目安を短めにして余裕を持たせる
+        appendLine("- 日本語で ${PartNamer.TARGET_NAME_LENGTH} 文字くらい。長くても ${PartNamer.MAX_NAME_LENGTH} 文字まで（${PartNamer.MAX_NAME_LENGTH + 1} 文字以上は使えない）")
         appendLine("- 形・距離・時間のどれかが伝わる名前にする")
         appendLine("- 距離の数字は名前に入れない（画面に別に出るため）")
         appendLine("- 地名・人名・店名・実在の作品名は入れない")
@@ -43,6 +47,10 @@ internal fun buildNamingPrompt(part: Part): String {
         appendLine("- 「〜のパーツ」「〜の道」で終わる名前ばかりにしない")
         appendLine("- ありがちな名前は避け、意外性のある言葉選びにする")
         appendLine("- $NAMING_TONE")
+        if (tooLong != null) {
+            appendLine()
+            appendLine("前に考えてもらった「$tooLong」は ${nameLength(tooLong)} 文字で長すぎました。${PartNamer.MAX_NAME_LENGTH} 文字以内の別の名前にしてください。")
+        }
     }.trimEnd()
 }
 
