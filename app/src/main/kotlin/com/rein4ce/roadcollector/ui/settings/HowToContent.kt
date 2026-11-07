@@ -8,17 +8,26 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -30,13 +39,33 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
- * 初めて開いたときに 1 回だけ出す使い方（「×」か枠の外で閉じると、次からは出さない）。
+ * 初めて開いたときに出す使い方。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
+ * （1 台を何人も触るデモで、初めての人が開くたびに見られるように）。チェックなしで閉じたら、その回だけ閉じる。
  * 中身は設定の「使い方」と同じ。最後に、設定からいつでも見られることを添える
+ *
+ * @param onClose 閉じたとき。[dontShowAgain] は「次回から表示しない」にチェックが入っていたか
  */
 @Composable
-fun HowToDialog(onClose: () -> Unit) {
-    FramedDialog(title = "使い方", onDismiss = onClose) {
+fun HowToDialog(onClose: (dontShowAgain: Boolean) -> Unit) {
+    var dontShowAgain by rememberSaveable { mutableStateOf(false) }
+    FramedDialog(title = "使い方", onDismiss = { onClose(dontShowAgain) }) {
         HowToContent(firstTime = true)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .heightIn(min = 48.dp)
+                .toggleable(value = dontShowAgain, onValueChange = { dontShowAgain = it }, role = Role.Checkbox),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = dontShowAgain,
+                onCheckedChange = null, // 行ごと押せる（toggleable）
+                colors = CheckboxDefaults.colors(checkedColor = Fieldbook.Survey, uncheckedColor = Fieldbook.Muted),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("次回から表示しない", fontSize = 15.sp, color = Fieldbook.Ink)
+        }
     }
 }
 
@@ -49,10 +78,10 @@ fun HowToDialog(onClose: () -> Unit) {
 @Composable
 internal fun ColumnScope.HowToContent(firstTime: Boolean = false) {
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Step(Dest.Collect.iconOutline, "採集", "歩いた道が、積み木のパーツになります。「デモ散歩」でも試せます。")
-        Step(Dest.Inventory.iconOutline, "コレクション", "集めたパーツが並びます。タップで大きく見て、名前を付けられます。")
-        Step(Dest.Stack.iconOutline, "積む", "コレクションで選んだパーツを、動かして回し、「置く」で積みます。")
-        Step(Dest.Gallery.iconOutline, "みんな", "完成したタワーを送ると、みんなの高さの順位表に並びます。")
+        Step(Dest.Collect.iconOutline, Dest.Collect.label, "歩いた道が、積み木のパーツになります。「デモ散歩」でも試せます。")
+        Step(Dest.Inventory.iconOutline, Dest.Inventory.label, "集めたパーツが並びます。タップで大きく見て、名前を付けられます。")
+        Step(Dest.Stack.iconOutline, Dest.Stack.label, "コレクションで選んだパーツを、動かして回し、「置く」で積みます。")
+        Step(Dest.Gallery.iconOutline, Dest.Gallery.label, "完成したタワーを送ると、みんなの高さの順位表に並びます。")
     }
     Text(
         "ひとこと",

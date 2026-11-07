@@ -117,7 +117,7 @@ class AppSettings(private val store: Store) {
 
     private val _howToSeen = MutableStateFlow(readBoolean(KEY_HOWTO_SEEN, false))
 
-    /** 初めて開いたときに出す「使い方」を、もう見たか（閉じたら true。次からは出さない。設定の「使い方」ではいつでも見られる） */
+    /** 開いたときに出す「使い方」で「次回から表示しない」を選んだか（true なら出さない。設定の「使い方」ではいつでも見られる） */
     val howToSeen: StateFlow<Boolean> = _howToSeen
 
     fun setHowToSeen(seen: Boolean) {
