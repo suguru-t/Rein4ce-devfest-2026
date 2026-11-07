@@ -17,6 +17,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
@@ -52,7 +53,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * 選ぶ画面に切り替わる（見出しの帯の左の「＜」・戻る・枠の外で一覧に戻る。「×」は設定ごと閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：なめらか・ふつう・止める・出さない
- * - 採集：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
+ * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
  * - アプリについて
  *
@@ -82,10 +83,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.LIST -> {
                 Section("見た目") {
                     LinkRow(Page.THEME.title, theme.label) { page = Page.THEME }
+                    ItemDivider()
                     LinkRow(Page.MOTION.title, motion.label) { page = Page.MOTION }
                 }
-                Section("採集") {
+                Section("記録") {
                     LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
+                    ItemDivider()
                     LinkRow(Page.AI.title, onOff(aiNaming)) { page = Page.AI }
                 }
                 Section("みんなのタワー") {
@@ -154,10 +157,14 @@ private fun SwitchPage(checked: Boolean, onChange: (Boolean) -> Unit, explanatio
     Text(explanation, style = noteStyle, fontSize = 14.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
 }
 
-/** ひとまとまりの項目。[title] があれば上に小さな見出し。項目は 1 つずつ枠で囲み、少しあけて並べる */
+/**
+ * ひとまとまりの項目（見た目・採集など）。[title] があれば上に小さな見出し。
+ * まとまりごとに 1 つの枠（コレクションの紙片と同じ、紙の色の角丸）でくくり、中の項目は細い線（[ItemDivider]）で分ける
+ */
 @Composable
 private fun Section(title: String?, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val shape = RoundedCornerShape(6.dp)
+    Column(modifier = Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (title != null) {
             Text(
                 title,
@@ -167,8 +174,21 @@ private fun Section(title: String?, content: @Composable ColumnScope.() -> Unit)
                 modifier = Modifier.semantics { heading() },
             )
         }
-        content()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(Fieldbook.Card)
+                .border(1.dp, Fieldbook.CardEdge, shape),
+            content = content,
+        )
     }
+}
+
+/** 枠の中の項目と項目のあいだの細い線 */
+@Composable
+private fun ItemDivider() {
+    HorizontalDivider(modifier = Modifier.padding(start = 14.dp), color = Fieldbook.CardEdge)
 }
 
 /** 1 つだけ選ぶ項目の 1 行（行ごと押せる） */
@@ -217,20 +237,13 @@ private fun Toggle(label: String, note: String?, checked: Boolean, onChange: (Bo
     }
 }
 
-/**
- * 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定と「›」。
- * 1 つずつ枠（コレクションの紙片と同じ、紙の色の角丸）で囲んで、項目の切れ目を分かりやすくする
- */
+/** 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定と「›」（まとまりの枠の中に並べる） */
 @Composable
 private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(6.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 52.dp)
-            .clip(shape)
-            .background(Fieldbook.Card)
-            .border(1.dp, Fieldbook.CardEdge, shape)
             .clickable(onClick = onClick, role = Role.Button)
             .padding(start = 14.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
