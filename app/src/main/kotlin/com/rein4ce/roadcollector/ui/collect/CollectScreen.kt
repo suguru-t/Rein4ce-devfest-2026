@@ -380,7 +380,8 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
                 color = if (asking) Fieldbook.Muted else Fieldbook.Ink,
             )
         }
-        if (o.naming == CollectViewModel.Naming.FAILED) {
+        // 付かなかったときだけ、あとで付けられることを添える（届くまでに自分で名前を付けていたら出さない）
+        if (o.naming == CollectViewModel.Naming.FAILED && !o.part.hasName) {
             Text(
                 notes("名前はコレクションから", "あとで付けられます"),
                 style = noteStyle,
