@@ -289,7 +289,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             radius = radius,
             center = center,
         )
-        // ダークモードでは、太陽の光を全体に弱める。右上の「L=○ m」と歯車は明るい字なので、白く飛んだ光の上では読めなくなるため
+        // ダークモードでは、太陽の光を全体に弱める。右上の歩いた長さと歯車は明るい字なので、白く飛んだ光の上では読めなくなるため
         // （暗い紙が白っぽくかすまないようにもなる）
         val glow = if (Fieldbook.dark) 0.4f else 1f
         bloom(w * 1.0f, SunWarm, 0.3f * pulse * glow) // 空いっぱいに広がる暖かい光
