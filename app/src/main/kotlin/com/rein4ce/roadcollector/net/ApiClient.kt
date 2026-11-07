@@ -39,7 +39,11 @@ object ApiClient {
 
     suspend fun listTowers(): List<TowerSummary> = client.get("$baseUrl/towers").body()
 
-    /** タワー 1 基の中身（パーツと置き方）。同じ URL は Accept なしだと共有ページ（HTML）を返すので JSON を頼む */
+    /**
+     * タワー 1 基の中身（パーツと置き方）。
+     * 同じ URL は Accept に application/json がないと共有ページ（HTML）を返す。ContentNegotiation が Accept を付けてくれるが、
+     * この呼び出しはそれに頼っていることが分かるよう明示しておく
+     */
     suspend fun getTower(id: String): Tower =
         client.get("$baseUrl/towers/$id") { accept(ContentType.Application.Json) }.body()
 

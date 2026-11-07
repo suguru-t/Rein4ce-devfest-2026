@@ -14,8 +14,16 @@ class TowerSketchTest {
 
     private val bar = Part(id = "p1", points = listOf(Pt(-0.5f, 0f), Pt(0.5f, 0f)), kind = Kind.BAR)
 
-    private fun tower(height: Float, vararg placements: Placement) =
-        Tower(parts = listOf(bar), placements = placements.toList(), height = height, createdAt = 0L)
+    /** 1.0×1.0 の箱いっぱいの輪。回転させると角が置いた点から √2/2 ≒ 0.71 まで届く */
+    private val ring = Part(
+        id = "p1",
+        points = listOf(Pt(-0.5f, -0.5f), Pt(0.5f, -0.5f), Pt(0.5f, 0.5f), Pt(-0.5f, 0.5f)),
+        closed = true,
+        kind = Kind.RING,
+    )
+
+    private fun tower(height: Float, vararg placements: Placement, part: Part = bar) =
+        Tower(parts = listOf(part), placements = placements.toList(), height = height, createdAt = 0L)
 
     @Test
     fun `パーツがなくても台と 1 m ぶんの高さは入る`() {
@@ -26,9 +34,16 @@ class TowerSketchTest {
     }
 
     @Test
-    fun `右にはみ出して置いたパーツも範囲に入る`() {
-        val b = sketchBounds(tower(height = 0.2f, Placement("p1", x = 1.5f, y = 0.1f, angleRad = 0f)))
-        assertTrue("maxX=${b.maxX}", b.maxX >= 1.5f + 0.5f)
+    fun `右にはみ出して斜めに置いた輪も、角まで範囲に入る`() {
+        // 45° に回した輪の角は x = 1.5 + 0.71 まで届く。道の太さの分も含めて入ること
+        val b = sketchBounds(tower(height = 0.2f, Placement("p1", x = 1.5f, y = 0.1f, angleRad = (Math.PI / 4).toFloat()), part = ring))
+        assertTrue("maxX=${b.maxX}", b.maxX >= 1.5f + 0.71f + 0.075f)
+    }
+
+    @Test
+    fun `台の端からぶら下がって止まったパーツは、下にも範囲を広げる`() {
+        val b = sketchBounds(tower(height = 0.2f, Placement("p1", x = 0.9f, y = -0.9f, angleRad = 0f)))
+        assertTrue("minY=${b.minY}", b.minY <= -0.9f - 0.5f)
     }
 
     @Test

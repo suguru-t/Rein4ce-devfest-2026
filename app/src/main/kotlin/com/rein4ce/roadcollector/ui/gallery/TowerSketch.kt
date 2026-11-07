@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlin.math.max
@@ -57,9 +58,16 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier) {
     }
 }
 
-/** 台の幅と厚さ [m]。物理（StackWorld）と共有ページの絵と同じ値 */
-internal const val PLATFORM_WIDTH = 1.4f
-internal const val PLATFORM_THICKNESS = 0.3f
+/** 台の幅と厚さ [m]。物理と共有ページの絵と同じ値（StackWorld が持つ） */
+internal const val PLATFORM_WIDTH = StackWorld.PLATFORM_WIDTH.toFloat()
+internal const val PLATFORM_THICKNESS = StackWorld.PLATFORM_THICKNESS.toFloat()
+
+/**
+ * 置いた点からパーツが届きうる最大の距離 [m]。
+ * パーツの点は 1.0×1.0 の箱に正規化されていて回転もするので、角までは最大 √2/2 ≒ 0.71。
+ * それに道の太さの半分と縁取りを足して 0.8。共有ページの絵（TowerSvg）は 1.0 で見ているが、小さな絵なのでやや詰める
+ */
+internal const val PART_REACH = 0.8f
 
 /** 絵に入れる範囲 [m]（ワールド座標。台の上面が y=0、y は上向き） */
 internal data class SketchBounds(val minX: Float, val maxX: Float, val minY: Float, val maxY: Float) {
@@ -68,18 +76,20 @@ internal data class SketchBounds(val minX: Float, val maxX: Float, val minY: Flo
 }
 
 /**
- * 台と、置いたパーツ全部が入る範囲。パーツは長辺が 1.0 なので、置いた点から ±0.6 を見ておく。
+ * 台と、置いたパーツ全部が入る範囲。置いた点から上下左右に [PART_REACH] を見ておく。
+ * 下にも広げるのは、台の端からぶら下がったまま静止したパーツ（物理は y > -1.5 なら落ちた扱いにしない）が保存されることがあるため。
  * 高さが 1 m 未満でも 1 m ぶんは見せて、低いタワーがやたら大きく描かれないようにする。
  */
 internal fun sketchBounds(tower: Tower): SketchBounds {
     var minX = -PLATFORM_WIDTH / 2 - 0.3f
     var maxX = PLATFORM_WIDTH / 2 + 0.3f
-    val minY = -PLATFORM_THICKNESS - 0.1f
+    var minY = -PLATFORM_THICKNESS - 0.1f
     var maxY = max(tower.height, 1f) + 0.3f
     for (p in tower.placements) {
-        minX = min(minX, p.x - 0.6f)
-        maxX = max(maxX, p.x + 0.6f)
-        maxY = max(maxY, p.y + 0.6f)
+        minX = min(minX, p.x - PART_REACH)
+        maxX = max(maxX, p.x + PART_REACH)
+        minY = min(minY, p.y - PART_REACH)
+        maxY = max(maxY, p.y + PART_REACH)
     }
     return SketchBounds(minX, maxX, minY, maxY)
 }

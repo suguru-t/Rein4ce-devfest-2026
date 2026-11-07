@@ -48,6 +48,9 @@ import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,38 +77,58 @@ class GalleryViewModel : ViewModel() {
     val sketches = mutableStateMapOf<String, Tower>()
     private val fetching = mutableSetOf<String>()
 
+    /**
+     * 取れなかったタワーの id。スクロールで何度もカードが見えるたびに取り直すと、壊れた 1 基のせいで
+     * 10 秒待ちの通信を繰り返すことになるので、次の「再読み込み」まで取り直さない
+     */
+    private val failed = mutableSetOf<String>()
+
     /** 一覧を取り直している最中か（表示中の一覧は残したまま）。「再読み込み」を押せなくするのに使う */
     var refreshing: Boolean by mutableStateOf(false)
         private set
 
-    /** カードが見えたときに呼ぶ。取れなかったら、次にカードが見えたときにもう一度取る */
+    /** 一覧が出たまま取り直しに失敗したか。一覧は残すが、黙って成功したように見せない */
+    var refreshFailed: Boolean by mutableStateOf(false)
+        private set
+
+    private var refreshJob: Job? = null
+
+    /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
     fun loadSketch(id: String) {
-        if (id in sketches || !fetching.add(id)) return
+        if (id in sketches || id in failed || !fetching.add(id)) return
         viewModelScope.launch {
             runCatching { ApiClient.getTower(id) }
                 .onSuccess { sketches[id] = it }
-                .onFailure { fetching.remove(id) }
+                .onFailure { failed.add(id) }
+            fetching.remove(id)
         }
     }
 
     /**
      * 一覧を取り直す。画面を開くたび（タブを切り替えて戻ったときも）と、「再読み込み」で呼ぶ。
      * この ViewModel はタブを切り替えても生きているので、開くたびに取り直さないと、送信したばかりのタワーが出ない。
-     * 既に一覧が出ているときは消さずに裏で取り直し、取れなかったら今の一覧を残す（通信が悪いときに一覧が消えないように）
+     * 既に一覧が出ているときは消さずに裏で取り直し、取れなかったら今の一覧を残す（通信が悪いときに一覧が消えないように）。
+     * 取り直しの最中にまた呼ばれたら、前の取り直しはやめて新しいほうを使う（古い結果が、送信したあとの一覧を上書きしないように）
      */
     fun refresh() {
-        if (refreshing) return
+        refreshJob?.cancel()
+        failed.clear()
         val shown = state as? State.Loaded
         if (shown == null) state = State.Loading
         refreshing = true
-        viewModelScope.launch {
-            state = runCatching { ApiClient.listTowers() }
-                .fold(
-                    // 高さの順位表。同じ高さなら新しいほうを上に
-                    onSuccess = { State.Loaded(it.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt })) },
-                    onFailure = { shown ?: State.Error(it.message ?: it.toString()) },
-                )
-            refreshing = false
+        refreshFailed = false
+        refreshJob = viewModelScope.launch {
+            try {
+                val towers = ApiClient.listTowers()
+                // 高さの順位表。同じ高さなら新しいほうを上に
+                state = State.Loaded(towers.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt }))
+            } catch (e: CancellationException) {
+                throw e // 新しい取り直しに置き換えられた。状態はそちらが決める
+            } catch (e: Exception) {
+                if (shown == null) state = State.Error(e.message ?: e.toString()) else refreshFailed = true
+            } finally {
+                if (isActive) refreshing = false
+            }
         }
     }
 }
@@ -147,10 +170,12 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
         val status = when (state) {
             GalleryViewModel.State.Loading -> StatusLine("サーバから読み込み中…", Fieldbook.Survey)
             is GalleryViewModel.State.Error -> StatusLine("サーバに接続できません", Fieldbook.Danger)
-            // 一覧を出したまま裏で取り直しているときは、青い点と「更新中」で分かるようにする
-            is GalleryViewModel.State.Loaded ->
-                if (vm.refreshing) StatusLine("更新中… ・ ${serverHost()}", Fieldbook.Survey)
-                else StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
+            // 一覧を出したまま裏で取り直しているときは青い点と「更新中」、取り直せなかったときは赤い点で分かるようにする
+            is GalleryViewModel.State.Loaded -> when {
+                vm.refreshing -> StatusLine("更新中… ・ ${serverHost()}", Fieldbook.Survey)
+                vm.refreshFailed -> StatusLine("取り直せませんでした（前の一覧のまま）", Fieldbook.Danger)
+                else -> StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
+            }
         }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
@@ -244,6 +269,8 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, ratio: Flo
         Box(
             modifier = Modifier
                 .size(width = 56.dp, height = 64.dp)
+                // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
+                .clip(SketchShape)
                 .background(Fieldbook.Paper, SketchShape)
                 .then(if (sketch == null) Modifier.dashedOutline(Fieldbook.CardEdge, corner = 3.dp) else Modifier.border(1.dp, Fieldbook.CardEdge, SketchShape)),
         ) {
