@@ -44,12 +44,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import java.util.Locale
 import kotlinx.coroutines.isActive
 import kotlin.math.max
 
@@ -134,7 +136,8 @@ fun StackScreen(
         val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
         val grip = Grip.of(sky)
 
-        // 上部のスコア。すべりやすいパーツなら、その下に一言（下の操作の側に出すと、操作が上に押されて台にかかるため）
+        // 上部のスコア。その下に、いま置くパーツの大きさと、すべりやすいならその一言
+        // （下の操作の側に出すと、操作が上に押されて台にかかるため）
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -148,10 +151,19 @@ fun StackScreen(
                     }
                 }
             }
-            val slippery = grip.label
-            if (vm.phase == StackViewModel.Phase.Placing && sky != null && slippery != null) {
-                Spacer(Modifier.height(8.dp))
-                SlipperyNote(sky, slippery)
+            val current = vm.current
+            if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+                // 長く歩いた道ほど大きい（PartSize）。何 m 歩いたから何倍か、を出す
+                Text(
+                    "${current.distanceM} m 歩いた道 ・ 大きさ %.1f 倍".format(Locale.US, PartSize.of(current.distanceM)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink,
+                )
+                val slippery = grip.label
+                if (sky != null && slippery != null) {
+                    Spacer(Modifier.height(8.dp))
+                    SlipperyNote(sky, slippery)
+                }
             }
         }
 
@@ -291,10 +303,11 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         // ゴースト（これから置くパーツ）
         val current = vm.current
         if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+            // 置いたときと同じ大きさで見せる（長く歩いた道ほど大きい。PartSize）
             drawPart(
                 part = current,
                 center = Offset(sx(vm.ghostX.toDouble()), sy(vm.spawnY().toDouble())),
-                scalePx = scalePx,
+                scalePx = scalePx * PartSize.of(current.distanceM).toFloat(),
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
                 alpha = 0.45f,
             )

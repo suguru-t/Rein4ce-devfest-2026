@@ -41,6 +41,9 @@ class StackWorld(
      */
     private val visuals = HashMap<Body, List<PartGeometry.Polygon>>()
 
+    /** 置いたパーツの大きさ（長辺 [m]）。保存する配置（[placements]）に入れる */
+    private val scales = HashMap<Body, Double>()
+
     /** 置かれているパーツ（落下で消えたものは含まない） */
     val placedParts: List<Part> get() = placed.values.toList()
 
@@ -69,6 +72,7 @@ class StackWorld(
     /**
      * パーツをワールドに追加して落下させる。
      *
+     * @param scale パーツの大きさ（長辺 [m]。歩いた距離で決まる。[PartSize.of]）
      * @param grip すべりやすさ（歩いたときの天気で決まる。[Grip.of]）
      */
     fun place(part: Part, x: Double, y: Double, angle: Double, scale: Double = 1.0, grip: Grip = Grip.NORMAL): Body {
@@ -78,6 +82,7 @@ class StackWorld(
         world.addBody(body)
         placed[body] = part
         visuals[body] = PartGeometry.shapes(part, scale)
+        scales[body] = scale
         return body
     }
 
@@ -97,7 +102,10 @@ class StackWorld(
     fun removeFallen(): List<Part> {
         val fallen = placed.keys.filter { it.worldCenter.y < fallThresholdY }
         val parts = fallen.map { placed.remove(it)!! }
-        fallen.forEach { visuals.remove(it) }
+        fallen.forEach {
+            visuals.remove(it)
+            scales.remove(it)
+        }
         fallen.forEach { world.removeBody(it) }
         return parts
     }
@@ -120,6 +128,7 @@ class StackWorld(
             x = t.translationX.toFloat(),
             y = t.translationY.toFloat(),
             angleRad = t.rotationAngle.toFloat(),
+            scale = (scales[b] ?: 1.0).toFloat(),
         )
     }
 
@@ -127,6 +136,7 @@ class StackWorld(
         placed.keys.forEach { world.removeBody(it) }
         placed.clear()
         visuals.clear()
+        scales.clear()
     }
 
     // ---- 描画用 ----

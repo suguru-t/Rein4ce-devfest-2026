@@ -1,7 +1,10 @@
 package com.rein4ce.roadcollector.core
 
 import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.model.AppJson
+import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.physics.PartBodyFactory
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
@@ -141,6 +144,42 @@ class StackWorldTest {
         assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.ICY.friction, 0.9), 1e-9)
         assertEquals(Grip.WET.friction, mixer.mixFriction(Grip.NORMAL.friction, Grip.WET.friction), 1e-9)
         assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.WET.friction, Grip.ICY.friction), 1e-9)
+    }
+
+    @Test
+    fun `longer walks make bigger parts`() {
+        assertEquals(PartSize.MIN, PartSize.of(0), 1e-9)
+        assertEquals(PartSize.MIN, PartSize.of(100), 1e-9)
+        assertEquals(PartSize.MAX, PartSize.of(2000), 1e-9)
+        assertEquals(PartSize.MAX, PartSize.of(50_000), 1e-9)
+        // 400 m ほどでちょうど 1 倍。長いほど大きい
+        assertEquals(1.0, PartSize.of(400), 0.05)
+        val sizes = listOf(100, 200, 400, 800, 1600, 2000).map { PartSize.of(it) }
+        assertTrue(sizes.zipWithNext().all { (a, b) -> a < b })
+    }
+
+    @Test
+    fun `a bigger part is bigger in the world and its size is saved in the placement`() {
+        // 寝かせた棒の高さは太さ×大きさ。大きさ 1.4 は 0.7 の 2 倍の高さになる
+        fun lay(scale: Double): Pair<Double, Placement> {
+            val world = StackWorld()
+            world.place(SampleParts.byId("sample-bar")!!, x = 0.0, y = 0.3, angle = Math.PI / 2, scale = scale)
+            settle(world)
+            return world.height() to world.placements().single()
+        }
+        val (small, smallPlacement) = lay(0.7)
+        val (big, bigPlacement) = lay(1.4)
+        assertEquals(0.7f, smallPlacement.scale, 1e-6f)
+        assertEquals(1.4f, bigPlacement.scale, 1e-6f)
+        assertEquals("small $small, big $big", 2.0, big / small, 0.1)
+    }
+
+    @Test
+    fun `towers saved before sizes existed read as size 1`() {
+        val old = """{"partId":"a","x":0.0,"y":0.1,"angleRad":0.0}"""
+        assertEquals(1f, AppJson.decodeFromString(Placement.serializer(), old).scale)
+        // 新しいタワーは大きさも書き出す
+        assertTrue("\"scale\":1.4" in AppJson.encodeToString(Placement.serializer(), Placement("a", 0f, 0f, 0f, scale = 1.4f)))
     }
 
     @Test

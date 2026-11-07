@@ -83,6 +83,17 @@ class TowerValidationTest {
         bad(ok.copy(placements = listOf(ok.placements[0].copy(x = Float.NaN))), "placement 0: out of range")
         bad(ok.copy(placements = listOf(ok.placements[0].copy(y = MAX_COORDINATE + 1))), "placement 0: out of range")
         bad(ok.copy(placements = listOf(ok.placements[0].copy(angleRad = Float.NEGATIVE_INFINITY))), "placement 0: out of range")
+        // 大きさ（歩いた距離で 0.7〜1.4 倍）。0・NaN・極端な値は断る
+        bad(ok.copy(placements = listOf(ok.placements[0].copy(scale = 0f))), "placement 0: scale out of range")
+        bad(ok.copy(placements = listOf(ok.placements[0].copy(scale = Float.NaN))), "placement 0: scale out of range")
+        bad(ok.copy(placements = listOf(ok.placements[0], ok.placements[1].copy(scale = MAX_PLACEMENT_SCALE + 1))), "placement 1: scale out of range")
+    }
+
+    @Test
+    fun `大きさを変えたパーツも通る`() {
+        val sized = ok.copy(placements = listOf(ok.placements[0].copy(scale = 0.7f), ok.placements[1].copy(scale = 1.4f)))
+        assertNull(sized.validationError())
+        assertNull(ok.copy(placements = listOf(ok.placements[0].copy(scale = MIN_PLACEMENT_SCALE))).validationError())
     }
 
     @Test

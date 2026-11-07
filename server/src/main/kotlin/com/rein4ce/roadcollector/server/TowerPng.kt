@@ -55,9 +55,10 @@ object TowerPng {
             val minY = -0.4
             var maxY = max(tower.height.toDouble(), 1.0) + 0.4
             for (p in tower.placements) {
-                minX = min(minX, p.x - 1.0)
-                maxX = max(maxX, p.x + 1.0)
-                maxY = max(maxY, p.y + 1.0)
+                // パーツは長辺が大きさ（scale）の箱に入るので、置いた点から大きさぶんを見ておく
+                minX = min(minX, p.x - 1.0 * p.scale)
+                maxX = max(maxX, p.x + 1.0 * p.scale)
+                maxY = max(maxY, p.y + 1.0 * p.scale)
             }
             val w = maxX - minX
             val h = maxY - minY
@@ -77,7 +78,8 @@ object TowerPng {
                 g.color = Color.decode(TowerSvg.colorOf(part.kind))
                 // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つのパスにまとめて塗る（継ぎ目に線が出ない）
                 val path = Path2D.Double(Path2D.WIND_NON_ZERO)
-                for (poly in PartGeometry.shapes(part, 1.0)) {
+                // 大きさ（歩いた距離で決まる）は、形を作るときに掛ける（物理と同じ）
+                for (poly in PartGeometry.shapes(part, pl.scale.toDouble())) {
                     poly.points.forEachIndexed { i, v ->
                         if (i == 0) path.moveTo(v.x * scale, -v.y * scale) else path.lineTo(v.x * scale, -v.y * scale)
                     }

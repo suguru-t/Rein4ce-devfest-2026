@@ -24,6 +24,13 @@ const val MAX_PART_NAME_LENGTH = 30
 const val MAX_COORDINATE = 100f
 
 /**
+ * パーツの大きさ（Placement.scale）の範囲。アプリは歩いた距離で 0.7〜1.4 倍（PartSize）にするが、
+ * 決め方が変わっても弾かないよう余裕を見る。0 や巨大な値は、絵が消えたり画面を埋めたりする
+ */
+const val MIN_PLACEMENT_SCALE = 0.2f
+const val MAX_PLACEMENT_SCALE = 5f
+
+/**
  * 受け付けられない理由（英語の短い文。400 の本文にそのまま出す）。問題なければ null。
  * 最初に見つかった 1 つだけ返す。
  */
@@ -47,6 +54,7 @@ internal fun Tower.validationError(): String? {
     for ((i, pl) in placements.withIndex()) {
         if (pl.partId !in ids) return "placement $i: unknown partId ${pl.partId}"
         if (!inRange(pl.x) || !inRange(pl.y) || !pl.angleRad.isFinite()) return "placement $i: out of range"
+        if (!pl.scale.isFinite() || pl.scale < MIN_PLACEMENT_SCALE || pl.scale > MAX_PLACEMENT_SCALE) return "placement $i: scale out of range"
     }
     if (!inRange(height) || height < 0f) return "height out of range"
     val a = author
