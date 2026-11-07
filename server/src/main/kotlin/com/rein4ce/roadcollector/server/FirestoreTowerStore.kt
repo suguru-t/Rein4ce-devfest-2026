@@ -44,11 +44,19 @@ class FirestoreTowerStore(
         // id の衝突はほぼ起きないが、create() は既存なら失敗するので数回だけ振り直す
         repeat(5) {
             val saved = tower.stamped(TowerIds.next())
+            val fields = saved.toFields()
+            val document = towers.document(saved.id)
             try {
-                towers.document(saved.id).create(saved.toFields()).await()
+                document.create(fields).await()
                 return saved
             } catch (e: AlreadyExistsException) {
-                // 次の id で再試行
+                // 「既にある」には 2 通りある：
+                //  a. 別のタワーと id がぶつかった → 次の id で振り直す
+                //  b. 自分の create は Firestore 側で成功していたが、その応答が届かず SDK が同じ create を再送した
+                //     （SDK は UNAVAILABLE などを自動で再試行する）→ 振り直すと同じタワーが 2 件できるので、
+                //     既にある文書が今回の内容と同じなら成功として返す
+                // 読み取り自体に失敗したら、保存できたか不明なまま次の id に進まず、そのエラーを伝える
+                if (document.get().await().getString("json") == fields["json"]) return saved
             }
         }
         error("tower id の採番に失敗しました")

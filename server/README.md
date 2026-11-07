@@ -71,15 +71,20 @@ GOOGLE_CLOUD_PROJECT=hackathon-2026-513703 TOWER_STORE=firestore TOWER_COLLECTIO
 
 起動ログに `TowerStore: firestore（project=..., database=..., collection=...）` と出れば、**Firestore 版が選ばれて接続先が決まった**ところまでは分かる。この時点ではまだ読み書きしていないので、プロジェクトの間違いや権限不足は、実際に保存・取得して初めて分かる（`/health` は DB を呼ばないので、200 でも DB の確認にはならない）。
 
-接続先・権限・保存の確認は、次の順でやる：
+接続先・権限・保存の確認は、次の順でやる（Bash / Git Bash 用。JSON はパーツ 1 本だけの最小のタワーで、`createdAt: 0` はサーバが現在時刻に直す）：
 
-```
-# 1. 保存（201 と id が返る）
-curl -s -X POST localhost:8080/towers -H "Content-Type: application/json" -d @tower.json
-# 2. 返ってきた id で取得（200。JSON で返る）
-curl -s -H "Accept: application/json" localhost:8080/towers/<id>
+```bash
+BASE_URL='http://localhost:8080'
+
+# 1. 保存（201 と、応答 JSON に id が返る）
+curl -sS -i -X POST "$BASE_URL/towers" -H 'Content-Type: application/json' \
+  -d '{"parts":[{"id":"p1","points":[{"x":-0.5,"y":0},{"x":0.5,"y":0}],"kind":"BAR"}],"placements":[{"partId":"p1","x":0,"y":0.1,"angleRad":0}],"height":0.2,"createdAt":0}'
+
+# 2. 返ってきた id で取得（200。JSON で返る）。ID は 1 の応答の id に置き換える
+ID='1 の応答の id'
+curl -sS -i -H 'Accept: application/json' "$BASE_URL/towers/$ID"
 # 3. 一覧に出る（200）
-curl -s localhost:8080/towers
+curl -sS -i "$BASE_URL/towers"
 # 4. サーバを再起動して、もう一度 2 を実行 → 同じ id で取得できれば Firestore に残っている
 ```
 

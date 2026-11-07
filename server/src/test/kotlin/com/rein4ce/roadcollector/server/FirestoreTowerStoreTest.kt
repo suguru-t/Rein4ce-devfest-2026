@@ -7,13 +7,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 import org.junit.Test
 
 /**
@@ -83,10 +81,9 @@ class FirestoreTowerStoreTest {
     @Test
     fun `待っているコルーチンをキャンセルすると、すぐ終わり、元の Future もキャンセルされる`() = runBlocking {
         val f = SettableApiFuture.create<String>()
-        val job = launch(Dispatchers.Default) { f.await() }
-        // await() の中に入るまで少し待つ
-        while (!job.isActive) yield()
-        delay(50)
+        // UNDISPATCHED：最初の中断点（await() の中）まで今のスレッドで進めてから返る。
+        // await() は中断する前にコールバックとキャンセル時の処理を登録するので、時間待ちなしで前提が作れる
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { f.await() }
 
         job.cancel(CancellationException("test"))
         withTimeout(1_000) { job.join() } // Future が終わっていなくても、待ちはすぐ解ける
