@@ -110,8 +110,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
-                explanation = "記録している間だけ、画面を消さないようにします。地図を見ながら歩くときに。" +
-                    "画面がついたままになるので、電池を多く使います。記録を止めると、いつもどおり画面が消えるようになります。",
+                explanation = "記録している間は、画面を消しません。地図を見ながら歩くときに便利ですが、電池を多く使います。",
             )
             Page.AI -> SwitchPage(
                 checked = aiNaming,
