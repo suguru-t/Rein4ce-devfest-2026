@@ -11,6 +11,7 @@ import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import javax.imageio.ImageIO
+import javax.imageio.stream.MemoryCacheImageOutputStream
 import kotlin.math.max
 import kotlin.math.min
 
@@ -94,8 +95,12 @@ object TowerPng {
         } finally {
             g.dispose()
         }
+        // ImageIO の既定ではディスクの一時ファイルを経由することがあるので、この書き出しだけメモリ上で行う
+        // （ImageIO.setUseCache(false) で共有設定を変えずに済む）。内側のストリームを閉じてから toByteArray() を呼ぶ
         return ByteArrayOutputStream().use { out ->
-            ImageIO.write(img, "png", out)
+            MemoryCacheImageOutputStream(out).use { imageOut ->
+                check(ImageIO.write(img, "png", imageOut)) { "PNG writer is unavailable" }
+            }
             out.toByteArray()
         }
     }

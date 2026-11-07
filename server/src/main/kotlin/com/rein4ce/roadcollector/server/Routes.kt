@@ -85,7 +85,8 @@ fun Route.towerRoutes(store: TowerStore) {
         call.respondText(TowerSvg.render(tower), ContentType.Image.SVG)
     }
 
-    // 共有ページの og:image 用。LINE / X は SVG を読まないので PNG。タワーは保存後に変わらないのでキャッシュさせる
+    // 共有ページの og:image 用。LINE / X は SVG を読まないので PNG。タワーは保存後に変わらないのでキャッシュさせる。
+    // GET だけで HEAD には応えない（AutoHeadResponse は入れていない）ので、確認は `curl -I` ではなく GET で行う
     get("/towers/{id}/image.png") {
         val id = call.parameters["id"].orEmpty()
         val tower = store.get(id)
