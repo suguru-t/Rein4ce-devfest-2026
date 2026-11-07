@@ -90,6 +90,7 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
+import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -295,17 +296,10 @@ fun CollectScreen(
                 TextButton(onClick = { vm.dismissOutcome() }) { Text("閉じる", color = Fieldbook.Muted) }
             },
         )
-        is CollectViewModel.Outcome.Rejected -> AlertDialog(
-            onDismissRequest = { vm.dismissOutcome() },
-            containerColor = Fieldbook.Paper,
-            titleContentColor = Fieldbook.Ink,
-            textContentColor = Fieldbook.Ink,
-            title = { Text("パーツになりませんでした", fontWeight = FontWeight.Bold) },
-            text = { Text(o.reason) },
-            confirmButton = {
-                TextButton(onClick = { vm.dismissOutcome() }) { Text("閉じる", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
-            },
-        )
+        // 設定と同じ形：灰色の帯の見出しと、枠の下の丸い「×」で閉じる（枠の外を押しても閉じる）
+        is CollectViewModel.Outcome.Rejected -> FramedDialog(title = "パーツになりませんでした", onDismiss = { vm.dismissOutcome() }) {
+            Text(o.reason, style = noteStyle, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+        }
         null -> Unit
     }
 }

@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -35,6 +36,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -74,6 +77,7 @@ internal fun RenameDialog(
     LaunchedEffect(Unit) { focus.requestFocus() }
     // AI に名前を考えてもらっているところ（ダイアログを閉じると取りやめる）
     val scope = rememberCoroutineScope()
+    val aiOn by RoadCollectorApp.from(LocalContext.current).settings.aiNaming.collectAsStateWithLifecycle()
     var asking by remember { mutableStateOf(false) }
     var aiResult by remember { mutableStateOf<AiResult?>(null) }
     fun ask() {
@@ -144,19 +148,22 @@ internal fun RenameDialog(
                     ),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
-                Text(
-                    when (aiResult) {
-                        AiResult.Named -> notes("AI の案です", "直してから保存もできます")
-                        AiResult.Failed -> notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください")
-                        null -> notes("場所は送らず、形・距離・日時で考えます")
-                    },
-                    style = noteStyle,
-                    fontSize = 12.sp,
-                    color = if (aiResult == AiResult.Failed) Fieldbook.Danger else Fieldbook.Muted,
-                    // 結果は入力欄の外に出るので、読み上げでも知らせる
-                    modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                )
+                // 設定（採集画面の歯車）で AI の名前付けをオフにしていたら、ボタンを出さない
+                if (aiOn) {
+                    AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
+                    Text(
+                        when (aiResult) {
+                            AiResult.Named -> notes("AI の案です", "直してから保存もできます")
+                            AiResult.Failed -> notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください")
+                            null -> notes("場所は送らず、形・距離・日時で考えます")
+                        },
+                        style = noteStyle,
+                        fontSize = 12.sp,
+                        color = if (aiResult == AiResult.Failed) Fieldbook.Danger else Fieldbook.Muted,
+                        // 結果は入力欄の外に出るので、読み上げでも知らせる
+                        modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
             }
         },
         confirmButton = {

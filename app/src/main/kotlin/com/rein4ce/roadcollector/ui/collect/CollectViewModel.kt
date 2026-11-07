@@ -36,6 +36,7 @@ import java.math.RoundingMode
 class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = RoadCollectorApp.from(app).partRepository
+    private val settings = RoadCollectorApp.from(app).settings
 
     val points: StateFlow<List<TrackPoint>> = TrackRecorder.points
     val isRecording: StateFlow<Boolean> = TrackRecorder.isRecording
@@ -65,6 +66,9 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
         /** 付かなかった（通信できない・サーバが考えられなかった）。「○ m の散歩」のまま。コレクションからあとで付けられる */
         FAILED,
+
+        /** 設定で AI の名前付けをオフにしている。聞かずに「○ m の散歩」のまま */
+        OFF,
     }
 
     var outcome: Outcome? by mutableStateOf(null)
@@ -179,6 +183,11 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun keep(r: TrackToPart.Result.Success, note: String? = null) {
         // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う）
         repository.add(r.part, r.place)
+        // 設定（歯車）で AI の名前付けをオフにしていたら、聞かない（形・距離・日時もサーバに送らない）
+        if (!settings.aiNaming.value) {
+            outcome = Outcome.Created(r.part, r.stats, note = note, naming = Naming.OFF)
+            return
+        }
         outcome = Outcome.Created(r.part, r.stats, note = note)
         // ダイアログを閉じても、名前は考え続けて保存する
         viewModelScope.launch {

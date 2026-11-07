@@ -10,6 +10,7 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.data.WeatherMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Duration.Companion.minutes
@@ -31,6 +32,7 @@ object BackdropFocus {
  * - **コレクション**：大きく見ているパーツを歩いたときの天気。見ていないときは、最後に歩いたパーツの天気
  * - **積む・みんな**：降らせない
  *
+ * 設定（採集画面の歯車）の「背景の天気の動き」で、なめらか・ふつう・止める・出さないを選べる。
  * 記録中（デモ再生中も）は、どの画面でも止まった絵にする。記録中は採集画面を開いたまま歩くことが多く、GPS と一緒に電池を使い続けないため。
  *
  * 方眼紙（`fieldbookGrid`）の上、画面の部品の下に敷く（AppNav）。
@@ -45,6 +47,8 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     val parts by repository.parts.collectAsStateWithLifecycle()
     val focus by BackdropFocus.partId.collectAsStateWithLifecycle()
     val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
+    // 設定（歯車）の「背景の天気の動き」
+    val motion by app.settings.weatherMotion.collectAsStateWithLifecycle()
 
     if (screen == BackdropScreen.COLLECT) {
         LaunchedEffect(Unit) {
@@ -60,7 +64,12 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
         BackdropScreen.COLLECTION -> (focus ?: latestWalk(parts)?.id)?.let { repository.weatherOf(it, saved) }
         BackdropScreen.OTHER -> null
     }
-    WeatherBackdrop(weather, modifier, still = recording)
+    WeatherBackdrop(
+        weather = if (motion == WeatherMotion.OFF) null else weather,
+        modifier = modifier,
+        still = recording || motion == WeatherMotion.STILL,
+        smooth = motion == WeatherMotion.SMOOTH,
+    )
 }
 
 /** 最後に歩いたパーツ（見本は除く） */

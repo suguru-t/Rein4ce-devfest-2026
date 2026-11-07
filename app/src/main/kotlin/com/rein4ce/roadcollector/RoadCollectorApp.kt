@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
+import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
 
@@ -27,6 +28,8 @@ class RoadCollectorApp : Application() {
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
+        // タワーを送るときの作者名は、設定のニックネーム（空なら名無し）
+        ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
         partRepository = PartRepository(this)
         weatherService = WeatherService(this, partRepository)
         LocationRecordingService.createNotificationChannel(this)

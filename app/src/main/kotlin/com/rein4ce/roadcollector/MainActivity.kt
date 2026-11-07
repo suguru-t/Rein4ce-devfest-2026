@@ -9,7 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.ui.AppNav
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.theme.RoadCollectorTheme
@@ -33,6 +35,14 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim) { dark },
                 )
                 onDispose {}
+            }
+            // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
+            val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
+            val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
+            val view = LocalView.current
+            DisposableEffect(keepOn && recording) {
+                view.keepScreenOn = keepOn && recording
+                onDispose { view.keepScreenOn = false }
             }
             RoadCollectorTheme(dark = dark) {
                 AppNav()
