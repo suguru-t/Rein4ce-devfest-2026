@@ -74,21 +74,29 @@ class GalleryViewModel : ViewModel() {
     val sketches = mutableStateMapOf<String, Tower>()
     private val fetching = mutableSetOf<String>()
 
+    /**
+     * 取れなかったタワーの id。スクロールで何度もカードが見えるたびに取り直すと、壊れた 1 基のせいで
+     * 10 秒待ちの通信を繰り返すことになるので、次の「再読み込み」まで取り直さない
+     */
+    private val failed = mutableSetOf<String>()
+
     init {
         refresh()
     }
 
-    /** カードが見えたときに呼ぶ。取れなかったら、次にカードが見えたときにもう一度取る */
+    /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
     fun loadSketch(id: String) {
-        if (id in sketches || !fetching.add(id)) return
+        if (id in sketches || id in failed || !fetching.add(id)) return
         viewModelScope.launch {
             runCatching { ApiClient.getTower(id) }
                 .onSuccess { sketches[id] = it }
-                .onFailure { fetching.remove(id) }
+                .onFailure { failed.add(id) }
+            fetching.remove(id)
         }
     }
 
     fun refresh() {
+        failed.clear()
         state = State.Loading
         viewModelScope.launch {
             state = runCatching { ApiClient.listTowers() }
@@ -229,6 +237,8 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, ratio: Flo
         Box(
             modifier = Modifier
                 .size(width = 56.dp, height = 64.dp)
+                // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
+                .clip(SketchShape)
                 .background(Fieldbook.Paper, SketchShape)
                 .then(if (sketch == null) Modifier.dashedOutline(Fieldbook.CardEdge, corner = 3.dp) else Modifier.border(1.dp, Fieldbook.CardEdge, SketchShape)),
         ) {

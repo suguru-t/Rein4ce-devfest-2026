@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.core.svg
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.physics.PartGeometry
+import com.rein4ce.roadcollector.core.physics.StackWorld
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
@@ -22,7 +23,7 @@ object TowerSvg {
         Kind.OTHER -> "#8D99AE"
     }
 
-    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = 1.4): String {
+    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = StackWorld.PLATFORM_WIDTH): String {
         val partsById = tower.parts.associateBy { it.id }
 
         // 表示範囲：台を含み、タワー全体が入るように
@@ -49,7 +50,7 @@ object TowerSvg {
         sb.append("""<rect width="100%" height="100%" fill="#FFF8F2"/>""")
         // 台
         sb.append(
-            """<rect x="${f(sx(-platformWidth / 2))}" y="${f(sy(0.0))}" width="${f(platformWidth * scale)}" height="${f(0.3 * scale)}" fill="#4A4E69" rx="4"/>""",
+            """<rect x="${f(sx(-platformWidth / 2))}" y="${f(sy(0.0))}" width="${f(platformWidth * scale)}" height="${f(StackWorld.PLATFORM_THICKNESS * scale)}" fill="#4A4E69" rx="4"/>""",
         )
         // パーツ
         for (pl in tower.placements) {
