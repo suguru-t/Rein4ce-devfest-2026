@@ -228,6 +228,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
         if (selecting && !editing && isLoaded) {
             RandomPickRow(
+                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                enabled = parts.isNotEmpty(),
                 count = pickCount,
                 onCountChange = { pickCount = it },
                 note = pickNote,
@@ -837,11 +839,11 @@ private fun formatDate(epochMs: Long): String =
  * 選んだあとは、その下に一言（何本選んだか。足りなかったときはそのこと）を出し、読み上げでも知らせる
  */
 @Composable
-private fun RandomPickRow(count: Int, onCountChange: (Int) -> Unit, note: String?, onPick: () -> Unit) {
+private fun RandomPickRow(enabled: Boolean, count: Int, onCountChange: (Int) -> Unit, note: String?, onPick: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onPick) {
-                Text("ランダムに選ぶ", color = Fieldbook.Survey, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onPick, enabled = enabled) {
+                Text("ランダムに選ぶ", color = if (enabled) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.weight(1f))
             StepButton("−", "1 本減らす", enabled = count > 1) { onCountChange(count - 1) }
