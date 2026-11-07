@@ -50,6 +50,12 @@ class LocationRecordingService : Service() {
                     ),
                 )
             }
+            // 速すぎて TrackRecorder が記録を止めたら、サービスも止める（画面を閉じていても通知が消える）
+            if (!TrackRecorder.isRecording.value) {
+                stopUpdates()
+                ServiceCompat.stopForeground(this@LocationRecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 

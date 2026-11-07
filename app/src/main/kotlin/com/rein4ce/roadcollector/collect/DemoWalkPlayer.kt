@@ -23,6 +23,7 @@ object DemoWalkPlayer {
         TrackRecorder.start()
         val perPoint = (durationMs / shifted.size.coerceAtLeast(1)).coerceAtLeast(1L)
         for (p in shifted) {
+            if (!TrackRecorder.isRecording.value) break // 速すぎて自動で止まった
             TrackRecorder.add(p)
             delay(perPoint)
         }
