@@ -599,7 +599,7 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
                 Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "採集したパーツは、削除すると元に戻せません。",
+                    if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "記録したパーツは、削除すると元に戻せません。",
                     style = noteStyle,
                     fontSize = 13.sp,
                     color = Fieldbook.Muted,

@@ -170,7 +170,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
             is TrackToPart.Result.TooFast ->
                 outcome = Outcome.Rejected(
                     "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps, RoundingMode.CEILING)}）。" +
-                        "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で採集してください",
+                        "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で記録してください",
                 )
         }
     }

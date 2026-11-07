@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.ui.common.drawGridClearings
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
 import kotlin.math.min
@@ -114,6 +115,8 @@ fun Modifier.fieldbookGrid(): Modifier = drawBehind {
         y += step
         i++
     }
+    // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
+    drawGridClearings()
 }
 
 /** 選んだパーツの破線の枠（測量の図面で範囲を囲む線のイメージ）。[corner] でカードの角丸に合わせる */
