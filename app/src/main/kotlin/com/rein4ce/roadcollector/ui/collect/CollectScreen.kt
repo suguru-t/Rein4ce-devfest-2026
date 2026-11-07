@@ -259,22 +259,26 @@ fun CollectScreen(
                         // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
                         Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
                     }
+                    // 数字と単位を離さず、「・」の区切りで折り返す（文字を大きくしても崩れない注記。ui/common/Notes）
                     Text(
-                        "L=${o.part.distanceM} m ・ 頂点 ${o.part.points.size} ・ ε ${"%.0f".format(o.stats.epsilonM)} m",
+                        notes("L=${o.part.distanceM} m", "頂点 ${o.part.points.size}", "ε ${"%.0f".format(o.stats.epsilonM)} m"),
+                        style = noteStyle,
                         fontFamily = Fieldbook.Data,
                         fontSize = 11.sp,
                         color = Fieldbook.Muted,
                     )
                     o.stats.fastestMps?.let { v ->
                         Text(
-                            "最高 ${CollectViewModel.kmh(v)}（30 秒の窓）",
+                            notes("最高 ${CollectViewModel.kmh(v)}（30 秒の窓）"),
+                            style = noteStyle,
                             fontFamily = Fieldbook.Data,
                             fontSize = 11.sp,
                             color = Fieldbook.Muted,
                         )
                     }
                     Text(
-                        "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点",
+                        notes("GPS ${o.stats.rawPoints} 点", "フィルタ後 ${o.stats.filteredPoints} 点", separator = " → "),
+                        style = noteStyle,
                         fontFamily = Fieldbook.Data,
                         fontSize = 11.sp,
                         color = Fieldbook.Muted,
