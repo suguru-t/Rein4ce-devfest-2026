@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 起動画面のアイコンの動き（Android 12 以降）：最後の「ミ」のブロックが右の外から勢いよく回りながら飛び込んできて、
-     採集画面の題字と同じ位置（少し浮いて傾いた「置く直前」）に、少し行き過ぎてから収まる（約 0.28 秒）。見えるのは直径 192dp の円の中だけなので、円の右の端から見え始める。
+<!-- 起動画面のアイコンの動き（Android 12 以降）：最後の「ミ」のブロックが右の外から回りながら落ちてきて、
+     着いたところで大きく 1 回・小さく 1 回はねてから、採集画面の題字と同じ位置（少し浮いて傾いた「置く直前」）に収まる（約 0.46 秒）。
+     見えるのは直径 192dp の円の中だけなので、円の右の端から見え始める。
      絵は splash_icon（tools/make_splash_icon.py で作る。落ち始める位置 260・-70 と傾き 60 は、そこで渡した値と合わせる） -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -8,7 +9,7 @@
     <target android:name="drop">
         <aapt:attr name="android:animation">
             <set android:ordering="sequentially">
-                <!-- 右の外から、回りながら一気に飛び込む（見え始めたときにはもう速い） -->
+                <!-- 右の外から、回りながら落ちてくる（横は一定の速さ、下へはだんだん速く） -->
                 <set android:ordering="together">
                     <objectAnimator
                         android:propertyName="translateX"
@@ -23,7 +24,7 @@
                         android:valueFrom="-70"
                         android:valueTo="0"
                         android:duration="140"
-                        android:interpolator="@android:interpolator/linear" />
+                        android:interpolator="@android:interpolator/accelerate_quad" />
                     <objectAnimator
                         android:propertyName="rotation"
                         android:valueType="floatType"
@@ -32,22 +33,54 @@
                         android:duration="140"
                         android:interpolator="@android:interpolator/decelerate_quad" />
                 </set>
-                <!-- 少し行き過ぎて -->
+                <!-- 着いたところで、大きくはね上がる（少し傾く） -->
+                <set android:ordering="together">
+                    <objectAnimator
+                        android:propertyName="translateY"
+                        android:valueType="floatType"
+                        android:valueFrom="0"
+                        android:valueTo="-16"
+                        android:duration="100"
+                        android:interpolator="@android:interpolator/decelerate_quad" />
+                    <objectAnimator
+                        android:propertyName="rotation"
+                        android:valueType="floatType"
+                        android:valueFrom="0"
+                        android:valueTo="-8"
+                        android:duration="100"
+                        android:interpolator="@android:interpolator/decelerate_quad" />
+                </set>
+                <set android:ordering="together">
+                    <objectAnimator
+                        android:propertyName="translateY"
+                        android:valueType="floatType"
+                        android:valueFrom="-16"
+                        android:valueTo="0"
+                        android:duration="100"
+                        android:interpolator="@android:interpolator/accelerate_quad" />
+                    <objectAnimator
+                        android:propertyName="rotation"
+                        android:valueType="floatType"
+                        android:valueFrom="-8"
+                        android:valueTo="0"
+                        android:duration="100"
+                        android:interpolator="@android:interpolator/accelerate_quad" />
+                </set>
+                <!-- もう一度、小さくはねて収まる -->
                 <objectAnimator
                     android:propertyName="translateY"
                     android:valueType="floatType"
                     android:valueFrom="0"
-                    android:valueTo="6"
+                    android:valueTo="-5"
                     android:duration="60"
                     android:interpolator="@android:interpolator/decelerate_quad" />
-                <!-- 元の位置に収まる -->
                 <objectAnimator
                     android:propertyName="translateY"
                     android:valueType="floatType"
-                    android:valueFrom="6"
+                    android:valueFrom="-5"
                     android:valueTo="0"
-                    android:duration="80"
-                    android:interpolator="@android:interpolator/accelerate_decelerate" />
+                    android:duration="60"
+                    android:interpolator="@android:interpolator/accelerate_quad" />
             </set>
         </aapt:attr>
     </target>

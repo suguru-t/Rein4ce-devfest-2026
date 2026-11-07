@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
             startDelay = 180
             duration = 140
         }
-        // 起動画面のアイコンの動き（最後の「ミ」が右の外から飛び込んできて収まる）が終わるまで待ってから、門をくぐる
+        // 起動画面のアイコンの動き（最後の「ミ」が右の外から落ちてきて、はねてから収まる）が終わるまで待ってから、門をくぐる
         val animStart = splash.iconAnimationStart
         val animDuration = splash.iconAnimationDuration
         val wait = if (animStart != null && animDuration != null) {
@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
         const val GATE_DY_DP = -35.8f
 
         /** 起動画面のアイコンの動きを待つのは、長くてもこれだけ [ms]（起動が遅くなりすぎないように） */
-        const val MAX_WAIT_MS = 350L
+        const val MAX_WAIT_MS = 550L
 
         /** 穴が画面いっぱいより大きくなるまで、アイコンを大きくする倍率 */
         const val GATE_ZOOM = 40f
