@@ -13,7 +13,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.random.Random
@@ -166,9 +165,9 @@ class TrackToPartTest {
         // 東へ 300 m、北へ 100 m の L 字。形の中心は（150 m 東, 50 m 北）、長辺は 300 m
         val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 300.0 to 0.0, 300.0 to 100.0), noiseM = 0.0))
         require(r is TrackToPart.Result.Success)
-        val place = requireNotNull(r.place)
-        val mPerDegLat = 110_574.0
-        val mPerDegLng = 111_320.0 * cos(Math.toRadians(35.7496))
+        val place = r.place
+        val mPerDegLat = Projection.M_PER_DEG_LAT
+        val mPerDegLng = Projection.metersPerDegLng(35.7496)
         assertEquals(35.7496 + 50.0 / mPerDegLat, place.lat, 1.0 / mPerDegLat) // 1 m 以内
         assertEquals(139.8049 + 150.0 / mPerDegLng, place.lng, 1.0 / mPerDegLng)
         assertEquals(300.0, place.sizeM, 1.0)
@@ -211,8 +210,8 @@ class TrackToPartTest {
         val rnd = Random(seed)
         val lat0 = 35.7496
         val lng0 = 139.8049
-        val mPerDegLat = 110_574.0
-        val mPerDegLng = 111_320.0 * cos(Math.toRadians(lat0))
+        val mPerDegLat = Projection.M_PER_DEG_LAT
+        val mPerDegLng = Projection.metersPerDegLng(lat0)
         val out = ArrayList<TrackPoint>()
         var t = 1_760_000_000_000L
         for (i in 1 until waypointsM.size) {

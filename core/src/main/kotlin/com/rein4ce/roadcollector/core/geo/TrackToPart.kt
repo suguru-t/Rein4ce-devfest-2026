@@ -26,7 +26,7 @@ object TrackToPart {
         /**
          * @param place 歩いた場所（形の中心と長辺の長さ）。**Part とは別に、スマホの中だけに保存する**（PartPlace のコメント）
          */
-        data class Success(val part: Part, val stats: Stats, val place: PartPlace? = null) : Result()
+        data class Success(val part: Part, val stats: Stats, val place: PartPlace) : Result()
         data class TooShort(val distanceM: Double, val minDistanceM: Double) : Result()
         data class TooFewPoints(val pointCount: Int) : Result()
     }

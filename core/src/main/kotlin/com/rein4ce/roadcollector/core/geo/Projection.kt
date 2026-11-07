@@ -15,14 +15,20 @@ data class XY(val x: Double, val y: Double) {
  * 散歩の範囲（数 km）なら誤差は無視できる。y は北向き（＝上向き）。
  */
 object Projection {
-    private const val M_PER_DEG_LAT = 110_574.0
-    private const val M_PER_DEG_LNG_AT_EQUATOR = 111_320.0
+    /** 緯度 1 度あたりのメートル。緯度・経度とメートルを行き来するところ（サンプル軌跡、拡大表示の地図、テスト）は、すべてこの値を使う */
+    const val M_PER_DEG_LAT = 110_574.0
+
+    /** 赤道での経度 1 度あたりのメートル。緯度が上がると cos の分だけ短くなる（[metersPerDegLng]） */
+    const val M_PER_DEG_LNG_AT_EQUATOR = 111_320.0
+
+    /** 緯度 [lat] での経度 1 度あたりのメートル */
+    fun metersPerDegLng(lat: Double): Double = M_PER_DEG_LNG_AT_EQUATOR * cos(Math.toRadians(lat))
 
     fun toMeters(points: List<TrackPoint>): List<XY> {
         if (points.isEmpty()) return emptyList()
         val lat0 = points.first().lat
         val lng0 = points.first().lng
-        val mPerDegLng = M_PER_DEG_LNG_AT_EQUATOR * cos(Math.toRadians(lat0))
+        val mPerDegLng = metersPerDegLng(lat0)
         return points.map { p ->
             XY((p.lng - lng0) * mPerDegLng, (p.lat - lat0) * M_PER_DEG_LAT)
         }
@@ -34,7 +40,7 @@ object Projection {
      * @return 緯度と経度
      */
     fun toLatLng(origin: TrackPoint, p: XY): Pair<Double, Double> {
-        val mPerDegLng = M_PER_DEG_LNG_AT_EQUATOR * cos(Math.toRadians(origin.lat))
+        val mPerDegLng = metersPerDegLng(origin.lat)
         return Pair(origin.lat + p.y / M_PER_DEG_LAT, origin.lng + p.x / mPerDegLng)
     }
 

@@ -1,7 +1,10 @@
 package com.rein4ce.roadcollector.ui.inventory
 
+import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.PartPlace
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.cos
 import kotlin.math.pow
@@ -35,9 +38,18 @@ class PlaceMapTest {
         val place = PartPlace(lat = 35.7496, lng = 139.8049, sizeM = 300.0)
         val target = cameraTarget(place, figureDp = 300f, belowDp = 28f)
         // 図の 1dp は 300 m ÷ (300dp × 98/150) ≈ 1.53 m。帯の半分 14dp ≈ 21.4 m 南
-        val southM = (place.lat - target.latitude) * 110_574.0
+        val southM = (place.lat - target.latitude) * Projection.M_PER_DEG_LAT
         assertEquals(14.0 * 300.0 / (300.0 * 98.0 / 150.0), southM, 1e-3) // 1 mm 以内（図の割合は Float）
         assertEquals(place.lng, target.longitude, 0.0)
+    }
+
+    @Test
+    fun `a very short walk gets no map`() {
+        // 図の幅 300dp：長辺 20 m なら拡大率 21 以内で合う。5 m だと 21 を超えて、地図が図より小さい縮尺のままになる
+        assertTrue(mapCanMatch(PartPlace(35.7496, 139.8049, sizeM = 20.0), figureDp = 300f))
+        assertFalse(mapCanMatch(PartPlace(35.7496, 139.8049, sizeM = 5.0), figureDp = 300f))
+        // ふつうの散歩（最短 150 m）は合う
+        assertTrue(mapCanMatch(PartPlace(35.7496, 139.8049, sizeM = 150.0), figureDp = 300f))
     }
 
     @Test

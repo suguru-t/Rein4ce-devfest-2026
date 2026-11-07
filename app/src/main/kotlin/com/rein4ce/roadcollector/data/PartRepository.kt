@@ -124,29 +124,38 @@ class PartRepository(
         val placesFromFile: Map<String, PartPlace> = runCatching {
             if (placesFile.exists()) AppJson.decodeFromString(placesSerializer, placesFile.readText()) else emptyMap()
         }.onFailure { logError("${placesFile.name} could not be read, ignoring", it) }.getOrDefault(emptyMap())
-        var placesAddedBeforeLoad = false
+        var changed = false
         _places.update { early ->
-            placesAddedBeforeLoad = early.isNotEmpty()
-            (placesFromFile + early).filterKeys { it in ids }
+            // 残すかどうかは、上の ids ではなく、いまの手持ちで決める。ids を作ったあとに採集（add）が割り込むと、
+            // そのパーツの場所まで捨ててしまうため。add はパーツを足してから場所を足すので、ここで見れば必ず手持ちにある
+            val have = _parts.value.mapTo(HashSet()) { it.id }
+            val kept = (placesFromFile + early).filterKeys { it in have }
+            changed = kept != placesFromFile
+            kept
         }
-        if (placesAddedBeforeLoad) persistPlaces()
+        // ファイルと違ったら書き直す。読み込み前に足された場所を残すためと、手持ちに無いパーツの場所
+        // （parts.json が壊れて見本から作り直したときなど）を、ファイルからも消すため（歩いた場所をスマホに残し続けない）
+        if (changed) persistPlaces()
     }
 
     /**
      * 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない。
+     * パーツを先に足してから場所を足す（[load] は、場所を残すかを手持ちにあるかで決めるため、この順番に頼っている）。
      * @param place 歩いた場所（TrackToPart の結果）。parts.json とは別のファイルに保存する
      */
-    fun add(part: Part, place: PartPlace? = null) {
+    fun add(part: Part, place: PartPlace) {
         _parts.update { it + part }
         persist()
-        if (place != null) {
-            _places.update { it + (part.id to place) }
-            persistPlaces()
-        }
+        _places.update { it + (part.id to place) }
+        persistPlaces()
     }
 
-    /** そのパーツを歩いた場所。見本は千住キャンパス付近の場所、場所を残す前に採集したパーツは null */
-    fun placeOf(id: String): PartPlace? = _places.value[id] ?: SampleParts.places[id]
+    /**
+     * そのパーツを歩いた場所。保存した場所（[places]）に無ければ見本の場所（千住キャンパス付近）。
+     * 場所を残す前に採集したパーツは null。
+     * 画面は [places] を見ていて、変わったら描き直すので、そのとき見ている値を [saved] に渡す
+     */
+    fun placeOf(id: String, saved: Map<String, PartPlace> = _places.value): PartPlace? = saved[id] ?: SampleParts.places[id]
 
     fun remove(id: String) {
         _parts.update { list -> list.filterNot { it.id == id } }
