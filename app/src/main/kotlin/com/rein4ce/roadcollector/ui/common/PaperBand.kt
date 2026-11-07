@@ -16,9 +16,10 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
  * 方眼紙の上に字を書くところの下地。紙の色を敷いて、方眼の線と背景の天気を字の下だけ隠す。
- * 下の端と右の端ではだんだん透明にして、まわりの方眼に溶け込ませる（新しい枠は増やさない）。
+ * 上・下・右の端ではだんだん透明にして、まわりの方眼に溶け込ませる（新しい枠は増やさない）。
  *
- * 部品の外側まで広げて描く（左右は [sideBleed]、上は [topBleed]、下は [fade] だけ方眼に向かって薄くなる）。
+ * 部品の外側まで広げて描く（左右は [sideBleed]。上は [topFade]、下は [fade] だけ、外に向かって薄くなる）。
+ * 字より上は方眼紙が見えるように、上の端のすぐ外から濃くする。
  * 右は部品の幅の [solidUntil] の割合まで紙の色で、そこから右の端（＋[sideBleed]）にかけて透明になる。
  * 右上に出る晴れの太陽などを隠しすぎないため。描くだけなので、配置は変わらない
  *
@@ -26,7 +27,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  */
 fun Modifier.paperBand(
     sideBleed: Dp = 16.dp,
-    topBleed: Dp = 120.dp,
+    topFade: Dp = 14.dp,
     fade: Dp = 28.dp,
     solidUntil: Float = 0.62f,
     opacity: Float = 0.9f,
@@ -35,7 +36,7 @@ fun Modifier.paperBand(
     val clear = Fieldbook.Paper.copy(alpha = 0f)
     val left = -sideBleed.toPx()
     val right = size.width + sideBleed.toPx()
-    val top = -topBleed.toPx()
+    val top = -topFade.toPx()
     val bottom = size.height + fade.toPx()
     val area = Rect(left, top, right, bottom)
     // 縦の薄まり（紙の色）と横の薄まり（型抜き）を重ねるため、この範囲だけ別の層に描いてから戻す
@@ -43,7 +44,8 @@ fun Modifier.paperBand(
         canvas.saveLayer(area, Paint())
         drawRect(
             brush = Brush.verticalGradient(
-                0f to paper,
+                0f to clear,
+                (0f - top) / (bottom - top) to paper,
                 (size.height - top) / (bottom - top) to paper,
                 1f to clear,
                 startY = top,
