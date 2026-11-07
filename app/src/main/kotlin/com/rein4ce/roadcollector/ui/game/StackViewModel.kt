@@ -55,6 +55,15 @@ class StackViewModel : ViewModel() {
     var uploading: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * 送信に成功したタワー。同じタワーを二度送らないために覚えておく
+     * （送るたびにサーバは新しい id で保存するので、2 回押すと「みんな」に同じタワーが 2 基並ぶ）
+     */
+    private var uploadedTower: Tower? by mutableStateOf(null)
+
+    /** いま完成しているタワーが送信済みか。送信済みならボタンを押せなくする */
+    val uploaded: Boolean get() = uploadedTower != null && uploadedTower == GameSession.lastTower
+
     private var settleTimer = 0.0
 
     val platformWidth: Double get() = world.platformWidth
@@ -134,12 +143,15 @@ class StackViewModel : ViewModel() {
 
     fun upload() {
         val tower = GameSession.lastTower ?: return
-        if (uploading) return
+        if (uploading || tower == uploadedTower) return // 送信中、または同じタワーを送信済みなら何もしない
         viewModelScope.launch {
             uploading = true
             uploadMessage = runCatching { ApiClient.postTower(tower) }
                 .fold(
-                    onSuccess = { "送信しました：${it.url}" },
+                    onSuccess = {
+                        uploadedTower = tower
+                        "送信しました：${it.url}"
+                    },
                     onFailure = { "送信できませんでした（${ApiClient.baseUrl}）：${it.message}" },
                 )
             uploading = false
