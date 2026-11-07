@@ -100,7 +100,7 @@ app/    com.rein4ce.roadcollector
 server/ com.rein4ce.roadcollector.server                                                  … C
   Application.kt  Ktor 起動（PORT 環境変数）
   Routes.kt       GET /, /health, /towers, POST /towers, GET /towers/{id}, /towers/{id}/image.svg
-  TowerStore.kt   いまはメモリ。Firestore に置き換える
+  TowerStore.kt   保存先のインターフェースとメモリ版。FirestoreTowerStore.kt が Firestore 版
   SharePage.kt    OGP 付き共有ページ
 ```
 
@@ -108,7 +108,7 @@ server/ com.rein4ce.roadcollector.server                                        
 
 - **A（採集）**：Android 実機で歩いて `ConversionParams` の数値（最低 150 m、精度 30 m、最小移動 5 m、最大速度 5 m/s、ε 10 m（GPS が粗いときは精度に合わせて大きくする）、頂点 24 個）を確認。特に Android の精度値で ε がどこまで上がるか（結果ダイアログに出る）。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みと、iPhone の GPX 6 本での調整は済み。Issue #1）
 - **B（変換・手持ち）**：`TrackToPart.classify` の精度（実データで棒/L/U/輪/ジグザグがどう出るか）。手持ち画面の見た目、削除、並び替え
-- **C（サーバ）**：Day1 に Cloud Run へ Hello World をデプロイ（server/README.md）。`TowerStore` を Firestore に。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
+- **C（サーバ）**：`TowerStore` の Firestore 版を Cloud Run にデプロイして確認。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
 - **D（ゲーム）**：操作感（ドラッグ感度、回転の刻み）、台の幅、摩擦などの調整。静止判定の待ち時間。対戦モード（交互置き or 非同期スコアバトル）
 
 ## データ形式（ここだけは全員で守る）
@@ -134,7 +134,7 @@ data class Part(
 
 - `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 37 本が通る
 - `app`：手持ちの保存・並び順・名前の文字数・地図の縮尺・合計距離の出し方のユニットテスト 37 本が通る。エミュレータ（Android 17）で「デモ散歩 → コレクション → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
-- `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する
+- `server`：API のテスト 11 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する。保存先の Firestore 版は、手元から本物の Firestore につないで「保存 → 再起動 → 読み出し」まで確認済み。**Cloud Run にはまだデプロイしていない**（本番はまだメモリ版）
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）
 - `gradle/libs.versions.toml` の版はすべて公開済みのもの。Studio が新しい版を勧めてきたら上げて構わない
 
