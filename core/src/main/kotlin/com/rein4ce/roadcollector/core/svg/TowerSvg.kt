@@ -56,21 +56,14 @@ object TowerSvg {
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
             val color = colorOf(part.kind)
-            val shapes = PartGeometry.shapes(part, 1.0)
             val cx = sx(pl.x.toDouble())
             val cy = sy(pl.y.toDouble())
             val deg = -Math.toDegrees(pl.angleRad.toDouble()) // SVG は y 下向きなので回転も反転
-            sb.append("""<g transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})">""")
-            for (s in shapes.segs) {
-                val segDeg = -Math.toDegrees(s.angle)
-                sb.append(
-                    """<rect x="${f(-s.length * scale / 2)}" y="${f(-s.thickness * scale / 2)}" width="${f(s.length * scale)}" height="${f(s.thickness * scale)}" fill="$color" transform="translate(${f(s.cx * scale)} ${f(-s.cy * scale)}) rotate(${f(segDeg)})"/>""",
-                )
+            // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つの path にまとめて塗る（継ぎ目に線が出ない）
+            val d = PartGeometry.shapes(part, 1.0).joinToString(" ") { poly ->
+                poly.points.joinToString(" L ", prefix = "M ", postfix = " Z") { "${f(it.x * scale)} ${f(-it.y * scale)}" }
             }
-            for (j in shapes.joints) {
-                sb.append("""<circle cx="${f(j.cx * scale)}" cy="${f(-j.cy * scale)}" r="${f(j.radius * scale)}" fill="$color"/>""")
-            }
-            sb.append("</g>")
+            sb.append("""<path d="$d" fill="$color" transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})"/>""")
         }
         // 高さ
         sb.append(
