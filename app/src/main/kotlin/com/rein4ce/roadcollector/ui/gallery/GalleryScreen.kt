@@ -269,10 +269,12 @@ private fun Overview(
                     selected = openedId,
                     progress = { intro.value },
                     onTap = onOpen,
+                    // weight は fill=true にする（Canvas の中身は Spacer で、高さが決まった制約のときだけその高さを取る。
+                    // fill=false だと 0 になる）。上限は SECTION_HEIGHT、残りの 3/4 まで（1/4 は下の Spacer）
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(3f, fill = false)
-                        .heightIn(min = 140.dp, max = SECTION_HEIGHT)
+                        .weight(3f)
+                        .heightIn(max = SECTION_HEIGHT)
                         .paperBand(bleedX = 8.dp, bleedY = 6.dp),
                 )
                 Spacer(Modifier.height(6.dp))
