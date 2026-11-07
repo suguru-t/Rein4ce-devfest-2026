@@ -101,7 +101,7 @@ app/    com.rein4ce.roadcollector
   ui/gallery/    みんなのタワー                                                             … C
   net/           ApiClient（Ktor client）                                                  … C
   data/          PartRepository（JSON ファイル保存。Room に替えるならここ）, GameSession, WeatherService（天気を取ってくる。B）, AppSettings（設定。B）
-  ui/common/     PartDrawing（パーツの描画。物理と同じ PartGeometry を使う）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）
+  ui/common/     PartDrawing（パーツの描画。物理と同じ PartGeometry を使う）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, PaperBand（方眼の上の字の下地）
   ui/settings/   設定（SettingsDialog）、ニックネーム、アプリについて                                  … B
 
 server/ com.rein4ce.roadcollector.server                                                  … C
