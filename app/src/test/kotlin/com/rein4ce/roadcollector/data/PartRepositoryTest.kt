@@ -3,8 +3,11 @@ package com.rein4ce.roadcollector.data
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.ui.inventory.inventoryOrder
+import com.rein4ce.roadcollector.ui.inventory.moved
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -39,6 +42,9 @@ class PartRepositoryTest {
         distanceM = 341,
         walkedAt = 1_762_400_000_000L,
     )
+
+    /** [walk] を歩いた場所の例 */
+    private val place = PartPlace(lat = 35.7501, lng = 139.8055, sizeM = 341.0)
 
     private fun file(): File = File(tmp.root, "parts.json")
 
@@ -94,11 +100,12 @@ class PartRepositoryTest {
         write(f, saved)
 
         val repo = repository(f)
-        repo.add(walk) // 起動直後、読み込みがまだ走っていないうちに採集した（#10 で直した競合）
+        repo.add(walk, place) // 起動直後、読み込みがまだ走っていないうちに採集した（#10 で直した競合）
         advanceUntilIdle()
 
         assertEquals(saved + walk, repo.parts.value)
         assertEquals(saved + walk, read(f))
+        assertEquals(place, repository(f).also { advanceUntilIdle() }.placeOf(walk.id)) // 場所も残る
     }
 
     @Test
@@ -106,7 +113,7 @@ class PartRepositoryTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
         repo.remove(SampleParts.all[1].id)
         repo.restoreMissingSamples()
         advanceUntilIdle()
@@ -121,7 +128,7 @@ class PartRepositoryTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
 
         assertTrue(repo.rename(walk.id, "  駅前の寄り道 "))
         advanceUntilIdle()
@@ -138,7 +145,7 @@ class PartRepositoryTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
         repo.rename(walk.id, "駅前の寄り道")
 
         assertTrue(repo.rename(walk.id, "   "))
@@ -154,7 +161,7 @@ class PartRepositoryTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
         repo.remove(walk.id)
         advanceUntilIdle()
         val before = read(f)
@@ -171,7 +178,7 @@ class PartRepositoryTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
         val arranged = listOf(SampleParts.all[2].id, walk.id) + SampleParts.all.map { it.id }.filter { it != SampleParts.all[2].id }
 
         repo.setOrder(arranged)
@@ -196,11 +203,72 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `the walked place is saved apart from the parts and survives a restart`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        advanceUntilIdle()
+        assertEquals(place, repo.placeOf(walk.id))
+        // 場所は parts.json（パーツの形式。タワーと一緒にサーバへ送られる）には入らない
+        val partsJson = f.readText()
+        assertFalse(partsJson.contains("35.7501") || partsJson.contains("\"lat\""))
+        assertTrue(File(tmp.root, "parts_places.json").exists())
+
+        val again = repository(f)
+        advanceUntilIdle()
+        assertEquals(place, again.placeOf(walk.id))
+    }
+
+    @Test
+    fun `deleting a part removes its place too`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.remove(walk.id)
+        advanceUntilIdle()
+
+        assertNull(repo.placeOf(walk.id))
+        val again = repository(f)
+        advanceUntilIdle()
+        assertNull(again.placeOf(walk.id))
+    }
+
+    @Test
+    fun `samples have places and older parts without a place have none`() = runTest {
+        val f = file()
+        write(f, SampleParts.all + walk) // 場所を残す前（#30 より前）に採集したパーツ
+        val repo = repository(f)
+        advanceUntilIdle()
+
+        assertEquals(SampleParts.places[SampleParts.all.first().id], repo.placeOf(SampleParts.all.first().id))
+        assertNull(repo.placeOf(walk.id))
+    }
+
+    @Test
+    fun `places of parts that are gone are erased from the file too`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        advanceUntilIdle()
+
+        f.writeText("{ broken") // parts.json が壊れて、見本から作り直しになった
+        val again = repository(f)
+        advanceUntilIdle()
+
+        assertNull(again.placeOf(walk.id))
+        // もう手持ちに無いパーツの、歩いた場所（緯度・経度）をスマホに残し続けない
+        assertFalse(File(tmp.root, "parts_places.json").readText().contains("35.7501"))
+    }
+
+    @Test
     fun `deleting a part removes it from the arranged order`() = runTest {
         val f = file()
         val repo = repository(f)
         advanceUntilIdle()
-        repo.add(walk)
+        repo.add(walk, place)
         repo.setOrder(listOf(walk.id) + SampleParts.all.map { it.id })
         repo.remove(walk.id)
         advanceUntilIdle()
@@ -209,6 +277,28 @@ class PartRepositoryTest {
         val again = repository(f)
         advanceUntilIdle()
         assertEquals(SampleParts.all.map { it.id }, again.order.value)
+    }
+
+    /**
+     * ドラッグ中にパーツが足されたとき（デモ散歩がちょうど終わった等）。
+     * 画面は指を離したときに「画面の並び（足されたパーツを知らない）で保存 → 最新の内容で並べ直す」ので、
+     * 動かさずに離しても、動かして離しても、足されたパーツが先頭に出ることを確かめる。
+     */
+    @Test
+    fun `a part added during a drag shows at the top once the drag ends`() = runTest {
+        val repo = repository(file())
+        advanceUntilIdle()
+        val onScreen = inventoryOrder(repo.parts.value, repo.order.value).map { it.id }
+
+        repo.add(walk, place)
+        advanceUntilIdle()
+
+        // 動かさずに離した（保存しない）
+        assertEquals(listOf(walk.id) + onScreen, inventoryOrder(repo.parts.value, repo.order.value).map { it.id })
+
+        // 1 枚目を 3 枚目へ動かして離した（足される前の並びで保存する）
+        repo.setOrder(onScreen.moved(0, 2))
+        assertEquals(listOf(walk.id) + onScreen.moved(0, 2), inventoryOrder(repo.parts.value, repo.order.value).map { it.id })
     }
 
     @Test
@@ -231,7 +321,7 @@ class PartRepositoryTest {
         write(f, SampleParts.all)
 
         val repo = repository(f)
-        repo.add(walk)
+        repo.add(walk, place)
         repo.rename(walk.id, "初夏を刺す直進") // 起動直後に採集して、すぐ名前が届いた
         advanceUntilIdle()
 

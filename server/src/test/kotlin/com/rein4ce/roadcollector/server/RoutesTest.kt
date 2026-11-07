@@ -28,8 +28,7 @@ import org.junit.Test
  * API の振る舞いのテスト。アプリと共有ページが頼っている約束事を確かめる。
  * テストごとに module() を起動し直すので、保存データはテストをまたがない。
  *
- * TowerStore を Firestore に替えるときは、テストが本物の Firestore につながないように、
- * module() に保存先を渡せるようにして、ここではメモリ版を使う。
+ * 本物の Firestore にはつながないよう、module() にはメモリ版の保存先を渡す。
  */
 class RoutesTest {
 
@@ -52,7 +51,7 @@ class RoutesTest {
 
     @Test
     fun `動作確認とヘルスチェックが応答する`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val root = client.get("/")
         assertEquals(HttpStatusCode.OK, root.status)
@@ -65,7 +64,7 @@ class RoutesTest {
 
     @Test
     fun `保存したタワーが一覧・JSON・共有ページ・画像で取れる`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val res = client.postTower(sampleTower())
         assertEquals(HttpStatusCode.Created, res.status)
@@ -92,18 +91,25 @@ class RoutesTest {
         assertTrue(page.contentType()?.match(ContentType.Text.Html) == true)
         val html = page.bodyAsText()
         assertContains(html, "og:title")
-        assertContains(html, "/towers/${created.id}/image.svg")
+        // og:image は PNG（LINE / X は SVG を読まない）。ページの中の絵はインライン SVG
+        assertContains(html, """<meta property="og:image" content="http://localhost/towers/${created.id}/image.png">""")
+        assertContains(html, "<svg")
 
         // 画像
         val svg = client.get("/towers/${created.id}/image.svg")
         assertEquals(HttpStatusCode.OK, svg.status)
         assertTrue(svg.contentType()?.match(ContentType.Image.SVG) == true)
         assertContains(svg.bodyAsText(), "<svg")
+
+        val png = client.get("/towers/${created.id}/image.png")
+        assertEquals(HttpStatusCode.OK, png.status)
+        assertTrue(png.contentType()?.match(ContentType.Image.PNG) == true)
+        assertContains(png.headers[HttpHeaders.CacheControl].orEmpty(), "max-age")
     }
 
     @Test
     fun `Cloud Run 経由（X-Forwarded-Proto が https）なら共有 URL も https になる`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val res = client.postTower(sampleTower(), forwardedProto = "https")
         val created = AppJson.decodeFromString(TowerCreated.serializer(), res.bodyAsText())
@@ -112,7 +118,7 @@ class RoutesTest {
 
     @Test
     fun `パーツや配置が空のタワーは 400 で断る`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val empty = sampleTower().copy(parts = emptyList(), placements = emptyList())
         assertEquals(HttpStatusCode.BadRequest, client.postTower(empty).status)
@@ -121,9 +127,10 @@ class RoutesTest {
 
     @Test
     fun `存在しない ID は 404`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.svg").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.png").status)
     }
 }

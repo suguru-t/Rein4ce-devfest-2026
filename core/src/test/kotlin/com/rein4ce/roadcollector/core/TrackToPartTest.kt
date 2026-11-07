@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.core
 
 import com.rein4ce.roadcollector.core.geo.ConversionParams
+import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.geo.TrackToPart
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Kind
@@ -12,7 +13,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.random.Random
@@ -160,6 +160,43 @@ class TrackToPartTest {
         assertEquals(10.0, r.stats.epsilonM, 1e-9)
     }
 
+    @Test
+    fun `the place is the center of the shape and its long side`() {
+        // 東へ 300 m、北へ 100 m の L 字。形の中心は（150 m 東, 50 m 北）、長辺は 300 m
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 300.0 to 0.0, 300.0 to 100.0), noiseM = 0.0))
+        require(r is TrackToPart.Result.Success)
+        val place = r.place
+        val mPerDegLat = Projection.M_PER_DEG_LAT
+        val mPerDegLng = Projection.metersPerDegLng(35.7496)
+        assertEquals(35.7496 + 50.0 / mPerDegLat, place.lat, 1.0 / mPerDegLat) // 1 m 以内
+        assertEquals(139.8049 + 150.0 / mPerDegLng, place.lng, 1.0 / mPerDegLng)
+        assertEquals(300.0, place.sizeM, 1.0)
+        assertEquals(r.stats.longSideM, place.sizeM, 1e-9)
+    }
+
+    @Test
+    fun `projection back to lat lng returns the original points`() {
+        val points = walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0))
+        val xy = Projection.toMeters(points)
+        for (i in points.indices step 17) {
+            val (lat, lng) = Projection.toLatLng(points.first(), xy[i])
+            assertEquals(points[i].lat, lat, 1e-9)
+            assertEquals(points[i].lng, lng, 1e-9)
+        }
+    }
+
+    @Test
+    fun `every sample has a place near the campus and the place stays out of the part`() {
+        assertEquals(SampleParts.all.map { it.id }.toSet(), SampleParts.places.keys)
+        for ((_, place) in SampleParts.places) {
+            assertTrue(abs(place.lat - 35.7496) < 0.01 && abs(place.lng - 139.8049) < 0.01)
+            assertTrue(place.sizeM > 50)
+        }
+        // 場所はパーツの JSON（サーバに送る形）には出ない
+        val json = AppJson.encodeToString(Part.serializer(), SampleParts.all.first())
+        assertTrue(json, !json.contains("lat") && !json.contains("lng"))
+    }
+
     /**
      * 経路点（メートル）を 4 m 刻みで補間し、±noiseM の揺れを足して GPS の点列にする（SampleTracks と同じ作り方）。
      * accuracyM は全点に同じ値を入れる（0 は「精度が分からない」）。
@@ -173,8 +210,8 @@ class TrackToPartTest {
         val rnd = Random(seed)
         val lat0 = 35.7496
         val lng0 = 139.8049
-        val mPerDegLat = 110_574.0
-        val mPerDegLng = 111_320.0 * cos(Math.toRadians(lat0))
+        val mPerDegLat = Projection.M_PER_DEG_LAT
+        val mPerDegLng = Projection.metersPerDegLng(lat0)
         val out = ArrayList<TrackPoint>()
         var t = 1_760_000_000_000L
         for (i in 1 until waypointsM.size) {
