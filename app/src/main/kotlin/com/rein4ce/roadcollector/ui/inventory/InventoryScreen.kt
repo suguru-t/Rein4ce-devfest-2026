@@ -67,10 +67,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.BuildConfig
@@ -82,7 +87,6 @@ import com.rein4ce.roadcollector.data.GameSession
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
-import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -374,7 +378,8 @@ private fun CollectionMeter(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 $totalM メートル。見本 $samples" else "コレクション。読み込み中"
+                val total = totalDistance(totalM)
+                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "コレクション。読み込み中"
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -390,9 +395,12 @@ private fun CollectionMeter(
                 Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
             }
         }
+        // 1 km 未満は m、1 km からは km で出す（totalDistance）。
+        // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
+        val shown = totalDistance(shownM.toInt())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (isLoaded) "%,d".format(shownM.roundToInt()) else "—",
+                if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
@@ -400,7 +408,7 @@ private fun CollectionMeter(
                 color = Fieldbook.Ink,
             )
             Text(
-                "m",
+                if (isLoaded) shown.unit.label else DistanceUnit.M.label,
                 fontFamily = Fieldbook.Data,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -415,6 +423,51 @@ private fun CollectionMeter(
         )
     }
 }
+
+/** 見出しのメーターに出す合計距離。数字と単位に分けて持つ（単位は小さく出すため） */
+internal data class TotalDistance(val number: String, val unit: DistanceUnit)
+
+/**
+ * 合計距離の単位。画面に出す文字と、読み上げ（TalkBack）の言葉を一緒に持つ。
+ * 画面の文字を変えても（たとえば「㎞」にしても）、読み上げが別の単位にならないように
+ */
+internal enum class DistanceUnit(val label: String, val spoken: String) {
+    M("m", "メートル"),
+    KM("km", "キロメートル"),
+}
+
+/**
+ * 合計距離 [m] を、見出しのメーターに出す形にする。
+ * - 1 km 未満は m のまま（834 m）
+ * - 1 km からは km にして小数 1 桁（2,115 m → 2.1 km）。0.1 km に満たない分は切り捨てる。
+ *   車の距離計と同じく、歩いた分より多くは見せないため（999 m の次が 1.0 km、1,999 m は 1.9 km）
+ * - 桁区切りの「,」は使わない。言語の設定によらず、小数点は「.」
+ */
+internal fun totalDistance(m: Int): TotalDistance =
+    if (m < 1_000) {
+        TotalDistance("$m", DistanceUnit.M)
+    } else {
+        val tenths = m / 100
+        TotalDistance("${tenths / 10}.${tenths % 10}", DistanceUnit.KM)
+    }
+
+/**
+ * 小数点の前後を詰める。メーターの数字は等幅の字なので、そのままだと「.」も数字 1 文字分の幅を取って、前後が空いて見えるため。
+ * 字体は変えずに字間だけ詰める（「.」だけ別の字体にすると、行の高さが変わって、横の単位の位置が km のときだけずれることがある）
+ */
+private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString {
+    val i = number.indexOf('.')
+    if (i < 0) {
+        append(number)
+    } else {
+        append(number.substring(0, i))
+        withStyle(SpanStyle(letterSpacing = POINT_LETTER_SPACING)) { append('.') }
+        append(number.substring(i + 1))
+    }
+}
+
+/** 小数点の字間。等幅の字の 1 文字分（およそ 0.6 文字の高さ）のうち、半分ほどを詰める（左右に半分ずつ詰まる） */
+private val POINT_LETTER_SPACING = (-0.3).em
 
 /** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
