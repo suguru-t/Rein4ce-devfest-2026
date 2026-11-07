@@ -12,9 +12,12 @@ import kotlinx.coroutines.flow.update
  * 記録中の軌跡を保持する（サービスと画面の橋渡し）。
  * サービス（実 GPS）もデモ再生もここに点を流し込む。
  *
- * 点が来るたびに最近 30 秒の速さを見て、歩き・ジョギングの上限（[ConversionParams.walkMaxSpeedMps]）を超えたら
- * 記録を自動で止める（[tooFast]）。画面を閉じて記録しているときにも効くように、画面ではなくここで判定する。
- * 速かった最後の 30 秒を切り落とした点列を [TooFast.keptPoints] に残すので、そこまでの歩きはパーツにできる。
+ * 点が来るたびに最近 30 秒の速さを見て、歩き・ジョギングの上限（[ConversionParams.walkMaxSpeedMps]）を超えた状態が
+ * [STOP_AFTER_MS] 続いたら記録を自動で止める（[tooFast]）。画面を閉じて記録しているときにも効くように、画面ではなくここで判定する。
+ * 超え始めた時刻の 30 秒前より後を切り落とした点列を [TooFast.keptPoints] に残すので、そこまでの歩きはパーツにできる。
+ *
+ * 「続いたら」にしているのは、GPS が 1 点だけ大きく飛んだときに止めないため（飛びのフィルタは通さないので、1 点の飛びでも
+ * 最近 30 秒の速さは一瞬上限を超える。次の点で元に戻るので、続かない）。自転車や車は超え続けるので、10 秒遅れて止まる
  */
 object TrackRecorder {
 
@@ -29,24 +32,33 @@ object TrackRecorder {
 
     private val _tooFast = MutableStateFlow<TooFast?>(null)
 
+    /** 上限を超え始めた時刻。超えている間だけ持つ（下回ったら null に戻す） */
+    private var overSince: Long? = null
+
     /** 速すぎて自動で止めたとき、その理由。画面（CollectViewModel）が受け取って [consumeTooFast] で消す */
     val tooFast: StateFlow<TooFast?> = _tooFast
 
     fun start() {
         _points.value = emptyList()
         _tooFast.value = null
+        overSince = null
         _isRecording.value = true
     }
 
     fun add(point: TrackPoint) {
         if (!_isRecording.value) return
         val pts = _points.updateAndGet { it + point }
-        val speed = recentSpeedMps(pts) ?: return
-        if (speed > ConversionParams.DEFAULT.walkMaxSpeedMps) {
-            val cutoff = point.timeMs - ConversionParams.DEFAULT.walkSpeedWindowMs
-            _isRecording.value = false
-            _tooFast.value = TooFast(speed, pts.filter { it.timeMs < cutoff })
+        val speed = recentSpeedMps(pts)
+        if (speed == null || speed <= ConversionParams.DEFAULT.walkMaxSpeedMps) {
+            overSince = null
+            return
         }
+        val since = overSince ?: point.timeMs.also { overSince = it }
+        if (point.timeMs - since < STOP_AFTER_MS) return
+        // 超え始めた時刻の 30 秒前より後は、速かった分が混ざるので切り落とす
+        val cutoff = since - ConversionParams.DEFAULT.walkSpeedWindowMs
+        _isRecording.value = false
+        _tooFast.value = TooFast(speed, pts.filter { it.timeMs < cutoff })
     }
 
     /** 記録を止めて、点列を返す。 */
@@ -75,4 +87,7 @@ object TrackRecorder {
         update(f)
         return value
     }
+
+    /** 上限を超えた状態がこれだけ続いたら止める [ms]。1 点の GPS の飛びでは止めず、自転車や車は止める */
+    const val STOP_AFTER_MS = 10_000L
 }

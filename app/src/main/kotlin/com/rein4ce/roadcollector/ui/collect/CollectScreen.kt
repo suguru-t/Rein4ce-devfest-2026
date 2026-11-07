@@ -95,9 +95,10 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
-    // 最近 30 秒の速さ。上限に近づいたら（8 割から）状態行で知らせる。上限を超えると TrackRecorder が記録を自動で止める
+    // 最近 30 秒の速さ。上限に近づいたら（9 割から。8 割だとジョギング中ずっと出てしまう）状態行で知らせる。
+    // 上限を超えた状態が続くと TrackRecorder が記録を自動で止める
     val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
-    val nearLimit = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps * 0.8
+    val nearLimit = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps * 0.9
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -153,7 +154,8 @@ fun CollectScreen(
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
-            nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmh(vm.walkMaxSpeedMps)} を超えると記録を止めます", RecordingRed)
+            // 1 行に収まる長さにする（2 行になると図が下に動く）
+            nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmhInt(vm.walkMaxSpeedMps)} km で止まります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> null
         }

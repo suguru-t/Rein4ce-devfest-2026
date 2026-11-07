@@ -161,22 +161,24 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         LocationRecordingService.stop(getApplication())
         demoJob?.cancel()
         playingLabel = null
-        val note = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}。" +
-            "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます）"
+        val stopped = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}）"
+        val limitNote = "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます"
         when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
             is TrackToPart.Result.Success -> {
                 repository.add(r.part, r.place)
-                outcome = Outcome.Created(r.part, r.stats, note = "$note。そこまでをパーツにしました")
+                outcome = Outcome.Created(r.part, r.stats, note = "$stopped。止める前までをパーツにしました")
             }
             is TrackToPart.Result.TooShort ->
-                outcome = Outcome.Rejected("$note。そこまでの %.0f m は短すぎてパーツになりません（最低 %.0f m）".format(r.distanceM, r.minDistanceM))
+                outcome = Outcome.Rejected(
+                    "$stopped。止める前までの %.0f m は短すぎてパーツになりません（最低 %.0f m）。$limitNote".format(r.distanceM, r.minDistanceM),
+                )
             is TrackToPart.Result.TooFewPoints ->
                 outcome = Outcome.Rejected(
-                    if (r.pointCount < 2) "$note。速くなる前の記録が無いので、パーツはできません"
-                    else "$note。そこまでの位置情報が足りません（${r.pointCount} 点）",
+                    if (r.pointCount < 2) "$stopped。速くなる前の記録が無いので、パーツはできません。$limitNote"
+                    else "$stopped。止める前までの位置情報が足りません（${r.pointCount} 点）。$limitNote",
                 )
             is TrackToPart.Result.TooFast ->
-                outcome = Outcome.Rejected("$note。そこまでにも速い区間があり、パーツになりません")
+                outcome = Outcome.Rejected("$stopped。止める前にも速い区間があり、パーツになりません。$limitNote")
         }
     }
 
@@ -193,5 +195,8 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
          */
         fun kmh(mps: Double, rounding: RoundingMode = RoundingMode.HALF_UP): String =
             "時速 " + BigDecimal(mps * 3.6).setScale(1, rounding).toPlainString() + " km"
+
+        /** 時速の整数だけ（「14」）。状態行のように短く書きたいところ用 */
+        fun kmhInt(mps: Double): String = BigDecimal(mps * 3.6).setScale(0, RoundingMode.HALF_UP).toPlainString()
     }
 }

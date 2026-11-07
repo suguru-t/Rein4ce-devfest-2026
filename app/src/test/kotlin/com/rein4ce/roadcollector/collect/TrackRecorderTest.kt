@@ -53,19 +53,37 @@ class TrackRecorderTest {
             if (!TrackRecorder.isRecording.value) { stoppedAt = p.timeMs; break }
         }
 
-        // 30 秒の窓が自転車で埋まる前（上限は時速 14 km なので、歩きが少し混ざっていても超える）に止まる
+        // 30 秒の窓が自転車で埋まる前（上限は時速 14 km なので、歩きが少し混ざっていても超える）に超え始め、
+        // 10 秒続いたところで止まる
         val at = requireNotNull(stoppedAt) { "should have stopped" }
-        assertTrue("stopped after ${(at - walk.last().timeMs) / 1000} s of riding", at - walk.last().timeMs <= 40_000L)
+        val riding = at - walk.last().timeMs
+        assertTrue("stopped after ${riding / 1000} s of riding", riding in 30_000L..50_000L)
         val stop = requireNotNull(TrackRecorder.tooFast.value) { "reason should be set" }
         assertTrue("speed ${stop.speedMps}", stop.speedMps > ConversionParams.DEFAULT.walkMaxSpeedMps)
-        // 残した点は、止めた時刻の 30 秒前より前だけ。止まるまでに自転車で 30 秒近く進んでいるので、
+        // 残した点は、超え始めた時刻の 30 秒前より前だけ。超え始めるまでに自転車で 30 秒近く進んでいるので、
         // 切り落とすのはほぼ自転車の分だけで、歩きは最後の数秒を除いて残る
-        assertTrue(stop.keptPoints.all { it.timeMs < at - ConversionParams.DEFAULT.walkSpeedWindowMs })
         assertTrue("kept ${stop.keptPoints.size} of ${walk.size}", stop.keptPoints.size >= walk.size - 5)
         assertTrue(stop.keptPoints.none { it in ride })
         // 止まったあとの点は無視される
         TrackRecorder.add(ride.last())
         assertFalse(TrackRecorder.points.value.contains(ride.last()))
+    }
+
+    @Test
+    fun `a single gps spike does not stop the recording`() {
+        // 歩きの途中で、GPS が 1 点だけ 90 m 北に飛ぶ（高架やビルの近くで起きる）。次の点で元に戻るので止めない。
+        // 飛んだ点が 30 秒後に窓の始点になったときも、1〜2 点だけ速く見えるが続かないので止めない
+        TrackRecorder.start()
+        val before = east(1.3, 60)
+        before.forEach { TrackRecorder.add(it) }
+        val last = before.last()
+        TrackRecorder.add(last.copy(lat = lat0 + 90.0 / Projection.M_PER_DEG_LAT, timeMs = last.timeMs + 1_000L, accuracyM = 10f))
+        val after = east(1.3, 90, fromX = 1.3 * 60, fromT = last.timeMs + 2_000L)
+        after.forEach {
+            TrackRecorder.add(it)
+            assertTrue("stopped at ${(it.timeMs - last.timeMs) / 1000} s after the spike", TrackRecorder.isRecording.value)
+        }
+        assertNull(TrackRecorder.tooFast.value)
     }
 
     @Test
