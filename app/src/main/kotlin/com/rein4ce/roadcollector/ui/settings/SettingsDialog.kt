@@ -131,7 +131,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.AI -> SwitchPage(
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
-                explanation = "採集したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
+                explanation = "記録したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
                     "オフにすると何も送りません。",
             )
             Page.HOWTO -> HowToContent()
