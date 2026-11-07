@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,8 +46,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
@@ -60,6 +65,7 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
+import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.TrackPoint
@@ -82,6 +88,9 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
+    // 最近 30 秒の速さ。歩きより速いと、記録中の状態行で知らせる（止めてもパーツにならないので、早めに気づけるように）
+    val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
+    val tooFast = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -102,39 +111,61 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に画面名、右に測量の数値（手持ちの「採集 n ・ 見本 n」と同じ位置・字）
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text("採集", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-            Spacer(Modifier.weight(1f))
+        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ。
+        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）。
+        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。それでも右の長さと近づく幅の端末では、
+        // 題字のほうを縮めて 1 行に収める（長さの字は折り返さない）
+        val density = LocalDensity.current
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            BasicText(
+                "michitsumi",
+                style = TextStyle(fontFamily = TitleSans, letterSpacing = (-0.5).sp, color = Fieldbook.Ink),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = with(density) { 20.dp.toSp() },
+                    maxFontSize = with(density) { 32.dp.toSp() },
+                    stepSize = with(density) { 1.dp.toSp() },
+                ),
+                modifier = Modifier.alignByBaseline().padding(start = 8.dp, end = 12.dp).weight(1f, fill = false),
+            )
             Text(
-                "L=${distance.toInt()} m ・ ${points.size} 点",
+                "L=${distance.toInt()} m",
                 fontFamily = Fieldbook.Data,
-                fontSize = 12.sp,
-                color = Fieldbook.Muted,
-                modifier = Modifier.padding(bottom = 4.dp),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Fieldbook.Ink,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.alignByBaseline(),
             )
         }
 
-        // 状態行：記録中だけ赤い点。文は短く、注記の字で
+        // 状態行：記録中・再生中のときだけ丸と文を出す（停止中は空の文）。
+        // 高さは文字の大きさに合わせて決まり、状態の有無では変えない（記録を始めた瞬間に地図が下にずれないように。
+        // 文字を大きくしている人でも字が切れないように、固定の高さにはしない）
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
+            tooFast -> StatusLine("速すぎます（${CollectViewModel.kmh(recentSpeed!!)}）・歩きだけパーツになります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
-            else -> StatusLine("停止中・「記録開始」で歩き始める", Fieldbook.Mark)
+            else -> null
         }
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(status.color),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(status.text, fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
+            if (status != null) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(status.color),
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(status?.text ?: "", fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
         }
+        Spacer(Modifier.height(4.dp))
 
         // 図：地図 or 軌跡。四隅の見当を地図の外側に描く（地図は Android の View なので、上には描けない）
         val hasMap = BuildConfig.MAPS_API_KEY.isNotBlank()
@@ -217,6 +248,14 @@ fun CollectScreen(
                         fontSize = 11.sp,
                         color = Fieldbook.Muted,
                     )
+                    o.stats.fastestMps?.let { v ->
+                        Text(
+                            "最高 ${CollectViewModel.kmh(v)}（30 秒の窓）",
+                            fontFamily = Fieldbook.Data,
+                            fontSize = 11.sp,
+                            color = Fieldbook.Muted,
+                        )
+                    }
                     Text(
                         "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点",
                         fontFamily = Fieldbook.Data,
@@ -251,6 +290,12 @@ fun CollectScreen(
 
 /** 記録中の赤。野帳の赤鉛筆のイメージで、少し落ち着いた色 */
 private val RecordingRed = Color(0xFFC0392B)
+
+/**
+ * 題字「michitsumi」の字。Google のロゴのような幾何学的なサンセリフにするため、Poppins SemiBold（OFL）を
+ * この綴りの 7 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
+ */
+private val TitleSans = FontFamily(Font(R.font.poppins_michitsumi, FontWeight.SemiBold))
 
 private data class StatusLine(val text: String, val color: Color)
 
