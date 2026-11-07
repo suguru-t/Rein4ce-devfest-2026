@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.core
 
 import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.physics.PartBodyFactory
@@ -149,12 +150,14 @@ class StackWorldTest {
     @Test
     fun `longer walks make bigger parts`() {
         assertEquals(PartSize.MIN, PartSize.of(0), 1e-9)
-        assertEquals(PartSize.MIN, PartSize.of(100), 1e-9)
+        // パーツになる最短の道（150 m）で、いちばん小さい 0.7 倍になる（前は 100 m にしていて、0.8 倍より小さくならなかった）
+        assertEquals(ConversionParams.DEFAULT.minDistanceM, PartSize.SHORT_M, 0.0)
+        assertEquals(PartSize.MIN, PartSize.of(150), 1e-9)
         assertEquals(PartSize.MAX, PartSize.of(2000), 1e-9)
         assertEquals(PartSize.MAX, PartSize.of(50_000), 1e-9)
-        // 400 m ほどでちょうど 1 倍。長いほど大きい
-        assertEquals(1.0, PartSize.of(400), 0.05)
-        val sizes = listOf(100, 200, 400, 800, 1600, 2000).map { PartSize.of(it) }
+        // 450 m ほどでちょうど 1 倍。長いほど大きい
+        assertEquals(1.0, PartSize.of(450), 0.02)
+        val sizes = listOf(150, 200, 450, 800, 1600, 2000).map { PartSize.of(it) }
         assertTrue(sizes.zipWithNext().all { (a, b) -> a < b })
     }
 
