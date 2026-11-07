@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -50,7 +51,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -81,6 +84,8 @@ import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import kotlin.math.max
 
@@ -242,7 +247,7 @@ fun CollectScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     FieldbookPart(o.part, modifier = Modifier.size(180.dp))
                     Spacer(Modifier.height(4.dp))
-                    Text(o.part.displayName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+                    PartNameLine(o)
                     o.note?.let { note ->
                         // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
                         Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
@@ -353,6 +358,38 @@ private fun TitleBlocks(modifier: Modifier = Modifier) {
 }
 
 private data class StatusLine(val text: String, val color: Color)
+
+/**
+ * 「パーツができました」の名前の行。AI に名前を考えてもらっている間は「名前を考え中…」、届いたら名前を出す。
+ * 付かなかったら「○ m の散歩」のまま、あとで付けられることを添える（decisions.md の 5・7）
+ */
+@Composable
+private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
+    val asking = o.naming == CollectViewModel.Naming.ASKING
+    // 名前は少しあとから届くので、読み上げでも知らせる
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (asking) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Fieldbook.Muted)
+            Text(
+                if (asking) "名前を考え中…" else o.part.displayName,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (asking) Fieldbook.Muted else Fieldbook.Ink,
+            )
+        }
+        if (o.naming == CollectViewModel.Naming.FAILED) {
+            Text(
+                notes("名前はコレクションから", "あとで付けられます"),
+                style = noteStyle,
+                fontSize = 11.sp,
+                color = Fieldbook.Muted,
+            )
+        }
+    }
+}
 
 /** 手持ちの「積む」ボタンと同じ見た目のボタン */
 @Composable
