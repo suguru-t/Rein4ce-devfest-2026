@@ -19,6 +19,7 @@ import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,9 +42,29 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 停止後の結果（ダイアログ表示用） */
     sealed class Outcome {
-        /** @param note 自動で止めたときの説明（「速すぎたので記録を止めました…」）。ふつうは null */
-        data class Created(val part: Part, val stats: TrackToPart.Stats, val note: String? = null) : Outcome()
+        /**
+         * @param note 自動で止めたときの説明（「速すぎたので記録を止めました…」）。ふつうは null
+         * @param naming AI に名前を考えてもらっているところか、その結果
+         */
+        data class Created(
+            val part: Part,
+            val stats: TrackToPart.Stats,
+            val note: String? = null,
+            val naming: Naming = Naming.ASKING,
+        ) : Outcome()
         data class Rejected(val reason: String) : Outcome()
+    }
+
+    /** 採集したパーツの名前（AI に考えてもらう。decisions.md の 5） */
+    enum class Naming {
+        /** 考えてもらっているところ（「名前を考え中…」） */
+        ASKING,
+
+        /** 名前が付いた */
+        NAMED,
+
+        /** 付かなかった（通信できない・サーバが考えられなかった）。「○ m の散歩」のまま。コレクションからあとで付けられる */
+        FAILED,
     }
 
     var outcome: Outcome? by mutableStateOf(null)
@@ -136,9 +157,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun convert(pts: List<TrackPoint>) {
         when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT)) {
             is TrackToPart.Result.Success -> {
-                // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う。B）
-                repository.add(r.part, r.place)
-                outcome = Outcome.Created(r.part, r.stats)
+                keep(r)
             }
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected("短すぎます（%.0f m、最低 %.0f m）".format(r.distanceM, r.minDistanceM))
@@ -149,6 +168,27 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                     "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps, RoundingMode.CEILING)}）。" +
                         "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で採集してください",
                 )
+        }
+    }
+
+    /**
+     * できたパーツを保存して、結果のダイアログに出す。名前は AI（命名 API）に考えてもらい、届いたら差し替える
+     * （decisions.md の 5。パーツはすぐ出し、届くまでは「名前を考え中…」）。
+     * 名前の手がかりは形・距離・日時だけで、歩いた場所は送らない（8）。付かなければ「○ m の散歩」のまま（7）
+     */
+    private fun keep(r: TrackToPart.Result.Success, note: String? = null) {
+        // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う）
+        repository.add(r.part, r.place)
+        outcome = Outcome.Created(r.part, r.stats, note = note)
+        // ダイアログを閉じても、名前は考え続けて保存する
+        viewModelScope.launch {
+            val suggested = ApiClient.namePart(r.part)
+            // 届くまでのあいだに自分で名前を付けていたら、そちらを残す（消していたら何もしない）
+            suggested?.let { repository.nameIfUnnamed(r.part.id, it) }
+            val shown = outcome as? Outcome.Created ?: return@launch
+            if (shown.part.id != r.part.id) return@launch // 別の結果に変わっていたら、そのまま
+            val latest = repository.parts.value.firstOrNull { it.id == r.part.id } ?: shown.part
+            outcome = shown.copy(part = latest, naming = if (suggested != null) Naming.NAMED else Naming.FAILED)
         }
     }
 
@@ -164,10 +204,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         val stopped = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}）"
         val limitNote = "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます"
         when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
-            is TrackToPart.Result.Success -> {
-                repository.add(r.part, r.place)
-                outcome = Outcome.Created(r.part, r.stats, note = "$stopped。止める前までをパーツにしました")
-            }
+            is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました")
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected(
                     "$stopped。止める前までの %.0f m は短すぎてパーツになりません（最低 %.0f m）。$limitNote".format(r.distanceM, r.minDistanceM),
