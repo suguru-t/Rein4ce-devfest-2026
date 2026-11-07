@@ -98,10 +98,39 @@ curl -sS -i "$BASE_URL/towers"
 
 Cloud Run のサービスアカウントには `roles/datastore.user` を付与済みなので、デプロイするだけで Firestore 版になる。
 
+## パーツの命名（POST /parts/name）
+
+`Part` をそのまま送ると、Vertex AI の Gemini が名前を付けて `200 {"name": "..."}` を返す。名前が付けられなかったとき（時間切れ・Gemini の失敗・命名が無効）は `503`。アプリはそのとき今の表示のままにする。名前の手がかりは形・距離・日時だけで、位置情報は使わない。
+
+| 実装 | 使われるとき |
+|---|---|
+| `DisabledPartNamer` | 手元の既定、テスト。いつも 503 |
+| `GeminiPartNamer` | Cloud Run 上（`K_SERVICE` があると自動で）、または `PART_NAMER=gemini` |
+
+環境変数：
+
+- `PART_NAMER`：`gemini` か `off`。未指定なら上の表のとおり
+- `GOOGLE_CLOUD_PROJECT`：Vertex AI を呼ぶプロジェクト。Cloud Run ではメタデータから自動で取るので不要。**手元では必須**
+- `GEMINI_MODEL`：既定 `gemini-3.5-flash-lite`
+- `GEMINI_LOCATION`：既定 `global`（3.5-flash-lite は東京にはない）
+
+手元で本物の Gemini を試す（Vertex AI API は有効化済み。Cloud Run のサービスアカウントは編集者なので、権限の追加は不要）：
+
+```
+gcloud auth application-default login     # 最初の 1 回だけ
+PART_NAMER=gemini GOOGLE_CLOUD_PROJECT=hackathon-2026-513703 ./gradlew :server:run
+curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
+  -d '{"id":"p1","points":[{"x":-0.5,"y":0},{"x":0,"y":0.3},{"x":0.5,"y":0}],"kind":"ZIGZAG","distanceM":820,"walkedAt":1793952000000}'
+```
+
+起動ログの `PartNamer: Gemini（project=..., location=global, model=gemini-3.5-flash-lite）` は、**Gemini 版のクライアントを作れて接続先の設定が決まった**ことを示す。この時点では命名 API の成功は未確認（モデル名の間違い・権限不足・割当切れは、実際に呼んで初めて分かる）。上の `curl` で `POST /parts/name` を呼び、200 と名前が返ることを確認する。503 のときはサーバのログを見る：「パーツの命名が時間切れ」「パーツの命名に失敗」「パーツの命名なし（命名が無効か、空の応答）」のどれかが所要時間つきで出る。
+
+名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
+
 ## 次にやること（C 担当）
 
 - ~~`SharePage` の `og:image` を PNG にする~~ → `GET /towers/{id}/image.png`（1200×630）をその場で描いて返す形で対応済み。Cloud Storage は使わない。文字は描かない（コンテナに日本語フォントがないため）。確認は GET で行う（HEAD には応えないので `curl -I` は 404 になる）：`curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "$BASE_URL/towers/$ID/image.png"` が `200 image/png` ならよい
 - Firestore 版を Cloud Run にデプロイして、本番で「送信 → 一覧 → 共有ページ」を確認する
-- `POST /parts/name`：Vertex AI（Gemini）でパーツに名前と一言を付ける
+- 命名を Cloud Run にデプロイして、本番で名前が返ることを確認する（プロジェクト ID をメタデータから取れるかも、ここで初めて確かめる）
 - 対戦方式が決まったら `/challenges`
 - `PUBLIC_BASE_URL` 環境変数：共有 URL のホスト名を固定したいときに設定

@@ -51,7 +51,7 @@ class RoutesTest {
 
     @Test
     fun `動作確認とヘルスチェックが応答する`() = testApplication {
-        application { module(MemoryTowerStore()) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         val root = client.get("/")
         assertEquals(HttpStatusCode.OK, root.status)
@@ -64,7 +64,7 @@ class RoutesTest {
 
     @Test
     fun `保存したタワーが一覧・JSON・共有ページ・画像で取れる`() = testApplication {
-        application { module(MemoryTowerStore()) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         val res = client.postTower(sampleTower())
         assertEquals(HttpStatusCode.Created, res.status)
@@ -109,7 +109,7 @@ class RoutesTest {
 
     @Test
     fun `Cloud Run 経由（X-Forwarded-Proto が https）なら共有 URL も https になる`() = testApplication {
-        application { module(MemoryTowerStore()) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         val res = client.postTower(sampleTower(), forwardedProto = "https")
         val created = AppJson.decodeFromString(TowerCreated.serializer(), res.bodyAsText())
@@ -118,7 +118,7 @@ class RoutesTest {
 
     @Test
     fun `パーツや配置が空のタワーは 400 で断る`() = testApplication {
-        application { module(MemoryTowerStore()) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         val empty = sampleTower().copy(parts = emptyList(), placements = emptyList())
         assertEquals(HttpStatusCode.BadRequest, client.postTower(empty).status)
@@ -127,7 +127,7 @@ class RoutesTest {
 
     @Test
     fun `存在しない ID は 404`() = testApplication {
-        application { module(MemoryTowerStore()) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.svg").status)

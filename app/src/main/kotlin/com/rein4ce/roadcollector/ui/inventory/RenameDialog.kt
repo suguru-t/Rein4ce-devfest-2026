@@ -26,6 +26,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
 
 /** 名前の長さの上限。命名 API と同じ（docs/decisions.md の 9 番）で、カードに収まる長さ */
 internal const val MAX_NAME_LENGTH = 10
@@ -68,7 +70,9 @@ internal fun RenameDialog(part: Part, onSave: (String) -> Unit, onDismiss: () ->
                 supportingText = {
                     Row(Modifier.fillMaxWidth()) {
                         Text(
-                            if (tooLong) "$MAX_NAME_LENGTH 文字までです" else "空なら「$fallback」に戻る",
+                            // 数と単位（「10 文字」「488 m」）が別の行に分かれないよう、notes() を通す
+                            notes(if (tooLong) "$MAX_NAME_LENGTH 文字までです" else "空なら「$fallback」に戻る"),
+                            style = noteStyle,
                             modifier = Modifier.weight(1f).padding(end = 8.dp),
                         )
                         Text("$length/$MAX_NAME_LENGTH", fontFamily = Fieldbook.Data)
