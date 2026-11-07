@@ -363,6 +363,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
     val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
     val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
+    // 設定（採集画面の歯車）で AI の名前付けをオフにしていたら、名前を付ける窓に「AI に考えてもらう」を出さない
+    val aiNaming by RoadCollectorApp.from(context).settings.aiNaming.collectAsStateWithLifecycle()
     if (renaming != null) {
         RenameDialog(
             part = renaming,
@@ -371,6 +373,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 renamingId = null
             },
             onDismiss = { renamingId = null },
+            aiOn = aiNaming,
         )
     } else if (zoomed != null) {
         ZoomDialog(
@@ -667,7 +670,7 @@ private fun PartCard(
             // 選んだパーツは青い破線、持ち上げているパーツは真っ白
             .then(
                 when {
-                    isDragging -> Modifier.background(Color.White, CardShape)
+                    isDragging -> Modifier.background(Fieldbook.Card, CardShape)
                     selected -> Modifier
                         .background(Fieldbook.Card, CardShape)
                         .dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
@@ -811,7 +814,7 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(if (selected) Fieldbook.Survey else Color.White.copy(alpha = 0.92f))
+                .background(if (selected) Fieldbook.Survey else Fieldbook.Card.copy(alpha = 0.92f))
                 .border(
                     BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
                     CircleShape,

@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -39,8 +40,6 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
-import com.rein4ce.roadcollector.ui.theme.Cream
-import com.rein4ce.roadcollector.ui.theme.Ink
 import kotlinx.coroutines.isActive
 import kotlin.math.max
 
@@ -91,7 +90,9 @@ fun StackScreen(
         return
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Cream)) {
+    // 地と字はテーマの色（ダークモードでは、あたたかみのある黒に明るい字）
+    val ink = MaterialTheme.colorScheme.onBackground
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         StackCanvas(vm = vm, modifier = Modifier.fillMaxSize())
 
         // 上部のスコア
@@ -99,9 +100,9 @@ fun StackScreen(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = Ink)
+            Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
             Column(horizontalAlignment = Alignment.End) {
-                Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = Ink)
+                Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
                 if (vm.fallenCount > 0) {
                     Text("落下 ${vm.fallenCount} 個", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD64545))
                 }
@@ -118,7 +119,7 @@ fun StackScreen(
                     Text(
                         "${vm.current?.displayName ?: ""} ・ 横にドラッグして位置を決める",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Ink,
+                        color = ink,
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -129,7 +130,7 @@ fun StackScreen(
                     TextButton(onClick = { vm.restart() }) { Text("やり直す") }
                 }
                 StackViewModel.Phase.Settling -> {
-                    Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = Ink)
+                    Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
                     Spacer(Modifier.height(48.dp))
                 }
                 StackViewModel.Phase.Finished -> {
@@ -168,6 +169,10 @@ fun StackScreen(
 
 @Composable
 private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
+    // 落下ラインと台の色。ダークモード（地が暗い）では、暗い地の上でも見える明るさにする
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
+    val platform = if (dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
     Canvas(
         modifier = modifier.pointerInput(vm) {
             detectDragGestures { change, drag ->
@@ -186,7 +191,7 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
 
         // 落下ライン
         drawLine(
-            color = Color(0x22000000),
+            color = guide,
             start = Offset(0f, sy(-1.5)),
             end = Offset(size.width, sy(-1.5)),
             strokeWidth = 2f,
@@ -194,7 +199,7 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
 
         // 物理ワールドの図形
         for (s in vm.shapes) {
-            val color = s.part?.kind?.color() ?: Color(0xFF4A4E69)
+            val color = s.part?.kind?.color() ?: platform
             when (s) {
                 is StackWorld.RenderShape.Poly -> {
                     val path = Path()

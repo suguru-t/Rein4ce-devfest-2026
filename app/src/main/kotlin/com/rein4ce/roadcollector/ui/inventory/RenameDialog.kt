@@ -55,6 +55,7 @@ internal fun nameLength(name: String): Int = name.trim().let { it.codePointCount
  * - 「AI に考えてもらう」で、サーバの命名 API（Gemini）に名前を考えてもらい、入力欄に入れる。保存するかは自分で決める。
  *   考えられなかったときは、入力欄はそのままにして知らせる（decisions.md の 7）。送るのは形・距離・日時だけ（8）
  *
+ * @param aiOn    「AI に考えてもらう」を出すか。設定（採集画面の歯車）で AI の名前付けをオフにしていたら false
  * @param suggest 名前を考えてもらう。考えられなければ null（テストやプレビューでは差し替える）
  */
 @Composable
@@ -62,6 +63,7 @@ internal fun RenameDialog(
     part: Part,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
+    aiOn: Boolean,
     suggest: suspend (Part) -> String? = ApiClient::namePart,
 ) {
     val fallback = "${part.distanceM} m の散歩"
@@ -144,19 +146,22 @@ internal fun RenameDialog(
                     ),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
-                AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
-                Text(
-                    when (aiResult) {
-                        AiResult.Named -> notes("AI の案です", "直してから保存もできます")
-                        AiResult.Failed -> notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください")
-                        null -> notes("場所は送らず、形・距離・日時で考えます")
-                    },
-                    style = noteStyle,
-                    fontSize = 12.sp,
-                    color = if (aiResult == AiResult.Failed) Fieldbook.Danger else Fieldbook.Muted,
-                    // 結果は入力欄の外に出るので、読み上げでも知らせる
-                    modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                )
+                // 設定で AI の名前付けをオフにしていたら、ボタンを出さない
+                if (aiOn) {
+                    AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
+                    Text(
+                        when (aiResult) {
+                            AiResult.Named -> notes("AI の案です", "直してから保存もできます")
+                            AiResult.Failed -> notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください")
+                            null -> notes("場所は送らず、形・距離・日時で考えます")
+                        },
+                        style = noteStyle,
+                        fontSize = 12.sp,
+                        color = if (aiResult == AiResult.Failed) Fieldbook.Danger else Fieldbook.Muted,
+                        // 結果は入力欄の外に出るので、読み上げでも知らせる
+                        modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
             }
         },
         confirmButton = {
