@@ -256,7 +256,8 @@ fun CollectScreen(
             containerColor = Fieldbook.Paper,
             titleContentColor = Fieldbook.Ink,
             textContentColor = Fieldbook.Ink,
-            title = { Text("パーツができました", fontWeight = FontWeight.Bold) },
+            // 「パーツができました」は機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
+            title = { Text("道を 1 本集めました", fontWeight = FontWeight.Bold) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     FieldbookPart(o.part, modifier = Modifier.size(180.dp))
