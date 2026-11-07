@@ -6,7 +6,7 @@
 使い方（fonttools が要る。pip install fonttools）:
   python3 tools/make_splash_icon.py app/src/main/res/font/mplus_rounded_michitsumi.ttf \
       app/src/main/res/drawable/ic_launcher_foreground.xml app/src/main/res/drawable/splash_icon.xml \
-      1.55 34 4 7.5 23 -9 6 -16 -150 70 30
+      1.55 34 4 7.5 23 -9 6 -16 -120 140 40
   数字は順に：アイコンの倍率、題字のブロックの大きさ [dp]、ブロックの間、角の丸み、字の大きさ、最後のブロックを浮かせる量（負で上）、
   アイコンと題字の間、全体を上下にずらす量（負で上）、最後のブロックが落ち始める位置（上へ・右へ [dp]、負で上）と傾き [度]。
   落ち始める位置と傾きは splash_icon_animated.xml で 0 に戻すので、変えたら合わせる。
