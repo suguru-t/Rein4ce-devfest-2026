@@ -22,8 +22,8 @@ import org.dyn4j.world.World
  *   w.isSettled() が true になったら w.removeFallen() → w.height()
  */
 class StackWorld(
-    val platformWidth: Double = 1.4,
-    val platformThickness: Double = 0.3,
+    val platformWidth: Double = PLATFORM_WIDTH,
+    val platformThickness: Double = PLATFORM_THICKNESS,
     /** これより下に落ちたパーツは「落下」扱い */
     val fallThresholdY: Double = -1.5,
 ) {
@@ -156,5 +156,9 @@ class StackWorld(
 
     companion object {
         const val PLATFORM_TAG = "platform"
+
+        /** 台の幅と厚さ [m]。物理と、共有ページの絵（TowerSvg / TowerPng）と、アプリの絵（TowerSketch）で同じ値を使う */
+        const val PLATFORM_WIDTH = 1.4
+        const val PLATFORM_THICKNESS = 0.3
     }
 }

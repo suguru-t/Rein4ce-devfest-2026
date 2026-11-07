@@ -5,9 +5,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -68,10 +72,13 @@ import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
+import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
+import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
+import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import kotlin.math.max
 
@@ -335,24 +342,99 @@ private fun DemoMenuButton(
             enabled = enabled,
             shape = RoundedCornerShape(6.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
+            border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
             modifier = Modifier.height(52.dp),
         ) {
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
+        // 見本は 1 本ずつ小さな図を添えて、名札（棒・L字…）と名前で選べるようにする
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(6.dp),
+            containerColor = Fieldbook.Paper,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, Fieldbook.CardEdge),
+        ) {
+            MenuHeading("見本の散歩")
             SampleTracks.all.forEach { track ->
+                val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
-                    text = { Text("${track.expectedKind.label}：${track.name}") },
+                    leadingIcon = { if (part != null) PartThumb(part, size = 30.dp) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                track.expectedKind.label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Fieldbook.Muted,
+                                modifier = Modifier.width(56.dp),
+                            )
+                            Text(track.name, fontSize = 15.sp, color = Fieldbook.Ink)
+                        }
+                    },
+                    colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
+                    contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                     onClick = { open = false; onPick(track) },
                 )
             }
-            HorizontalDivider()
+            HorizontalDivider(color = Fieldbook.GridMajor, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            MenuHeading("実機で録ったもの")
             DropdownMenuItem(
-                text = { Text("ファイルから再生（GPX / JSON）") },
+                leadingIcon = {
+                    // 書類の小さな印：野帳の線で描く
+                    Canvas(Modifier.size(30.dp)) {
+                        val w = 1.5.dp.toPx()
+                        val l = size.width * 0.3f
+                        val t = size.height * 0.15f
+                        val r = size.width * 0.7f
+                        val b = size.height * 0.85f
+                        val fold = size.width * 0.12f
+                        val path = Path().apply {
+                            moveTo(l, t); lineTo(r - fold, t); lineTo(r, t + fold); lineTo(r, b); lineTo(l, b); close()
+                            moveTo(r - fold, t); lineTo(r - fold, t + fold); lineTo(r, t + fold)
+                        }
+                        drawPath(path, Fieldbook.Ink, style = Stroke(width = w, join = StrokeJoin.Round))
+                        for (k in 1..3) {
+                            val y = t + (b - t) * (0.4f + 0.18f * k)
+                            drawLine(Fieldbook.Mark, Offset(l + fold, y), Offset(r - fold, y), w)
+                        }
+                    }
+                },
+                text = { Text("ファイルから再生", fontSize = 15.sp, color = Fieldbook.Ink) },
+                trailingIcon = { Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted) },
+                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink, trailingIconColor = Fieldbook.Muted),
+                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
                 onClick = { open = false; onPickFile() },
             )
         }
+    }
+}
+
+/** メニューの小さな見出し（野帳の注記の字。コレクションの「コレクション」と同じ作り） */
+@Composable
+private fun MenuHeading(text: String) {
+    Text(
+        text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp,
+        color = Fieldbook.Muted,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
+    )
+}
+
+/** パーツの小さな図（メニューの見本用）。コレクションのカードと同じ、縁取りした道の色 */
+@Composable
+private fun PartThumb(part: Part, size: Dp) {
+    Canvas(Modifier.size(size)) {
+        val scalePx = this.size.minDimension * 0.78f
+        val center = Offset(this.size.width / 2, this.size.height / 2)
+        val edgePx = 1.2.dp.toPx()
+        drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = Fieldbook.RoadCasing)
+        drawPart(part, center, scalePx, color = Fieldbook.Road)
     }
 }
 

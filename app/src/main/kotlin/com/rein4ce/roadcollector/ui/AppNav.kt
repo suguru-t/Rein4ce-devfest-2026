@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -56,6 +57,8 @@ import com.rein4ce.roadcollector.ui.game.StackScreen
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
+import com.rein4ce.roadcollector.ui.weather.BackdropScreen
+import com.rein4ce.roadcollector.ui.weather.WeatherLayer
 
 /**
  * 4 画面のタブ。担当分けに合わせて 1 画面 = 1 パッケージ。
@@ -76,7 +79,9 @@ sealed class Dest(val route: String, val label: String, val icon: ImageVector, v
     data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
 
     companion object {
-        val all = listOf(Collect, Inventory, Stack, Gallery)
+        // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
+        // Collect を作っている途中でこの一覧を作ることになり、一覧に null が入って落ちる
+        val all: List<Dest> by lazy { listOf(Collect, Inventory, Stack, Gallery) }
     }
 }
 
@@ -94,21 +99,29 @@ fun AppNav() {
         }
     }
 
-    Scaffold(
-        // 地はアプリ全体で方眼紙。タブバーは透明なので、浮いたピルの下に方眼が透けて見える
-        modifier = Modifier.fieldbookGrid(),
-        containerColor = Color.Transparent,
-        bottomBar = { TabBar(currentDestination, onGo = ::go) },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Dest.Collect.route,
-            modifier = Modifier.padding(innerPadding),
-        ) {
-            composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
-            composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
-            composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
-            composable(Dest.Gallery.route) { GalleryScreen() }
+    // 地はアプリ全体で方眼紙。その上に、見ている画面に合わせた天気（雨・雪など）を降らせる（B：ui/weather）。
+    // 画面の部品はさらにその上。タブバーは透明なので、浮いたピルの下に方眼と雨が透けて見える
+    Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
+        val backdrop = when (currentDestination?.route) {
+            Dest.Collect.route -> BackdropScreen.COLLECT
+            Dest.Inventory.route -> BackdropScreen.COLLECTION
+            else -> BackdropScreen.OTHER
+        }
+        WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
+        Scaffold(
+            containerColor = Color.Transparent,
+            bottomBar = { TabBar(currentDestination, onGo = ::go) },
+        ) { innerPadding ->
+            NavHost(
+                navController = navController,
+                startDestination = Dest.Collect.route,
+                modifier = Modifier.padding(innerPadding),
+            ) {
+                composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
+                composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
+                composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
+                composable(Dest.Gallery.route) { GalleryScreen() }
+            }
         }
     }
 }
