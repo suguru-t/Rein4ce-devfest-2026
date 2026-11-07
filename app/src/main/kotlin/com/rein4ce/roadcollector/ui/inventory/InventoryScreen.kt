@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -41,6 +42,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -92,6 +94,7 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -521,56 +524,51 @@ private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString 
 /** 小数点の字間。等幅の字の 1 文字分（およそ 0.6 文字の高さ）のうち、半分ほどを詰める（左右に半分ずつ詰まる） */
 private val POINT_LETTER_SPACING = (-0.3).em
 
-/** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
+/**
+ * カードを押して開く拡大表示。設定などと同じ枠（見出しの帯にパーツの名前、枠の下に丸い「×」）に、大きな図と注記を出す。
+ * 枠の中のいちばん下の「名前を付ける」から名前を付けられる
+ */
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(8.dp),
-        containerColor = Fieldbook.Paper,
-        titleContentColor = Fieldbook.Ink,
-        textContentColor = Fieldbook.Ink,
-        title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
-                    // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
-                    // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
-                    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
-                    if (mapPlace != null) {
-                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
-                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
-                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
-                    }
-                    Column {
-                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
-                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                            FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
-                        }
-                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
-                    }
+    FramedDialog(title = part.displayName, onDismiss = onDismiss) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
+                if (mapPlace != null) {
+                    // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                    // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                    PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
                 }
-                Spacer(Modifier.height(4.dp))
-                // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
-                // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
-                WalkNote(
-                    distanceM = part.distanceM,
-                    date = if (isSample) "見本" else walkDate(part.walkedAt),
-                    weather = weather?.sky?.label,
-                )
-                // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
-                if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
+                Column {
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                        // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                        if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
+                    }
+                    if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("閉じる", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onRename) { Text("名前を付ける", color = Fieldbook.Survey) }
-        },
-    )
+            Spacer(Modifier.height(4.dp))
+            // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
+            // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+            WalkNote(
+                distanceM = part.distanceM,
+                date = if (isSample) "見本" else walkDate(part.walkedAt),
+                weather = weather?.sky?.label,
+            )
+            // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+            if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
+            // 名前を付ける（付け直す）。閉じるのは、ほかの窓と同じく枠の下の「×」
+            TextButton(onClick = onRename, modifier = Modifier.padding(top = 8.dp)) {
+                Icon(Icons.Filled.Edit, contentDescription = null, tint = Fieldbook.Survey, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("名前を付ける", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 @Composable
