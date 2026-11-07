@@ -130,7 +130,8 @@ class TrackToPartTest {
         val track = jumps + straight
 
         val withFilter = TrackToPart.convert(track) as TrackToPart.Result.Success
-        val withoutFilter = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(maxSpeedMps = Double.MAX_VALUE)) as TrackToPart.Result.Success
+        // フィルタなし版は飛びが残るので、歩きの速さの判定（walkMaxSpeedMps）も外して、形の違いだけを比べる
+        val withoutFilter = TrackToPart.convert(track, ConversionParams.DEFAULT.copy(maxSpeedMps = Double.MAX_VALUE, walkMaxSpeedMps = Double.MAX_VALUE)) as TrackToPart.Result.Success
 
         // 速度フィルタで飛びが落ちて、まっすぐ（棒）になる。フィルタなしだと飛びが形に残る
         assertEquals(Kind.BAR, withFilter.part.kind)
@@ -197,6 +198,64 @@ class TrackToPartTest {
         assertTrue(json, !json.contains("lat") && !json.contains("lng"))
     }
 
+    @Test
+    fun `a walk at 4,8 km per hour is accepted and its fastest window is recorded`() {
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0)))
+        require(r is TrackToPart.Result.Success) { "should convert: $r" }
+        val fastest = requireNotNull(r.stats.fastestMps)
+        // 4 m / 3 秒 = 1.33 m/s。揺れで少し増えるが、歩きの上限 2.2 m/s には届かない
+        assertTrue("fastest $fastest", fastest > 1.0 && fastest < ConversionParams.DEFAULT.walkMaxSpeedMps)
+    }
+
+    @Test
+    fun `a ride faster than walking is rejected as too fast`() {
+        // 同じ道を 4 m / 1 秒 = 4 m/s（時速 14 km。自転車）。GPS の飛びの上限 5 m/s には引っかからない
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0), stepMs = 1_000L))
+        assertTrue("should be too fast: $r", r is TrackToPart.Result.TooFast)
+        r as TrackToPart.Result.TooFast
+        assertEquals(ConversionParams.DEFAULT.walkMaxSpeedMps, r.limitMps, 0.0)
+        assertTrue("fastest ${r.fastestMps}", r.fastestMps > 3.5 && r.fastestMps < 5.0)
+    }
+
+    @Test
+    fun `a car ride is reported as too fast, not as too few points`() {
+        // 4 m / 0.4 秒 = 10 m/s（時速 36 km）。飛びの上限 5 m/s を超え続けるので速度フィルタが点をほぼ全部落とすが、
+        // 「位置情報が足りない」ではなく「速すぎ」と返す
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 200.0), stepMs = 400L))
+        assertTrue("should be too fast: $r", r is TrackToPart.Result.TooFast)
+        assertTrue("fastest ${(r as TrackToPart.Result.TooFast).fastestMps}", r.fastestMps > 8.0)
+    }
+
+    @Test
+    fun `a short dash across a street does not reject the walk`() {
+        // 歩き 300 m（225 秒）の途中に、20 m を 5 秒で渡る（4 m/s）区間を 1 つ入れる。30 秒の窓で見れば歩きの範囲
+        val slow = walk(listOf(0.0 to 0.0, 150.0 to 0.0))
+        val dashStart = slow.last().timeMs
+        val dash = walk(listOf(150.0 to 0.0, 170.0 to 0.0), stepMs = 1_000L, seed = 7).drop(1)
+            .map { it.copy(timeMs = it.timeMs - 1_760_000_000_000L + dashStart) }
+        val rest = walk(listOf(170.0 to 0.0, 300.0 to 0.0, 300.0 to 120.0), seed = 9).drop(1)
+            .map { it.copy(timeMs = it.timeMs - 1_760_000_000_000L + dash.last().timeMs) }
+        val r = TrackToPart.convert(slow + dash + rest)
+        assertTrue("should convert: $r", r is TrackToPart.Result.Success)
+    }
+
+    @Test
+    fun `rough gps does not look like running`() {
+        // ±6 m 揺れる粗い GPS で 400 m 歩く。点をたどった道のりで速さを測ると揺れが足されて 2.2 m/s を超えるが、
+        // 窓の直線距離で測るので歩き（1.33 m/s）のまま
+        val r = TrackToPart.convert(walk(listOf(0.0 to 0.0, 0.0 to 400.0), noiseM = 6.0, accuracyM = 15f))
+        require(r is TrackToPart.Result.Success) { "should convert: $r" }
+        assertTrue("fastest ${r.stats.fastestMps}", requireNotNull(r.stats.fastestMps) < 1.8)
+    }
+
+    @Test
+    fun `a track without timestamps is not judged by speed`() {
+        val pts = walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0)).map { it.copy(timeMs = 0L) }
+        val r = TrackToPart.convert(pts)
+        require(r is TrackToPart.Result.Success) { "should convert: $r" }
+        assertEquals(null, r.stats.fastestMps)
+    }
+
     /**
      * 経路点（メートル）を 4 m 刻みで補間し、±noiseM の揺れを足して GPS の点列にする（SampleTracks と同じ作り方）。
      * accuracyM は全点に同じ値を入れる（0 は「精度が分からない」）。
@@ -206,6 +265,7 @@ class TrackToPartTest {
         seed: Int = 42,
         noiseM: Double = 2.0,
         accuracyM: Float = 8f,
+        stepMs: Long = 3_000L, // 4 m ごとの時間。3 秒なら時速 4.8 km（歩き）
     ): List<TrackPoint> {
         val rnd = Random(seed)
         val lat0 = 35.7496
@@ -223,7 +283,7 @@ class TrackToPartTest {
                 val x = x0 + (x1 - x0) * f + (rnd.nextDouble() * 2 - 1) * noiseM
                 val y = y0 + (y1 - y0) * f + (rnd.nextDouble() * 2 - 1) * noiseM
                 out += TrackPoint(lat0 + y / mPerDegLat, lng0 + x / mPerDegLng, accuracyM = accuracyM, timeMs = t)
-                t += 3_000L
+                t += stepMs
             }
         }
         return out

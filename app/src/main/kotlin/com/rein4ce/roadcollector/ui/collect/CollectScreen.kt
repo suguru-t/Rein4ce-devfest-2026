@@ -82,6 +82,9 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
+    // 最近 30 秒の速さ。歩きより速いと、記録中の状態行で知らせる（止めてもパーツにならないので、早めに気づけるように）
+    val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
+    val tooFast = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -119,6 +122,7 @@ fun CollectScreen(
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
+            tooFast -> StatusLine("速すぎます（${CollectViewModel.kmh(recentSpeed!!)}）・歩きだけパーツになります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> StatusLine("停止中・「記録開始」で歩き始める", Fieldbook.Mark)
         }
@@ -217,6 +221,14 @@ fun CollectScreen(
                         fontSize = 11.sp,
                         color = Fieldbook.Muted,
                     )
+                    o.stats.fastestMps?.let { v ->
+                        Text(
+                            "最高 ${CollectViewModel.kmh(v)}（30 秒の窓）",
+                            fontFamily = Fieldbook.Data,
+                            fontSize = 11.sp,
+                            color = Fieldbook.Muted,
+                        )
+                    }
                     Text(
                         "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点",
                         fontFamily = Fieldbook.Data,
