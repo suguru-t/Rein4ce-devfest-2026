@@ -6,9 +6,10 @@
 使い方（fonttools が要る。pip install fonttools）:
   python3 tools/make_splash_icon.py app/src/main/res/font/mplus_rounded_michitsumi.ttf \
       app/src/main/res/drawable/ic_launcher_foreground.xml app/src/main/res/drawable/splash_icon.xml \
-      1.55 34 4 7.5 23 0 6 -12 -130
+      1.55 34 4 7.5 23 -9 6 -16 -150 70 30
   数字は順に：アイコンの倍率、題字のブロックの大きさ [dp]、ブロックの間、角の丸み、字の大きさ、最後のブロックを浮かせる量（負で上）、
-  アイコンと題字の間、全体を上下にずらす量（負で上）、最後のブロックが落ち始める高さ（負で上。splash_icon_animated で 0 まで落とす）。
+  アイコンと題字の間、全体を上下にずらす量（負で上）、最後のブロックが落ち始める位置（上へ・右へ [dp]、負で上）と傾き [度]。
+  落ち始める位置と傾きは splash_icon_animated.xml で 0 に戻すので、変えたら合わせる。
   最後のブロックは「drop」という名前のグループに入れてあり、動かす絵（splash_icon_animated.xml）が落としてはねさせる
 """
 import sys, re
@@ -17,7 +18,7 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.pens.boundsPen import BoundsPen
 font_path, icon_path, out_path = sys.argv[1:4]
-ICON_SCALE, SIZE, GAP, R, FONT, LIFT, SPACE, OFFSET, DROP_START = (float(v) for v in sys.argv[4:13])
+ICON_SCALE, SIZE, GAP, R, FONT, LIFT, SPACE, OFFSET, DROP_START, DROP_DX, DROP_ROT = (float(v) for v in sys.argv[4:15])
 font = TTFont(font_path); gs = font.getGlyphSet(); cmap = font.getBestCmap()
 C = 144.0  # 起動画面のアイコンの絵は 288×288dp。見えるのはまん中の直径 192dp の円の中だけ
 def f(v): return ("%.2f" % v).rstrip("0").rstrip(".")
@@ -57,8 +58,9 @@ for i, (ch, color, tilt, lift) in enumerate(blocks):
     lifted = lift < 0
     last = i == len(blocks) - 1
     if last:
-        # 最後のブロックは、上（DROP_START）から落ちてくる。動かすのは splash_icon_animated.xml
-        out.append('    <group android:name="drop" android:translateY="%s">' % f(DROP_START))
+        # 最後のブロックは、右上（DROP_DX・DROP_START）から回りながら（DROP_ROT）落ちてくる。動かすのは splash_icon_animated.xml
+        out.append('    <group android:name="drop" android:pivotX="%s" android:pivotY="%s" android:translateX="%s" android:translateY="%s" android:rotation="%s">'
+                   % (f(cx), f(cy), f(DROP_DX), f(DROP_START), f(DROP_ROT)))
     out.append('    <group android:rotation="%s" android:pivotX="%s" android:pivotY="%s">' % (f(tilt), f(cx), f(cy)))
     dy, a = (SIZE * 0.12, 0.22) if lifted else (SIZE * 0.04, 0.14)
     out.append('        <path android:fillColor="#000000" android:fillAlpha="%s" android:pathData="%s"/>' % (f(a), rrect(x, y + dy, SIZE, SIZE, R)))
