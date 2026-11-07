@@ -196,7 +196,8 @@ private fun ResultCard(
     onGoGallery: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // 列をカードの幅いっぱいにして、中身をカードの真ん中にそろえる（幅が中身なりだと、カードの左に寄る）
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             val title = when {
                 unresolved -> "揺れが止まりませんでした"
                 result.remainingCount == 0 -> "全部落ちました"
