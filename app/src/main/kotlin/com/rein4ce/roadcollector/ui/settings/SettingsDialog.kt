@@ -69,7 +69,7 @@ import kotlin.math.roundToInt
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
- * - デモ（発表用）：見本のパーツ（コレクションに出す・出さない）、デモの天気（背景とデモ散歩の天気を選んだ天気にする）。
+ * - デモ（発表で使う）：見本のパーツ（コレクションに出す・出さない）、デモの天気（背景とデモ散歩の天気を選んだ天気にする）。
  *   [DEMO_SETTINGS] が false なら出さない
  * - その他：使い方（初めて開いたときに出すものと同じ）、アプリについて
  *
@@ -118,7 +118,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 }
                 // 発表が終わったら、DEMO_SETTINGS（AppSettings.kt）を false にすれば出なくなる
                 if (DEMO_SETTINGS) {
-                    Section("デモ（発表用）") {
+                    Section("デモ") {
                         LinkRow(Page.SAMPLES.title, if (samplesShown) "出す" else "出さない") { page = Page.SAMPLES }
                         ItemDivider()
                         LinkRow(Page.DEMO_SKY.title, demoSky.label) { page = Page.DEMO_SKY }

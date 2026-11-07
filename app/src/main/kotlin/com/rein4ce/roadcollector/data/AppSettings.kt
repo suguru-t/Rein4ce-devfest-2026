@@ -42,7 +42,7 @@ enum class WeatherMotion(val label: String, val note: String) {
 }
 
 /**
- * 設定の「デモ（発表用）」を出すか。**発表が終わって要らなくなったら、ここを false にするだけでよい。**
+ * 設定の「デモ」の欄（発表で使う）を出すか。**発表が終わって要らなくなったら、ここを false にするだけでよい。**
  * false にすると、設定に欄が出なくなり、保存してあるデモの天気も読まない（いつも本当の天気）。
  * 見本のパーツはそのまま残る（コレクションの「見本を戻す」でも戻せる）
  */
@@ -78,7 +78,7 @@ enum class DemoSky(val label: String, val weather: WalkWeather?, val fullMoon: B
  * アプリの設定。スマホの中だけに保存する。採集画面の右上の歯車から変える。
  *
  * @param store 保存先。アプリでは SharedPreferences、テストではただの Map
- * @param demoEnabled 設定の「デモ（発表用）」を使うか（[DEMO_SETTINGS]）。false なら、デモの天気はいつも本当の天気
+ * @param demoEnabled 設定の「デモ」の欄を使うか（[DEMO_SETTINGS]）。false なら、デモの天気はいつも本当の天気
  */
 class AppSettings(private val store: Store, private val demoEnabled: Boolean = DEMO_SETTINGS) {
 
