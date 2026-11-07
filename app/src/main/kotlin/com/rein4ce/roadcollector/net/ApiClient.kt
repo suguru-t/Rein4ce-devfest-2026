@@ -1,7 +1,10 @@
 package com.rein4ce.roadcollector.net
 
+import android.util.Log
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.core.model.AppJson
+import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartNameResponse
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.model.TowerSummary
@@ -17,6 +20,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 
 /**
  * Cloud Run 上のサーバ（:server モジュール）を呼ぶ。
@@ -52,4 +56,26 @@ object ApiClient {
             contentType(ContentType.Application.Json)
             setBody(tower)
         }.body()
+
+    /**
+     * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。
+     * 名前が付かなかった（サーバが 503 を返した）・通信できなかったときは null。そのときは今の表示のままにする（decisions.md の 7）
+     */
+    suspend fun namePart(part: Part): String? = try {
+        client.post("$baseUrl/parts/name") {
+            contentType(ContentType.Application.Json)
+            setBody(namingRequest(part))
+        }.body<PartNameResponse>().name
+    } catch (e: CancellationException) {
+        throw e // 画面を閉じて取りやめたときは、失敗として扱わない
+    } catch (e: Exception) {
+        Log.w("ApiClient", "naming failed", e)
+        null
+    }
 }
+
+/**
+ * 命名 API に送るパーツ。名前の手がかりは形・距離・日時だけなので（decisions.md の 8）、今付いている名前は送らない
+ * （自分で付けた名前を外に出さない。サーバの指示文も名前は使わない）
+ */
+internal fun namingRequest(part: Part): Part = part.copy(name = null)

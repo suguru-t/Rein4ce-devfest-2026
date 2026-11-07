@@ -20,9 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -42,14 +41,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.Font
@@ -79,6 +84,8 @@ import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import kotlin.math.max
 
@@ -95,9 +102,10 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
-    // 最近 30 秒の速さ。歩きより速いと、記録中の状態行で知らせる（止めてもパーツにならないので、早めに気づけるように）
+    // 最近 30 秒の速さ。上限に近づいたら（9 割から。8 割だとジョギング中ずっと出てしまう）状態行で知らせる。
+    // 上限を超えた状態が続くと TrackRecorder が記録を自動で止める
     val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
-    val tooFast = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps
+    val nearLimit = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps * 0.9
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -118,23 +126,14 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ。
-        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）。
-        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。それでも右の長さと近づく幅の端末では、
-        // 題字のほうを縮めて 1 行に収める（長さの字は折り返さない）
-        val density = LocalDensity.current
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText(
-                "michitsumi",
-                style = TextStyle(fontFamily = TitleSans, letterSpacing = (-0.5).sp, color = Fieldbook.Ink),
-                maxLines = 1,
-                autoSize = TextAutoSize.StepBased(
-                    minFontSize = with(density) { 20.dp.toSp() },
-                    maxFontSize = with(density) { 32.dp.toSp() },
-                    stepSize = with(density) { 1.dp.toSp() },
-                ),
-                modifier = Modifier.alignByBaseline().padding(start = 8.dp, end = 12.dp).weight(1f, fill = false),
-            )
+        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さ。
+        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TitleBlocks(modifier = Modifier.padding(start = 4.dp, end = 12.dp))
             Text(
                 "L=${distance.toInt()} m",
                 fontFamily = Fieldbook.Data,
@@ -143,7 +142,6 @@ fun CollectScreen(
                 color = Fieldbook.Ink,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.alignByBaseline(),
             )
         }
 
@@ -153,7 +151,8 @@ fun CollectScreen(
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
-            tooFast -> StatusLine("速すぎます（${CollectViewModel.kmh(recentSpeed!!)}）・歩きだけパーツになります", RecordingRed)
+            // 1 行に収まる長さにする（2 行になると図が下に動く）
+            nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmhInt(vm.walkMaxSpeedMps)} km で止まります", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> null
         }
@@ -248,7 +247,11 @@ fun CollectScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     FieldbookPart(o.part, modifier = Modifier.size(180.dp))
                     Spacer(Modifier.height(4.dp))
-                    Text(o.part.displayName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+                    PartNameLine(o)
+                    o.note?.let { note ->
+                        // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
+                        Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
+                    }
                     Text(
                         "L=${o.part.distanceM} m ・ 頂点 ${o.part.points.size} ・ ε ${"%.0f".format(o.stats.epsilonM)} m",
                         fontFamily = Fieldbook.Data,
@@ -299,12 +302,95 @@ fun CollectScreen(
 private val RecordingRed = Color(0xFFC0392B)
 
 /**
- * 題字「michitsumi」の字。Google のロゴのような幾何学的なサンセリフにするため、Poppins SemiBold（OFL）を
- * この綴りの 7 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
+ * 題字「ミチツミ」の字。アプリのアイコンのように見えるよう、太い丸ゴシック M PLUS Rounded 1c Black（OFL）を
+ * この 3 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
  */
-private val TitleSans = FontFamily(Font(R.font.poppins_michitsumi, FontWeight.SemiBold))
+private val TitleRounded = FontFamily(Font(R.font.mplus_rounded_michitsumi, FontWeight.Black))
+
+/** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
+private class TitleBlock(val char: Char, val color: Color, val tiltDeg: Float, val liftDp: Float)
+
+/**
+ * 題字「ミチツミ」を、積み木を積んでいる途中の絵にする。
+ * 1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べる。最後の 1 つは浮かせて（影も濃く）「置く直前」に見せる
+ */
+private val TitleBlocks = listOf(
+    TitleBlock('ミ', Color(0xFFE07A2A), tiltDeg = -5f, liftDp = 0f),
+    TitleBlock('チ', Color(0xFF2A9D8F), tiltDeg = 3f, liftDp = 1f),
+    TitleBlock('ツ', Color(0xFFF2C14E), tiltDeg = -2f, liftDp = 0f),
+    TitleBlock('ミ', Color(0xFF4A4E69), tiltDeg = 8f, liftDp = -9f),
+)
+
+@Composable
+private fun TitleBlocks(modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val shape = RoundedCornerShape(7.dp)
+    Row(
+        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (block in TitleBlocks) {
+            val lifted = block.liftDp < 0f
+            Box(
+                modifier = Modifier
+                    // 浮かせた分の場所を上に取っておく（傾けた角が見出しの外にはみ出さないように少し余裕も）
+                    .padding(top = 10.dp)
+                    .size(32.dp)
+                    .graphicsLayer {
+                        rotationZ = block.tiltDeg
+                        translationY = with(density) { block.liftDp.dp.toPx() }
+                    }
+                    .shadow(if (lifted) 6.dp else 2.dp, shape, clip = false)
+                    .background(block.color, shape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    block.char.toString(),
+                    fontFamily = TitleRounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = with(density) { 21.dp.toSp() },
+                    color = Fieldbook.Paper,
+                )
+            }
+        }
+    }
+}
 
 private data class StatusLine(val text: String, val color: Color)
+
+/**
+ * 「パーツができました」の名前の行。AI に名前を考えてもらっている間は「名前を考え中…」、届いたら名前を出す。
+ * 付かなかったら「○ m の散歩」のまま、あとで付けられることを添える（decisions.md の 5・7）
+ */
+@Composable
+private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
+    val asking = o.naming == CollectViewModel.Naming.ASKING
+    // 名前は少しあとから届くので、読み上げでも知らせる
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (asking) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Fieldbook.Muted)
+            Text(
+                if (asking) "名前を考え中…" else o.part.displayName,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (asking) Fieldbook.Muted else Fieldbook.Ink,
+            )
+        }
+        // 付かなかったときだけ、あとで付けられることを添える（届くまでに自分で名前を付けていたら出さない）
+        if (o.naming == CollectViewModel.Naming.FAILED && !o.part.hasName) {
+            Text(
+                notes("名前はコレクションから", "あとで付けられます"),
+                style = noteStyle,
+                fontSize = 11.sp,
+                color = Fieldbook.Muted,
+            )
+        }
+    }
+}
 
 /** 手持ちの「積む」ボタンと同じ見た目のボタン */
 @Composable

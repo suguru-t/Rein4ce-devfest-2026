@@ -47,8 +47,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,9 +65,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -84,9 +88,13 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.weather.BackdropFocus
+import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
@@ -114,6 +122,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
+    val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
@@ -143,12 +152,17 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // （触ると、積んでいる途中のゲームが最初からやり直しになる）。なので、キャンセルしたあと別のタブから戻ると、
     // selectedIds が GameSession.selected から作り直されて、「選択」で積む画面に渡した選択がまた出る
     var selecting by remember { mutableStateOf(false) }
+    // 「ランダムに選ぶ」の個数と、選んだあとの一言（手で選び直したら消す）
+    var pickCount by remember { mutableIntStateOf(GameSession.MAX_PARTS) }
+    var pickNote by remember { mutableStateOf<String?>(null) }
     fun cancelSelecting() {
         selectedIds.clear()
+        pickNote = null
         selecting = false
     }
     BackHandler(enabled = selecting) { cancelSelecting() }
     fun toggleSelect(id: String) {
+        pickNote = null
         if (id in selectedIds) {
             selectedIds.remove(id)
         } else if (validSelected.size < GameSession.MAX_PARTS) {
@@ -210,6 +224,24 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
+        // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
+        // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
+        if (selecting && !editing && isLoaded) {
+            RandomPickRow(
+                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                enabled = parts.isNotEmpty(),
+                count = pickCount,
+                onCountChange = { pickCount = it },
+                note = pickNote,
+                onPick = {
+                    val picked = pickRandom(parts.map { it.id }, pickCount)
+                    selectedIds.clear()
+                    selectedIds.addAll(picked)
+                    pickNote = randomPickNote(picked.size, pickCount)
+                },
+            )
+        }
+
         val gridState = rememberLazyGridState()
         val haptics = LocalHapticFeedback.current
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
@@ -233,6 +265,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     fun moveTo(to: Int) = saveArranged(arranged.moved(index, to))
                     PartCard(
                         part = part,
+                        sky = repository.weatherOf(part.id, weathers)?.sky,
                         order = order,
                         isSample = SampleParts.byId(part.id) != null,
                         isDragging = isDragging,
@@ -321,6 +354,12 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
     }
 
+    // 大きく見ている間は、背景にそのパーツを歩いたときの天気を降らせる（ui/weather/WeatherLayer）
+    DisposableEffect(zoomedId) {
+        BackdropFocus.partId.value = zoomedId
+        onDispose { BackdropFocus.partId.value = null }
+    }
+
     // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
     val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
     val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
@@ -337,6 +376,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         ZoomDialog(
             zoomed,
             place = repository.placeOf(zoomed.id, places),
+            weather = repository.weatherOf(zoomed.id, weathers),
             onRename = { renamingId = zoomed.id },
             onDismiss = { zoomedId = null },
         )
@@ -345,6 +385,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     pendingDelete?.let { part ->
         DeleteDialog(
             part = part,
+            sky = repository.weatherOf(part.id, weathers)?.sky,
             onConfirm = {
                 repository.remove(part.id)
                 // この画面の選択からは外す。積む画面に渡した選択（GameSession.selected）には触らない。
@@ -476,7 +517,7 @@ private val POINT_LETTER_SPACING = (-0.3).em
 
 /** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -500,19 +541,29 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
                         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                             // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
                             if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                            FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
                         }
                         if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    notes("L=${part.distanceM} m", "頂点 ${part.points.size}", if (isSample) "見本" else formatDate(part.walkedAt)),
+                    // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+                    notes(
+                        *listOfNotNull(
+                            "L=${part.distanceM} m",
+                            "頂点 ${part.points.size}",
+                            if (isSample) "見本" else formatDate(part.walkedAt),
+                            weather?.sky?.label,
+                        ).toTypedArray(),
+                    ),
                     style = noteStyle,
                     fontFamily = Fieldbook.Data,
                     fontSize = 12.sp,
                     color = Fieldbook.Muted,
                 )
+                // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+                if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
             }
         },
         confirmButton = {
@@ -525,7 +576,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
 }
 
 @Composable
-private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     // 採集画面の結果ダイアログと同じ、野帳の紙のダイアログ。どれを消すのか分かるように図も出す
     AlertDialog(
@@ -537,7 +588,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
         title = { Text("パーツを削除", fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.size(132.dp))
+                FieldbookPart(part, modifier = Modifier.size(132.dp), sky = sky)
                 Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -569,6 +620,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
 @Composable
 private fun PartCard(
     part: Part,
+    sky: Sky?,
     order: Int?,
     isSample: Boolean,
     isDragging: Boolean,
@@ -643,7 +695,14 @@ private fun PartCard(
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Box {
-            FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            // 道の色は歩いたときの天気で変わる。読み上げでは天気を言葉で伝える
+            FieldbookPart(
+                part,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).semantics {
+                    if (sky != null) contentDescription = "${sky.label}の日に歩いた道"
+                },
+                sky = sky,
+            )
             if (selecting && !editing) {
                 SelectMark(
                     order = order,
@@ -774,3 +833,50 @@ private val CardShape = RoundedCornerShape(4.dp)
 /** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
 private fun formatDate(epochMs: Long): String =
     if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
+
+/**
+ * 選択中に出す「ランダムに選ぶ」の行。左にボタン、右に個数（1〜[GameSession.MAX_PARTS] 本）。
+ * 選んだあとは、その下に一言（何本選んだか。足りなかったときはそのこと）を出し、読み上げでも知らせる
+ */
+@Composable
+private fun RandomPickRow(enabled: Boolean, count: Int, onCountChange: (Int) -> Unit, note: String?, onPick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onPick, enabled = enabled) {
+                Text("ランダムに選ぶ", color = if (enabled) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.weight(1f))
+            StepButton("−", "1 本減らす", enabled = count > 1) { onCountChange(count - 1) }
+            Text(
+                notes("$count 本"),
+                fontFamily = Fieldbook.Data,
+                fontSize = 13.sp,
+                color = Fieldbook.Ink,
+                modifier = Modifier.semantics { contentDescription = "ランダムに選ぶ数、$count 本" },
+            )
+            StepButton("+", "1 本増やす", enabled = count < GameSession.MAX_PARTS) { onCountChange(count + 1) }
+        }
+        if (note != null) {
+            Text(
+                note,
+                style = noteStyle,
+                fontSize = 12.sp,
+                color = Fieldbook.Muted,
+                modifier = Modifier.padding(start = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+    }
+}
+
+/** 個数を増やす・減らすボタン（押せる大きさは 48dp） */
+@Composable
+private fun StepButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(48.dp).semantics { contentDescription = description },
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Text(symbol, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (enabled) Fieldbook.Survey else Fieldbook.Mark)
+    }
+}

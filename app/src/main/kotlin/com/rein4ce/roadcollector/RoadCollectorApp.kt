@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.PartRepository
+import com.rein4ce.roadcollector.data.WeatherService
 
 /**
  * アプリ全体で共有するもの（リポジトリなど）の置き場。
@@ -14,9 +15,14 @@ class RoadCollectorApp : Application() {
     lateinit var partRepository: PartRepository
         private set
 
+    /** 天気を取ってくる係（歩いたときの天気と、今の天気） */
+    lateinit var weatherService: WeatherService
+        private set
+
     override fun onCreate() {
         super.onCreate()
         partRepository = PartRepository(this)
+        weatherService = WeatherService(this, partRepository)
         LocationRecordingService.createNotificationChannel(this)
     }
 
