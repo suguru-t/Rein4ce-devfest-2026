@@ -5,6 +5,8 @@ import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.ui.inventory.inventoryOrder
+import com.rein4ce.roadcollector.ui.inventory.moved
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -209,6 +211,28 @@ class PartRepositoryTest {
         val again = repository(f)
         advanceUntilIdle()
         assertEquals(SampleParts.all.map { it.id }, again.order.value)
+    }
+
+    /**
+     * ドラッグ中にパーツが足されたとき（デモ散歩がちょうど終わった等）。
+     * 画面は指を離したときに「画面の並び（足されたパーツを知らない）で保存 → 最新の内容で並べ直す」ので、
+     * 動かさずに離しても、動かして離しても、足されたパーツが先頭に出ることを確かめる。
+     */
+    @Test
+    fun `a part added during a drag shows at the top once the drag ends`() = runTest {
+        val repo = repository(file())
+        advanceUntilIdle()
+        val onScreen = inventoryOrder(repo.parts.value, repo.order.value).map { it.id }
+
+        repo.add(walk)
+        advanceUntilIdle()
+
+        // 動かさずに離した（保存しない）
+        assertEquals(listOf(walk.id) + onScreen, inventoryOrder(repo.parts.value, repo.order.value).map { it.id })
+
+        // 1 枚目を 3 枚目へ動かして離した（足される前の並びで保存する）
+        repo.setOrder(onScreen.moved(0, 2))
+        assertEquals(listOf(walk.id) + onScreen.moved(0, 2), inventoryOrder(repo.parts.value, repo.order.value).map { it.id })
     }
 
     @Test
