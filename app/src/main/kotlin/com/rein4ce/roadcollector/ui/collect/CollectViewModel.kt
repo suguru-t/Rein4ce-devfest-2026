@@ -166,7 +166,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected("短すぎます（%.0f m、最低 %.0f m）".format(r.distanceM, r.minDistanceM))
             is TrackToPart.Result.TooFewPoints ->
-                outcome = Outcome.Rejected("使える位置情報が足りません（${r.pointCount} 点）")
+                outcome = Outcome.Rejected("使える位置情報が足りません")
             is TrackToPart.Result.TooFast ->
                 outcome = Outcome.Rejected(
                     "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps, RoundingMode.CEILING)}）。" +
@@ -221,7 +221,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
             is TrackToPart.Result.TooFewPoints ->
                 outcome = Outcome.Rejected(
                     if (r.pointCount < 2) "$stopped。速くなる前の記録が無いので、パーツはできません。$limitNote"
-                    else "$stopped。止める前までの位置情報が足りません（${r.pointCount} 点）。$limitNote",
+                    else "$stopped。止める前までの位置情報が足りません。$limitNote",
                 )
             is TrackToPart.Result.TooFast ->
                 outcome = Outcome.Rejected("$stopped。止める前にも速い区間があり、パーツになりません。$limitNote")
