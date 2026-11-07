@@ -72,8 +72,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import sh.calvin.reorderable.ReorderableItem
@@ -102,6 +104,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     val savedOrder by repository.order.collectAsStateWithLifecycle()
+    // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
+    val places by repository.places.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
@@ -321,7 +325,12 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             onDismiss = { renamingId = null },
         )
     } else if (zoomed != null) {
-        ZoomDialog(zoomed, onRename = { renamingId = zoomed.id }, onDismiss = { zoomedId = null })
+        ZoomDialog(
+            zoomed,
+            place = places[zoomed.id] ?: SampleParts.places[zoomed.id],
+            onRename = { renamingId = zoomed.id },
+            onDismiss = { zoomedId = null },
+        )
     }
 
     pendingDelete?.let { part ->
@@ -408,8 +417,10 @@ private fun CollectionMeter(
 
 /** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, onRename: () -> Unit, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
+    // 歩いた場所が分かっていて、地図のキーがあるときだけ、図の背景に地図を敷く（無ければ今までどおり紙だけ）
+    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() }
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(8.dp),
@@ -419,7 +430,21 @@ private fun ZoomDialog(part: Part, onRename: () -> Unit, onDismiss: () -> Unit) 
         title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                    if (mapPlace != null) {
+                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
+                    }
+                    Column {
+                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                        }
+                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ " + if (isSample) "見本" else formatDate(part.walkedAt),
@@ -604,6 +629,9 @@ private fun PartCard(
         )
     }
 }
+
+/** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
+private const val MAP_LOGO_STRIP_DP = 28f
 
 /**
  * 見出しの右上の「選択」ボタン（選択中は「キャンセル」）。写真アプリと同じ位置・言葉。

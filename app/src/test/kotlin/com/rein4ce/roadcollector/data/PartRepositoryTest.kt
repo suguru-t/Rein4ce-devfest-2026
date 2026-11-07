@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.data
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.inventory.inventoryOrder
@@ -195,6 +196,52 @@ class PartRepositoryTest {
 
         repo.setOrder(listOf("nothing-here", SampleParts.all[1].id, SampleParts.all[1].id, SampleParts.all[0].id))
         assertEquals(listOf(SampleParts.all[1].id, SampleParts.all[0].id), repo.order.value)
+    }
+
+    @Test
+    fun `the walked place is saved apart from the parts and survives a restart`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        val place = PartPlace(lat = 35.7501, lng = 139.8055, sizeM = 341.0)
+
+        repo.add(walk, place)
+        advanceUntilIdle()
+        assertEquals(place, repo.placeOf(walk.id))
+        // 場所は parts.json（パーツの形式。タワーと一緒にサーバへ送られる）には入らない
+        val partsJson = f.readText()
+        assertFalse(partsJson.contains("35.7501") || partsJson.contains("\"lat\""))
+        assertTrue(File(tmp.root, "parts_places.json").exists())
+
+        val again = repository(f)
+        advanceUntilIdle()
+        assertEquals(place, again.placeOf(walk.id))
+    }
+
+    @Test
+    fun `deleting a part removes its place too`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, PartPlace(lat = 35.75, lng = 139.80, sizeM = 341.0))
+        repo.remove(walk.id)
+        advanceUntilIdle()
+
+        assertNull(repo.placeOf(walk.id))
+        val again = repository(f)
+        advanceUntilIdle()
+        assertNull(again.placeOf(walk.id))
+    }
+
+    @Test
+    fun `samples have places and older parts without a place have none`() = runTest {
+        val repo = repository(file())
+        advanceUntilIdle()
+        repo.add(walk) // 場所を残す前に採集したパーツ
+        advanceUntilIdle()
+
+        assertEquals(SampleParts.places[SampleParts.all.first().id], repo.placeOf(SampleParts.all.first().id))
+        assertNull(repo.placeOf(walk.id))
     }
 
     @Test

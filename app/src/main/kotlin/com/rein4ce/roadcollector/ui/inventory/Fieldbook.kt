@@ -156,7 +156,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         corner(s - a, s - a, -(b - a), -(b - a))
 
         // 道：縁取り（少し太く暗い色）を描いてから、本体を重ねる
-        val scalePx = s - 2 * 26f * u
+        val scalePx = s * FIGURE_ROAD_RATIO
         val center = Offset(ox + s / 2, oy + s / 2)
         val edgePx = 1.8f * u
         drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = Fieldbook.RoadCasing)
@@ -181,6 +181,12 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * 図の幅のうち、パーツの長辺（1.0）を描く割合。左右に 26/150 ずつ余白（四隅の見当・北・縮尺の場所）を残す。
+ * 拡大表示の背景の地図（PlaceMap.kt）も、この割合で縮尺を合わせる
+ */
+internal const val FIGURE_ROAD_RATIO = (150f - 2 * 26f) / 150f
 
 /** 正規化された図の上の道の長さ（輪なら最後の点から最初の点まで含める） */
 internal fun normalizedLength(part: Part): Float {

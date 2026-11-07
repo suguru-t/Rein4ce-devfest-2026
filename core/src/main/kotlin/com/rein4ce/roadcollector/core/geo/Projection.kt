@@ -28,6 +28,16 @@ object Projection {
         }
     }
 
+    /**
+     * [toMeters] の逆：メートルの座標を緯度・経度に戻す。
+     * @param origin [toMeters] に渡した点列の最初の点（そこが原点）
+     * @return 緯度と経度
+     */
+    fun toLatLng(origin: TrackPoint, p: XY): Pair<Double, Double> {
+        val mPerDegLng = M_PER_DEG_LNG_AT_EQUATOR * cos(Math.toRadians(origin.lat))
+        return Pair(origin.lat + p.y / M_PER_DEG_LAT, origin.lng + p.x / mPerDegLng)
+    }
+
     fun pathLength(points: List<XY>): Double {
         var total = 0.0
         for (i in 1 until points.size) total += points[i - 1].dist(points[i])
