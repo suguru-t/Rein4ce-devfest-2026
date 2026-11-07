@@ -85,13 +85,13 @@ class MainActivity : ComponentActivity() {
             PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, GATE_ZOOM),
             PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, GATE_ZOOM),
         ).apply {
-            duration = 400
+            duration = 320
             interpolator = AccelerateInterpolator(2f)
         }
         // くぐり始めてから、起動画面をうすくして採集画面を見せる
         val fade = ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply {
-            startDelay = 220
-            duration = 180
+            startDelay = 180
+            duration = 140
         }
         AnimatorSet().apply {
             playTogether(zoom, fade)
