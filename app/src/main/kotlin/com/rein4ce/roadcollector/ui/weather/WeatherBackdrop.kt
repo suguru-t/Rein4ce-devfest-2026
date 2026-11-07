@@ -10,9 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.State
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -22,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.weather.Sky
@@ -44,6 +43,9 @@ import kotlin.random.Random
  * - 天気が分からないとき：何も描かない
  *
  * 「動きを減らす」設定（アニメーションをオフ）の人には、止まった絵を出す。雷の光る演出は、光の点滅が苦手な人がいるので入れていない。
+ *
+ * 電池のため、描き直す回数を抑える：ゆっくり動く空（くもり・霧・晴れ）は 1 秒に 30 回、雨・雪は 60 回まで
+ * （画面が 1 秒に 120 回描ける機種でも、それ以上は描かない）。背景だけを別の層にして、描き直すときに方眼紙や画面の部品は描き直さない。
  */
 @Composable
 fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier) {
@@ -53,27 +55,48 @@ fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier) {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
     val particles = remember(sky, weather.precipitationMm) { Particles(sky, weather.precipitationMm) }
-    // 経過時間 [秒]。描くとき（draw）だけで読むので、毎コマ描き直しても画面の部品は作り直さない
-    val time = remember { mutableFloatStateOf(0f) }
-    if (!reduceMotion) {
-        LaunchedEffect(Unit) {
-            val start = withFrameNanos { it }
-            while (true) withFrameNanos { time.floatValue = (it - start) / 1e9f }
-        }
-    }
     // 晴れのときだけ、スマホの傾きで太陽ときらめきを少し動かす（天気アプリと同じ）。動きを減らす設定なら動かさない
     val tilt = rememberTilt(enabled = sky == Sky.CLEAR && !reduceMotion)
-    Canvas(modifier) { particles.draw(this, time.floatValue, tilt.value) }
+    // 経過時間 [秒] と傾き。描くとき（draw）だけで読むので、描き直しても画面の部品は作り直さない。
+    // 傾きはセンサーが変わるたびではなく、次に描き直すときに一緒に入れる（描き直しの回数を増やさない）
+    val frame = remember { mutableStateOf(Frame(0f, Offset.Zero)) }
+    if (!reduceMotion) {
+        val minNanos = if (sky.isSlow) SLOW_FRAME_NANOS else FAST_FRAME_NANOS
+        LaunchedEffect(minNanos) {
+            val start = withFrameNanos { it }
+            var shown = start
+            while (true) withFrameNanos { now ->
+                if (now - shown >= minNanos - FRAME_SLACK_NANOS) {
+                    frame.value = Frame((now - start) / 1e9f, tilt.value)
+                    shown = now
+                }
+            }
+        }
+    }
+    Canvas(modifier.graphicsLayer()) { frame.value.let { particles.draw(this, it.time, it.tilt) } }
 }
 
+/** 描き直す 1 回分の、経過時間 [秒] とスマホの傾き */
+private class Frame(val time: Float, val tilt: Offset)
+
+/** ゆっくり動く空（くもり・霧・晴れ）。1 秒に 30 回描けば十分なめらかに見える */
+private val Sky.isSlow: Boolean get() = this == Sky.CLOUDY || this == Sky.FOG || this == Sky.CLEAR
+
+/** 描き直しの間隔の下限：ゆっくりな空は 1/30 秒、雨・雪は 1/60 秒 */
+private const val SLOW_FRAME_NANOS = 1_000_000_000L / 30
+private const val FAST_FRAME_NANOS = 1_000_000_000L / 60
+
+/** 画面の描き替えの時刻は少しずれるので、間隔をこれだけ短く見る（ちょうど 1/60 秒ごとの画面で 1 回飛ばしにならないように） */
+private const val FRAME_SLACK_NANOS = 2_000_000L
+
 /**
- * スマホの傾き（-1〜1 の x・y。まっすぐ持つと 0 付近）。重力センサーの値をなめらかにして返す。
- * 使わないとき（[enabled] が false）はセンサーを聞かない（電池のため）
+ * スマホの傾き（-1〜1 の x・y。まっすぐ持つと 0 付近）。重力センサーの値をなめらかにして入れておく。
+ * 読んでも描き直しは起きない（描き直すときに読む）。使わないとき（[enabled] が false）はセンサーを聞かない（電池のため）
  */
 @Composable
-private fun rememberTilt(enabled: Boolean): State<Offset> {
+private fun rememberTilt(enabled: Boolean): Tilt {
     val context = LocalContext.current
-    val tilt = remember { mutableStateOf(Offset.Zero) }
+    val tilt = remember { Tilt() }
     DisposableEffect(enabled) {
         val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         val sensor = manager?.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -95,6 +118,11 @@ private fun rememberTilt(enabled: Boolean): State<Offset> {
     return tilt
 }
 
+/** 傾きの入れ物。センサーも描き直しも画面のスレッドで動くので、ただの変数でよい */
+private class Tilt {
+    var value: Offset = Offset.Zero
+}
+
 /** 雨粒・雪の粒などの、動かない値（位置の種・奥行き）。毎コマの位置は時刻から計算する */
 private class Particles(private val sky: Sky, precipitationMm: Double) {
     private val count: Int = when (sky) {
@@ -110,6 +138,12 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
     private val x0 = FloatArray(count) { random.nextFloat() }
     private val phase = FloatArray(count) { random.nextFloat() }
     private val depth = FloatArray(count) { random.nextFloat() }
+
+    /** 雲を描く順（奥から）。毎コマ並べ替えないように、最初に決めておく */
+    private val backToFront: IntArray = (0 until count).sortedBy { depth[it] }.toIntArray()
+
+    /** 光の筋・六角形の形を入れる入れ物（毎コマ作り直さないで使い回す） */
+    private val path = Path()
 
     fun draw(scope: DrawScope, t: Float, tilt: Offset = Offset.Zero) = with(scope) {
         when (sky) {
@@ -256,7 +290,8 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             val angle = Math.toRadians((i * 360.0 / RAY_COUNT) + spin + (hash(i, 40) - 0.5f) * 10f)
             val length = disc * lerp(4.5f, 8f, hash(i, 41)) * (0.9f + 0.1f * sin(t * 0.7f + i))
             val half = Math.toRadians(lerp(0.6f, 1.3f, hash(i, 42)).toDouble())
-            val ray = Path().apply {
+            val ray = path.apply {
+                reset()
                 moveTo(sun.x + cos(angle - half).toFloat() * disc * 0.5f, sun.y + sin(angle - half).toFloat() * disc * 0.5f)
                 lineTo(sun.x + cos(angle).toFloat() * length, sun.y + sin(angle).toFloat() * length)
                 lineTo(sun.x + cos(angle + half).toFloat() * disc * 0.5f, sun.y + sin(angle + half).toFloat() * disc * 0.5f)
@@ -321,7 +356,8 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             val r = f.radiusDp.dp.toPx()
             val a = f.alpha * (0.85f + 0.15f * sin(t * 0.5f + k))
             if (f.hexagon) {
-                val hex = Path().apply {
+                val hex = path.apply {
+                    reset()
                     for (n in 0 until 6) {
                         val ang = Math.toRadians(30.0 + n * 60.0)
                         val p = Offset(c.x + cos(ang).toFloat() * r, c.y + sin(ang).toFloat() * r)
@@ -361,8 +397,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             ),
         )
         // 奥の雲から描く
-        val order = (0 until count).sortedBy { depth[it] }
-        for (i in order) {
+        for (i in backToFront) {
             val d = depth[i]
             val scale = lerp(55f, 120f, d).dp.toPx() // 雲の大きさ
             val speed = lerp(4f, 14f, d).dp.toPx() // 1 秒に流れる距離

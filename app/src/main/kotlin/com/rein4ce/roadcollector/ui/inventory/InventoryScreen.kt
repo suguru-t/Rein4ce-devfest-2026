@@ -91,6 +91,7 @@ import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
+import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
@@ -535,6 +536,8 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     fontSize = 12.sp,
                     color = Fieldbook.Muted,
                 )
+                // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+                if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
             }
         },
         confirmButton = {
