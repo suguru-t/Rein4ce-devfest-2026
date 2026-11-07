@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.physics.PartGeometry
+import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.svg.TowerSvg
 import java.awt.Color
 import java.awt.RenderingHints
@@ -39,7 +40,7 @@ object TowerPng {
         System.setProperty("java.awt.headless", "true")
     }
 
-    fun render(tower: Tower, widthPx: Int = WIDTH, heightPx: Int = HEIGHT, platformWidth: Double = 1.4): ByteArray {
+    fun render(tower: Tower, widthPx: Int = WIDTH, heightPx: Int = HEIGHT, platformWidth: Double = StackWorld.PLATFORM_WIDTH): ByteArray {
         val img = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
         try {
@@ -69,7 +70,7 @@ object TowerPng {
 
             // 台
             g.color = PLATFORM
-            g.fill(RoundRectangle2D.Double(sx(-platformWidth / 2), sy(0.0), platformWidth * scale, 0.3 * scale, 8.0, 8.0))
+            g.fill(RoundRectangle2D.Double(sx(-platformWidth / 2), sy(0.0), platformWidth * scale, StackWorld.PLATFORM_THICKNESS * scale, 8.0, 8.0))
 
             // パーツ
             for (pl in tower.placements) {

@@ -23,7 +23,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,9 +43,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,11 +67,36 @@ class GalleryViewModel : ViewModel() {
     var state: State by mutableStateOf(State.Loading)
         private set
 
+    /**
+     * 絵を描くためのタワーの中身（id → Tower）。一覧の JSON には置き方が入っていないので、カードが見えたときに 1 基ずつ取る。
+     * タワーは保存後に変わらないので、一度取れたら再読み込みでも捨てない
+     */
+    val sketches = mutableStateMapOf<String, Tower>()
+    private val fetching = mutableSetOf<String>()
+
+    /**
+     * 取れなかったタワーの id。スクロールで何度もカードが見えるたびに取り直すと、壊れた 1 基のせいで
+     * 10 秒待ちの通信を繰り返すことになるので、次の「再読み込み」まで取り直さない
+     */
+    private val failed = mutableSetOf<String>()
+
     init {
         refresh()
     }
 
+    /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
+    fun loadSketch(id: String) {
+        if (id in sketches || id in failed || !fetching.add(id)) return
+        viewModelScope.launch {
+            runCatching { ApiClient.getTower(id) }
+                .onSuccess { sketches[id] = it }
+                .onFailure { failed.add(id) }
+            fetching.remove(id)
+        }
+    }
+
     fun refresh() {
+        failed.clear()
         state = State.Loading
         viewModelScope.launch {
             state = runCatching { ApiClient.listTowers() }
@@ -147,8 +176,11 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
                     contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
                 ) {
                     itemsIndexed(towers, key = { _, t -> t.id }, contentType = { _, _ -> "tower" }) { i, t ->
+                        // 絵の中身はカードが見えたときに取る（一覧の JSON には入っていない）
+                        LaunchedEffect(t.id) { vm.loadSketch(t.id) }
                         TowerCard(
                             tower = t,
+                            sketch = vm.sketches[t.id],
                             rank = i + 1,
                             ratio = t.height / tallest,
                             onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
@@ -160,9 +192,12 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
     }
 }
 
-/** タワー 1 基ぶんの紙片：順位、高さ（主役）、高さの目盛り、パーツ数・作者・日時 */
+/**
+ * タワー 1 基ぶんの紙片：順位、タワーの絵、高さ（主役）、高さの目盛り、パーツ数・作者・日時。
+ * [sketch] はまだ取れていなければ null で、絵の場所に破線の枠だけ出す（取れたら差し替わる）
+ */
 @Composable
-private fun TowerCard(tower: TowerSummary, rank: Int, ratio: Float, onClick: () -> Unit) {
+private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, ratio: Float, onClick: () -> Unit) {
     val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
@@ -175,7 +210,7 @@ private fun TowerCard(tower: TowerSummary, rank: Int, ratio: Float, onClick: () 
             .semantics(mergeDescendants = true) {
                 contentDescription = "$rank 位。高さ $heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
             }
-            .padding(start = 10.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 10.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
     ) {
         // 順位。9 位までは選んだ順の ①② と同じ丸数字、10 位からは丸数字がないので測量の字で数字だけ（幅 36dp に収める）
         if (rank <= 9) {
@@ -198,6 +233,18 @@ private fun TowerCard(tower: TowerSummary, rank: Int, ratio: Float, onClick: () 
                 modifier = Modifier.width(36.dp),
             )
         }
+        // タワーの絵（野帳の図）。コレクションのカードと同じ「紙の上の図」の見せ方
+        Box(
+            modifier = Modifier
+                .size(width = 56.dp, height = 64.dp)
+                // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
+                .clip(SketchShape)
+                .background(Fieldbook.Paper, SketchShape)
+                .then(if (sketch == null) Modifier.dashedOutline(Fieldbook.CardEdge, corner = 3.dp) else Modifier.border(1.dp, Fieldbook.CardEdge, SketchShape)),
+        ) {
+            if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(4.dp))
+        }
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(heightText, fontFamily = Fieldbook.Data, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, color = Fieldbook.Ink)
@@ -236,6 +283,9 @@ private data class StatusLine(val text: String, val color: Color)
 
 /** タワー 1 基ぶんの紙片の形（手持ちのカードと同じ角丸） */
 private val CardShape = RoundedCornerShape(4.dp)
+
+/** 紙片の中のタワーの絵の枠 */
+private val SketchShape = RoundedCornerShape(3.dp)
 
 /** 状態行に出すサーバ名。URL 全体は長いのでホスト名だけ */
 private fun serverHost(): String = ApiClient.baseUrl.removePrefix("https://").removePrefix("http://").substringBefore('/')
