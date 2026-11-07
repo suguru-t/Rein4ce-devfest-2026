@@ -46,24 +46,29 @@ import kotlin.random.Random
  *
  * 電池のため、描き直す回数を抑える：ゆっくり動く空（くもり・霧・晴れ）は 1 秒に 30 回、雨・雪は 60 回まで
  * （画面が 1 秒に 120 回描ける機種でも、それ以上は描かない）。背景だけを別の層にして、描き直すときに方眼紙や画面の部品は描き直さない。
+ *
+ * @param still true なら動かさない（その時点の絵のまま止め、傾きのセンサーも止める）。記録中に GPS と一緒に電池を使わないため。
+ *   false に戻ると、止めたところから続けて動く
  */
 @Composable
-fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier) {
+fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier, still: Boolean = false) {
     val sky = weather?.sky ?: return
     val context = LocalContext.current
     val reduceMotion = remember {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
+    val animate = !reduceMotion && !still
     val particles = remember(sky, weather.precipitationMm) { Particles(sky, weather.precipitationMm) }
-    // 晴れのときだけ、スマホの傾きで太陽ときらめきを少し動かす（天気アプリと同じ）。動きを減らす設定なら動かさない
-    val tilt = rememberTilt(enabled = sky == Sky.CLEAR && !reduceMotion)
+    // 晴れのときだけ、スマホの傾きで太陽ときらめきを少し動かす（天気アプリと同じ）。止めているときは動かさない
+    val tilt = rememberTilt(enabled = sky == Sky.CLEAR && animate)
     // 経過時間 [秒] と傾き。描くとき（draw）だけで読むので、描き直しても画面の部品は作り直さない。
     // 傾きはセンサーが変わるたびではなく、次に描き直すときに一緒に入れる（描き直しの回数を増やさない）
     val frame = remember { mutableStateOf(Frame(0f, Offset.Zero)) }
-    if (!reduceMotion) {
+    if (animate) {
         val minNanos = if (sky.isSlow) SLOW_FRAME_NANOS else FAST_FRAME_NANOS
         LaunchedEffect(minNanos) {
-            val start = withFrameNanos { it }
+            // 止めていた後なら、止めたときの時刻から続ける（絵が飛ばないように）
+            val start = withFrameNanos { it } - (frame.value.time * 1e9f).toLong()
             var shown = start
             while (true) withFrameNanos { now ->
                 if (now - shown >= minNanos - FRAME_SLACK_NANOS) {
