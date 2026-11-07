@@ -25,7 +25,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 @Composable
 internal fun ColumnScope.AboutContent() {
     Text(
-        "ミチツミ（道の採集家）",
+        "ミチツミ",
         fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
         color = Fieldbook.Ink,
