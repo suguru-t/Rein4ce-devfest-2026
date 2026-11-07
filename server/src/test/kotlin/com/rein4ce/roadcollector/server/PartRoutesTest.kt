@@ -15,7 +15,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -26,12 +28,20 @@ import org.junit.Test
  */
 class PartRoutesTest {
 
-    /** 決まった動きをする偽物。受け取ったパーツを覚えておく */
+    /** 決まった動きをする偽物。受け取ったパーツと、聞き直されたときの前の案を覚えておく */
     private class FakePartNamer(private val answer: suspend (Part) -> String?) : PartNamer {
         var received: Part? = null
+        var calls = 0
+        var retriedWith: String? = null
         override suspend fun name(part: Part): String? {
             received = part
+            calls++
             return answer(part)
+        }
+
+        override suspend fun retryName(part: Part, tooLong: String): String? {
+            retriedWith = tooLong
+            return name(part)
         }
     }
 
@@ -89,14 +99,38 @@ class PartRoutesTest {
     }
 
     @Test
-    fun `長すぎる名前は 10 文字に切り詰めて返す`() = testApplication {
-        application { module(store = MemoryTowerStore(), namer = FakePartNamer { "とてもとても長い名前の道でございます" }) }
+    fun `長すぎる名前は切り詰めずに 1 回だけ聞き直し、短くなれば 200`() = testApplication {
+        val answers = ArrayDeque(listOf("夕暮れの七曲りブロック", "夕暮れの七曲り"))
+        val namer = FakePartNamer { answers.removeFirst() }
+        application { module(store = MemoryTowerStore(), namer = namer) }
 
         val res = client.postName(zigzag.json())
 
         assertEquals(HttpStatusCode.OK, res.status)
-        val name = AppJson.decodeFromString(PartNameResponse.serializer(), res.bodyAsText()).name
-        assertEquals("とてもとても長い名前", name)
+        assertEquals("夕暮れの七曲り", AppJson.decodeFromString(PartNameResponse.serializer(), res.bodyAsText()).name)
+        assertEquals(2, namer.calls)
+        assertEquals("夕暮れの七曲りブロック", namer.retriedWith) // 前の案を見せて聞き直す
+    }
+
+    @Test
+    fun `聞き直しても長ければ、途中で切った名前は返さず 503`() = testApplication {
+        val namer = FakePartNamer { "とてもとても長い名前の道でございます" }
+        application { module(store = MemoryTowerStore(), namer = namer) }
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.postName(zigzag.json()).status)
+        assertEquals(2, namer.calls) // 聞き直しは 1 回だけ
+    }
+
+    @Test
+    fun `ちょうど 10 文字なら聞き直さない`() = testApplication {
+        val namer = FakePartNamer { "ちょうど十文字の名前" }
+        application { module(store = MemoryTowerStore(), namer = namer) }
+
+        val res = client.postName(zigzag.json())
+
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("ちょうど十文字の名前", AppJson.decodeFromString(PartNameResponse.serializer(), res.bodyAsText()).name)
+        assertEquals(1, namer.calls)
     }
 
     @Test
@@ -135,11 +169,13 @@ class PartRoutesTest {
     }
 
     @Test
-    fun `絵文字を途中で切らない`() {
-        // 絵文字（サロゲートペア）を含めて 11 文字 → 10 文字に切っても壊れない
-        val cut = cleanName("🌙月夜の長い長い小道です")!!
-        assertEquals(10, cut.codePointCount(0, cut.length))
-        assertEquals("🌙月夜の長い長い小道", cut)
+    fun `文字数は絵文字も 1 文字と数える`() {
+        // 絵文字（サロゲートペア）は Java の文字（char）では 2 つぶんだが、1 文字として数える（アプリの数え方と同じ）
+        assertEquals(10, nameLength("🌙月夜の長い長い小道"))
+        assertFalse(isTooLong("🌙月夜の長い長い小道"))
+        assertTrue(isTooLong("🌙月夜の長い長い小道です"))
+        // 長くても cleanName は切らない（聞き直すか 503 にするのは nameSafely）
+        assertEquals("🌙月夜の長い長い小道です", cleanName("🌙月夜の長い長い小道です"))
     }
 }
 
