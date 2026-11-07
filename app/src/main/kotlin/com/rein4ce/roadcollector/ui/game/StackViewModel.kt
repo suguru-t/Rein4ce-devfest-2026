@@ -7,9 +7,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -19,7 +22,9 @@ import kotlinx.coroutines.launch
  * Settling … 落下中。全部が静止したら次へ（落ちたパーツは消える）
  * Finished … 置き切った。高さ確定
  */
-class StackViewModel : ViewModel() {
+class StackViewModel(
+    private val postTower: suspend (Tower) -> TowerCreated = { ApiClient.postTower(it) },
+) : ViewModel() {
 
     enum class Phase { Idle, Placing, Settling, Finished }
 
@@ -29,6 +34,15 @@ class StackViewModel : ViewModel() {
     var sessionParts: List<Part> = emptyList()
         private set
     private var queue: List<Part> = emptyList()
+
+    var runId: Long by mutableStateOf(0L)
+        private set
+    private var handledRequestId: Long? = null
+    private var completedTower: Tower? = null
+    private var uploadJob: Job? = null
+
+    var startMessage: String? by mutableStateOf(null)
+        private set
 
     var phase: Phase by mutableStateOf(Phase.Idle)
         private set
@@ -55,14 +69,11 @@ class StackViewModel : ViewModel() {
     var uploading: Boolean by mutableStateOf(false)
         private set
 
-    /**
-     * 送信に成功したタワー。同じタワーを二度送らないために覚えておく
-     * （送るたびにサーバは新しい id で保存するので、2 回押すと「みんな」に同じタワーが 2 基並ぶ）
-     */
-    private var uploadedTower: Tower? by mutableStateOf(null)
+    /** #39の一回送信をrun単位で管理し、古い送信結果を次のゲームへ持ち越さない。 */
+    private var uploadedRunId: Long? by mutableStateOf(null)
 
     /** いま完成しているタワーが送信済みか。送信済みならボタンを押せなくする */
-    val uploaded: Boolean get() = uploadedTower != null && uploadedTower == GameSession.lastTower
+    val uploaded: Boolean get() = completedTower != null && uploadedRunId == runId
 
     private var settleTimer = 0.0
 
@@ -71,18 +82,53 @@ class StackViewModel : ViewModel() {
     /** ゴーストを出す高さ [m]（タワーの上 1.5 m） */
     fun spawnY(): Float = height + 1.5f
 
-    fun start(parts: List<Part>) {
+    /** 一覧の通知は開始要求ではない。初回だけ先頭5個で始める。 */
+    fun updateInventory(inventory: List<Part>, isLoaded: Boolean, request: GameSession.StartRequest?) {
+        if (!isLoaded) return
+        if (request != null) {
+            if (handledRequestId == request.id) return
+            handledRequestId = request.id
+            startResolved(request.partIds, inventory)
+        } else if (runId == 0L && inventory.isNotEmpty()) {
+            startResolved(inventory.take(GameSession.MAX_PARTS).map { it.id }, inventory)
+        }
+    }
+
+    fun restart(inventory: List<Part>, isLoaded: Boolean) {
+        if (!isLoaded) return
+        startResolved(sessionParts.map { it.id }, inventory)
+    }
+
+    private fun startResolved(ids: List<String>, inventory: List<Part>) {
+        val byId = inventory.associateBy { it.id }
+        val parts = ids.distinct().take(GameSession.MAX_PARTS).mapNotNull { byId[it] }
+        if (parts.isEmpty()) {
+            startMessage = "選んだパーツはコレクションにありません。パーツを選び直してください。"
+            return
+        }
+        start(parts)
+    }
+
+    fun dismissStartMessage() {
+        startMessage = null
+    }
+
+    private fun start(parts: List<Part>) {
+        runId++
+        uploadJob?.cancel()
+        uploadJob = null
+        uploading = false
+        completedTower = null
+        startMessage = null
         world = StackWorld()
-        sessionParts = parts
-        queue = parts
+        sessionParts = parts.toList()
+        queue = sessionParts
         height = 0f
         fallenCount = 0
         uploadMessage = null
         shapes = world.renderShapes()
         nextPart()
     }
-
-    fun restart() = start(sessionParts)
 
     private fun nextPart() {
         current = queue.firstOrNull()
@@ -92,7 +138,7 @@ class StackViewModel : ViewModel() {
         ghostAngleDeg = 0f
         if (current == null) {
             phase = Phase.Finished
-            GameSession.lastTower = Tower(
+            completedTower = Tower(
                 parts = world.placedParts,
                 placements = world.placements(),
                 height = height,
@@ -142,19 +188,24 @@ class StackViewModel : ViewModel() {
     }
 
     fun upload() {
-        val tower = GameSession.lastTower ?: return
-        if (uploading || tower == uploadedTower) return // 送信中、または同じタワーを送信済みなら何もしない
-        viewModelScope.launch {
-            uploading = true
-            uploadMessage = runCatching { ApiClient.postTower(tower) }
-                .fold(
-                    onSuccess = {
-                        uploadedTower = tower
-                        "送信しました：${it.url}"
-                    },
-                    onFailure = { "送信できませんでした（${ApiClient.baseUrl}）：${it.message}" },
-                )
-            uploading = false
+        val tower = completedTower ?: return
+        if (phase != Phase.Finished || uploading || uploaded) return
+        val uploadingRunId = runId
+        uploading = true
+        uploadJob = viewModelScope.launch {
+            try {
+                val response = postTower(tower)
+                if (runId == uploadingRunId) {
+                    uploadedRunId = uploadingRunId
+                    uploadMessage = "送信しました：${response.url}"
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (runId == uploadingRunId) uploadMessage = "送信できませんでした：${e.message}"
+            } finally {
+                if (runId == uploadingRunId) uploading = false
+            }
         }
     }
 

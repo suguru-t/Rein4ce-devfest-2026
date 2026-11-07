@@ -131,14 +131,13 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
     val sampleCount = parts.count { SampleParts.byId(it.id) != null }
-    val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
+    val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.startRequest?.partIds.orEmpty()) } }
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
     val validSelected = selectedIds.filter { id -> parts.any { it.id == id } }
     // 選択中か（積むパーツを選んでいる）。前回の選択は残してあり、「選択」を押すとそのまま出る。
     // 「キャンセル」か戻るで、選択を消して普段に戻る（写真アプリと同じ）。
-    // ただし消すのはこの画面の選択（selectedIds）だけ。積む画面に渡した選択（GameSession.selected）には触らない
-    // （触ると、積んでいる途中のゲームが最初からやり直しになる）。なので、キャンセルしたあと別のタブから戻ると、
-    // selectedIds が GameSession.selected から作り直されて、「選択」で積む画面に渡した選択がまた出る
+    // キャンセルはこの画面の選択だけを消し、新しい開始要求を発行しない。
+    // 別のタブから戻ったときは、前回の開始要求のIDを選択の初期値にする。
     var selecting by remember { mutableStateOf(false) }
     fun cancelSelecting() {
         selectedIds.clear()
@@ -288,8 +287,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     editing -> editing = false
                     !selecting -> selecting = true
                     else -> {
-                        val chosen = validSelected.mapNotNull { id -> parts.firstOrNull { it.id == id } }
-                        GameSession.selected = chosen
+                        GameSession.requestStart(validSelected)
                         onGoStack()
                     }
                 }
@@ -343,8 +341,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             part = part,
             onConfirm = {
                 repository.remove(part.id)
-                // この画面の選択からは外す。積む画面に渡した選択（GameSession.selected）には触らない。
-                // 触ると、積んでいる途中のゲームが最初からやり直しになるため
+                // 選択draftだけから外す。進行中のrunは保持し、次の開始時に現在のIDを解決する。
                 selectedIds.remove(part.id)
                 pendingDelete = null
             },

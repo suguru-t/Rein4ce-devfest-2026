@@ -3,19 +3,23 @@ package com.rein4ce.roadcollector.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.rein4ce.roadcollector.core.model.Part
-import com.rein4ce.roadcollector.core.model.Tower
 
 /**
- * 画面をまたいで渡す「いま遊んでいるもの」。
- * 手持ち画面で選んだパーツ → 積む画面、完成したタワー → 送信、など。
+ * コレクションから積む画面へ渡す開始要求。
+ * Partの古い値ではなくIDだけを渡し、開始時に現在のコレクションから解決する。
  */
 object GameSession {
-    /** 手持ち画面で選んだパーツ（最大 5 個） */
-    var selected: List<Part> by mutableStateOf(emptyList())
+    data class StartRequest(val id: Long, val partIds: List<String>)
 
-    /** 直近に完成したタワー */
-    var lastTower: Tower? by mutableStateOf(null)
+    var startRequest: StartRequest? by mutableStateOf(null)
+        private set
+
+    private var nextRequestId = 0L
+
+    /** 同じ素材を選び直した場合も、新しい開始操作として区別する。 */
+    fun requestStart(partIds: List<String>) {
+        startRequest = StartRequest(++nextRequestId, partIds.distinct().take(MAX_PARTS))
+    }
 
     const val MAX_PARTS = 5
 }
