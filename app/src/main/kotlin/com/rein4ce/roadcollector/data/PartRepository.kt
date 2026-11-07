@@ -6,6 +6,7 @@ import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -52,6 +53,10 @@ class PartRepository(
      */
     private val placesFile = File(file.parentFile, "${file.nameWithoutExtension}_places.json")
     private val placesSerializer = MapSerializer(String.serializer(), PartPlace.serializer())
+
+    /** パーツを歩いたときの天気（id → 天気）の保存先。道の色と背景の雨・雪に使う。場所と同じく、スマホの中だけに持つ */
+    private val weatherFile = File(file.parentFile, "${file.nameWithoutExtension}_weather.json")
+    private val weatherSerializer = MapSerializer(String.serializer(), WalkWeather.serializer())
     private val writeLock = Mutex()
 
     private val _parts = MutableStateFlow<List<Part>>(emptyList())
@@ -72,6 +77,14 @@ class PartRepository(
      * 見本の場所はここには無く、[placeOf] が SampleParts から返す
      */
     val places: StateFlow<Map<String, PartPlace>> = _places
+
+    private val _weather = MutableStateFlow<Map<String, WalkWeather>>(emptyMap())
+
+    /**
+     * 採集したパーツを歩いたときの天気（id → 天気）。天気を取る前のパーツや、場所の無いパーツは入っていない。
+     * 見本の天気はここには無く、[weatherOf] が SampleParts から返す。天気を取りに行くのは WeatherService
+     */
+    val weather: StateFlow<Map<String, WalkWeather>> = _weather
 
     private val _isLoaded = MutableStateFlow(false)
 
@@ -136,6 +149,19 @@ class PartRepository(
         // ファイルと違ったら書き直す。読み込み前に足された場所を残すためと、手持ちに無いパーツの場所
         // （parts.json が壊れて見本から作り直したときなど）を、ファイルからも消すため（歩いた場所をスマホに残し続けない）
         if (changed) persistPlaces()
+
+        // 歩いたときの天気。場所と同じ決まりで、手持ちに無いパーツの天気は捨てる
+        val weatherFromFile: Map<String, WalkWeather> = runCatching {
+            if (weatherFile.exists()) AppJson.decodeFromString(weatherSerializer, weatherFile.readText()) else emptyMap()
+        }.onFailure { logError("${weatherFile.name} could not be read, ignoring", it) }.getOrDefault(emptyMap())
+        var weatherChanged = false
+        _weather.update { early ->
+            val have = _parts.value.mapTo(HashSet()) { it.id }
+            val kept = (weatherFromFile + early).filterKeys { it in have }
+            weatherChanged = kept != weatherFromFile
+            kept
+        }
+        if (weatherChanged) persistWeather()
     }
 
     /**
@@ -157,6 +183,19 @@ class PartRepository(
      */
     fun placeOf(id: String, saved: Map<String, PartPlace> = _places.value): PartPlace? = saved[id] ?: SampleParts.places[id]
 
+    /**
+     * そのパーツを歩いたときの天気。保存した天気（[weather]）に無ければ見本の天気。まだ分からないパーツは null。
+     * 画面は [weather] を見ていて、変わったら描き直すので、そのとき見ている値を [saved] に渡す
+     */
+    fun weatherOf(id: String, saved: Map<String, WalkWeather> = _weather.value): WalkWeather? = saved[id] ?: SampleParts.weather[id]
+
+    /** 天気を保存する（WeatherService が取ってきたとき）。もう手持ちに無いパーツなら何もしない */
+    fun setWeather(id: String, weather: WalkWeather) {
+        if (_parts.value.none { it.id == id }) return
+        _weather.update { it + (id to weather) }
+        persistWeather()
+    }
+
     fun remove(id: String) {
         _parts.update { list -> list.filterNot { it.id == id } }
         persist()
@@ -167,6 +206,10 @@ class PartRepository(
         if (id in _places.value) {
             _places.update { it - id }
             persistPlaces()
+        }
+        if (id in _weather.value) {
+            _weather.update { it - id }
+            persistWeather()
         }
     }
 
@@ -227,6 +270,8 @@ class PartRepository(
     private fun persistOrder() = save(orderFile) { AppJson.encodeToString(orderSerializer, _order.value) }
 
     private fun persistPlaces() = save(placesFile) { AppJson.encodeToString(placesSerializer, _places.value) }
+
+    private fun persistWeather() = save(weatherFile) { AppJson.encodeToString(weatherSerializer, _weather.value) }
 
     /**
      * ファイルに保存する（parts.json も、並び順のファイルも同じ書き方）。
