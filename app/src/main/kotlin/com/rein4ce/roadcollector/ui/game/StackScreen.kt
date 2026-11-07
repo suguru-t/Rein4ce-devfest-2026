@@ -83,6 +83,8 @@ fun StackScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // 読み込み後は、VM が「始める」か「startMessage を出す」のどちらかになる。
+            // パーツがあって案内もないのは、上の LaunchedEffect が動く前の一瞬だけ
             if (!isLoaded || (inventory.isNotEmpty() && vm.startMessage == null)) {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(8.dp))
@@ -104,7 +106,7 @@ fun StackScreen(
                 TextButton(onClick = {
                     vm.dismissStartMessage()
                     onGoInventory()
-                }) { Text("選び直す") }
+                }) { Text("コレクションへ") }
             },
             dismissButton = {
                 TextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
@@ -147,10 +149,7 @@ fun StackScreen(
                         Button(onClick = { vm.place() }) { Text("置く") }
                         OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
-                    TextButton(
-                        onClick = { vm.restart(repository.parts.value, repository.isLoaded.value) },
-                        enabled = isLoaded,
-                    ) { Text("やり直す") }
+                    TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
                 }
                 StackViewModel.Phase.Settling -> {
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = Ink)
@@ -166,10 +165,7 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = { vm.restart(repository.parts.value, repository.isLoaded.value) },
-                                    enabled = isLoaded,
-                                ) { Text("もう一度") }
+                                Button(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
                                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                                 OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                                     when {

@@ -12,7 +12,6 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -23,6 +22,8 @@ import kotlinx.coroutines.launch
  * Finished … 置き切った。高さ確定
  */
 class StackViewModel(
+    /** 送信に失敗したとき、画面に出す接続先。デモ端末で接続先の設定ミスを見分けるため */
+    private val serverUrl: () -> String = { ApiClient.baseUrl },
     private val postTower: suspend (Tower) -> TowerCreated = { ApiClient.postTower(it) },
 ) : ViewModel() {
 
@@ -38,8 +39,13 @@ class StackViewModel(
     var runId: Long by mutableStateOf(0L)
         private set
     private var handledRequestId: Long? = null
+
+    /** いまのゲームが、選択なし（コレクションの先頭から）で始めたものか */
+    private var implicitRun = false
+
+    /** 選んだ直後の要求が解決できなかった。別のパーツで勝手に始めず、選び直しを待つ */
+    private var waitingForReselect = false
     private var completedTower: Tower? = null
-    private var uploadJob: Job? = null
 
     var startMessage: String? by mutableStateOf(null)
         private set
@@ -82,41 +88,67 @@ class StackViewModel(
     /** ゴーストを出す高さ [m]（タワーの上 1.5 m） */
     fun spawnY(): Float = height + 1.5f
 
-    /** 一覧の通知は開始要求ではない。初回だけ先頭5個で始める。 */
+    /**
+     * コレクションの通知を受け取る。一覧が変わっただけではゲームを始め直さない。
+     *
+     * - 新しい開始要求：IDを今のコレクションで解決して始める（要求ごとに1回だけ）
+     * - 要求がない、または前に遊んだ要求のパーツがすべて消えた：まだ一度も始めていなければ、先頭の最大5個で始める
+     */
     fun updateInventory(inventory: List<Part>, isLoaded: Boolean, request: GameSession.StartRequest?) {
         if (!isLoaded) return
-        if (request != null) {
-            if (handledRequestId == request.id) return
+        if (request != null && request.id != handledRequestId) {
             handledRequestId = request.id
-            startResolved(request.partIds, inventory)
-        } else if (runId == 0L && inventory.isNotEmpty()) {
-            startResolved(inventory.take(GameSession.MAX_PARTS).map { it.id }, inventory)
+            val parts = resolve(request.partIds, inventory)
+            if (parts.isNotEmpty()) {
+                start(parts, implicit = false)
+                GameSession.markStarted(request.id)
+                return
+            }
+            if (!request.started) {
+                // 選んだ直後の要求：別のパーツで代わりに始めない（#9）
+                waitingForReselect = true
+                startMessage = MESSAGE_SELECTION_MISSING
+                return
+            }
+            // 前に遊んだ要求（積む画面が作り直された）で、パーツがすべて消えていた：選択なしと同じに扱う
+        }
+        if (runId == 0L && !waitingForReselect && inventory.isNotEmpty()) {
+            start(inventory.take(GameSession.MAX_PARTS), implicit = true)
         }
     }
 
-    fun restart(inventory: List<Part>, isLoaded: Boolean) {
-        if (!isLoaded) return
-        startResolved(sessionParts.map { it.id }, inventory)
-    }
-
-    private fun startResolved(ids: List<String>, inventory: List<Part>) {
-        val byId = inventory.associateBy { it.id }
-        val parts = ids.distinct().take(GameSession.MAX_PARTS).mapNotNull { byId[it] }
+    /**
+     * 「やり直す」「もう一度」。選んで始めたゲームは同じパーツの最新の値で、
+     * 選択なしで始めたゲームは今のコレクションの先頭の最大5個で始め直す。
+     * 使えるパーツがなければ、いまのゲームはそのままにして案内を出す。
+     */
+    fun restart(inventory: List<Part>) {
+        if (phase == Phase.Idle) return
+        val ids = if (implicitRun) inventory.map { it.id } else sessionParts.map { it.id }
+        val parts = resolve(ids, inventory)
         if (parts.isEmpty()) {
-            startMessage = "選んだパーツはコレクションにありません。パーツを選び直してください。"
+            startMessage = if (implicitRun) MESSAGE_COLLECTION_EMPTY else MESSAGE_RETRY_MISSING
             return
         }
-        start(parts)
+        start(parts, implicitRun)
+    }
+
+    /** IDを今のコレクションのPartに置き換える。消えたものは除き、重複を除いて最大5個、元の順番のまま */
+    private fun resolve(ids: List<String>, inventory: List<Part>): List<Part> {
+        val byId = inventory.associateBy { it.id }
+        return ids.distinct().mapNotNull { byId[it] }.take(GameSession.MAX_PARTS)
     }
 
     fun dismissStartMessage() {
         startMessage = null
     }
 
-    private fun start(parts: List<Part>) {
+    private fun start(parts: List<Part>, implicit: Boolean) {
         runId++
-        uploadJob?.cancel()
-        uploadJob = null
+        implicitRun = implicit
+        waitingForReselect = false
+        // 前のゲームの送信は打ち切らない（サーバ側の保存と食い違わないように）。
+        // 結果は runId で照合するので、次のゲームの表示には混ざらない
         uploading = false
         completedTower = null
         startMessage = null
@@ -192,7 +224,7 @@ class StackViewModel(
         if (phase != Phase.Finished || uploading || uploaded) return
         val uploadingRunId = runId
         uploading = true
-        uploadJob = viewModelScope.launch {
+        viewModelScope.launch {
             try {
                 val response = postTower(tower)
                 if (runId == uploadingRunId) {
@@ -202,7 +234,7 @@ class StackViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (runId == uploadingRunId) uploadMessage = "送信できませんでした：${e.message}"
+                if (runId == uploadingRunId) uploadMessage = "送信できませんでした（${serverUrl()}）：${e.message}"
             } finally {
                 if (runId == uploadingRunId) uploading = false
             }
@@ -212,5 +244,9 @@ class StackViewModel(
     companion object {
         private const val MIN_SETTLE_SECONDS = 0.8
         private const val MAX_SETTLE_SECONDS = 6.0
+
+        const val MESSAGE_SELECTION_MISSING = "選んだパーツはコレクションにありません。パーツを選び直してください。"
+        const val MESSAGE_RETRY_MISSING = "このゲームのパーツは、すべてコレクションから削除されています。パーツを選び直してください。"
+        const val MESSAGE_COLLECTION_EMPTY = "コレクションにパーツがありません。"
     }
 }

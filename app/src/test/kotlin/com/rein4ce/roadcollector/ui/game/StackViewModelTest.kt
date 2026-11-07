@@ -8,13 +8,12 @@ import com.rein4ce.roadcollector.data.GameSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.withContext
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,8 +27,13 @@ class StackViewModelTest {
     private val b = a.copy(id = "b")
     private val c = a.copy(id = "c")
 
-    private fun request(id: Long, vararg parts: Part) =
-        GameSession.StartRequest(id, parts.map { it.id })
+    private fun request(id: Long, vararg parts: Part, started: Boolean = false) =
+        GameSession.StartRequest(id, parts.map { it.id }, started)
+
+    @After
+    fun resetSession() {
+        GameSession.resetForTest()
+    }
 
     @Test
     fun `initial start waits for load and takes at most five current parts`() {
@@ -97,7 +101,7 @@ class StackViewModelTest {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a, b, c), true, request(1, b, a, c))
         val renamed = a.copy(name = "after", distanceM = 999)
-        vm.restart(listOf(c, renamed), true)
+        vm.restart(listOf(c, renamed))
         assertEquals(listOf(renamed, c), vm.sessionParts)
         assertEquals(renamed, vm.current)
         assertEquals(2L, vm.runId)
@@ -108,11 +112,35 @@ class StackViewModelTest {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a, b), true, request(1, a))
         vm.dragBy(0.4f)
-        vm.restart(listOf(b), true)
+        vm.restart(listOf(b))
         assertEquals(1L, vm.runId)
         assertEquals(listOf(a), vm.sessionParts)
         assertEquals(0.4f, vm.ghostX, 0.00001f)
-        assertNotNull(vm.startMessage)
+        assertEquals(StackViewModel.MESSAGE_RETRY_MISSING, vm.startMessage)
+    }
+
+    @Test
+    fun `implicit retry takes the current first parts after the original ones were deleted`() {
+        val vm = StackViewModel()
+        val first = (1..5).map { a.copy(id = "first-$it") }
+        vm.updateInventory(first, true, null)
+        val added = a.copy(id = "added")
+        vm.restart(listOf(added))
+        assertEquals(2L, vm.runId)
+        assertEquals(listOf(added), vm.sessionParts)
+        assertNull(vm.startMessage)
+    }
+
+    @Test
+    fun `implicit retry with an empty collection keeps the current game`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true, null)
+        vm.dragBy(0.4f)
+        vm.restart(emptyList())
+        assertEquals(1L, vm.runId)
+        assertEquals(listOf(a), vm.sessionParts)
+        assertEquals(0.4f, vm.ghostX, 0.00001f)
+        assertEquals(StackViewModel.MESSAGE_COLLECTION_EMPTY, vm.startMessage)
     }
 
     @Test
@@ -124,10 +152,36 @@ class StackViewModelTest {
         assertEquals(StackViewModel.Phase.Idle, vm.phase)
         assertEquals(0L, vm.runId)
         assertTrue(vm.sessionParts.isEmpty())
-        assertNotNull(vm.startMessage)
+        assertEquals(StackViewModel.MESSAGE_SELECTION_MISSING, vm.startMessage)
         vm.updateInventory(listOf(b, c), true, request(2, c))
         assertEquals(listOf(c), vm.sessionParts)
         assertNull(vm.startMessage)
+    }
+
+    @Test
+    fun `replayed request whose parts are all gone falls back to automatic start`() {
+        val vm = StackViewModel()
+        val replayed = request(1, a, started = true)
+        vm.updateInventory(emptyList(), true, replayed)
+        assertEquals(StackViewModel.Phase.Idle, vm.phase)
+        assertNull(vm.startMessage)
+        vm.updateInventory(listOf(b, c), true, replayed)
+        assertEquals(1L, vm.runId)
+        assertEquals(listOf(b, c), vm.sessionParts)
+        assertNull(vm.startMessage)
+    }
+
+    @Test
+    fun `starting from a request marks it started for a recreated view model`() {
+        GameSession.requestStart(listOf(a.id))
+        val original = StackViewModel()
+        original.updateInventory(listOf(a), true, GameSession.startRequest)
+        assertTrue(GameSession.startRequest!!.started)
+
+        val recreated = StackViewModel()
+        recreated.updateInventory(listOf(b), true, GameSession.startRequest)
+        assertEquals(listOf(b), recreated.sessionParts)
+        assertNull(recreated.startMessage)
     }
 
     @Test
@@ -165,21 +219,17 @@ class StackViewModelTest {
     }
 
     @Test
-    fun `retry before inventory load does not discard current game`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        vm.restart(emptyList(), false)
-        assertEquals(1L, vm.runId)
-        assertEquals(listOf(a), vm.sessionParts)
-    }
-
-    @Test
-    fun `same selection issues different requests with unique bounded ids`() {
-        GameSession.requestStart(listOf("a", "a", "b", "c", "d", "e", "f"))
+    fun `same selection issues different requests and the start keeps five unique parts in order`() {
+        GameSession.requestStart(listOf("a", "b"))
         val first = GameSession.startRequest!!
-        assertEquals(listOf("a", "b", "c", "d", "e"), first.partIds)
         GameSession.requestStart(first.partIds)
         assertTrue(GameSession.startRequest!!.id > first.id)
+
+        val inventory = (0..6).map { a.copy(id = "p$it") }
+        val vm = StackViewModel()
+        val ids = listOf("p3", "p3", "p1", "p0", "p6", "p5", "p4")
+        vm.updateInventory(inventory, true, GameSession.StartRequest(99, ids))
+        assertEquals(listOf("p3", "p1", "p0", "p6", "p5"), vm.sessionParts.map { it.id })
     }
 
     @Test
@@ -196,12 +246,38 @@ class StackViewModelTest {
             vm.upload()
             runCurrent()
             assertEquals(1, posted.size)
-            vm.restart(listOf(a), true)
+            vm.restart(listOf(a))
             vm.upload()
             runCurrent()
             assertEquals(1, posted.size)
             assertNull(vm.uploadMessage)
             assertFalse(vm.uploading)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `starting a new run does not cancel the previous upload`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val response = CompletableDeferred<TowerCreated>()
+            var completed = false
+            val vm = StackViewModel {
+                val result = response.await()
+                completed = true
+                result
+            }
+            vm.updateInventory(listOf(a), true, null)
+            finish(vm)
+            vm.upload()
+            runCurrent()
+            vm.restart(listOf(a))
+            response.complete(TowerCreated("old", "https://example.test/old"))
+            runCurrent()
+            assertTrue(completed)
+            assertFalse(vm.uploading)
+            assertNull(vm.uploadMessage)
         } finally {
             Dispatchers.resetMain()
         }
@@ -215,14 +291,13 @@ class StackViewModelTest {
             val newResponse = CompletableDeferred<TowerCreated>()
             var calls = 0
             val vm = StackViewModel {
-                if (++calls == 1) withContext(NonCancellable) { oldResponse.await() }
-                else newResponse.await()
+                if (++calls == 1) oldResponse.await() else newResponse.await()
             }
             vm.updateInventory(listOf(a), true, null)
             finish(vm)
             vm.upload()
             runCurrent()
-            vm.restart(listOf(a), true)
+            vm.restart(listOf(a))
             finish(vm)
             vm.upload()
             runCurrent()
@@ -255,14 +330,14 @@ class StackViewModelTest {
             runCurrent()
             assertEquals(1, calls)
 
-            vm.restart(emptyList(), true)
+            vm.restart(emptyList())
             assertEquals(1L, vm.runId)
             assertTrue(vm.uploaded)
             vm.upload()
             runCurrent()
             assertEquals(1, calls)
 
-            vm.restart(listOf(a), true)
+            vm.restart(listOf(a))
             assertFalse(vm.uploaded)
             finish(vm)
             vm.upload()
@@ -275,11 +350,11 @@ class StackViewModelTest {
     }
 
     @Test
-    fun `failed upload permits retry on the same run`() = runTest {
+    fun `failed upload shows the server url and permits retry on the same run`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             var calls = 0
-            val vm = StackViewModel {
+            val vm = StackViewModel(serverUrl = { "https://server.test" }) {
                 if (++calls == 1) error("offline")
                 TowerCreated("ok", "https://example.test/ok")
             }
@@ -289,7 +364,7 @@ class StackViewModelTest {
             runCurrent()
             assertFalse(vm.uploaded)
             assertFalse(vm.uploading)
-            assertNotNull(vm.uploadMessage)
+            assertEquals("送信できませんでした（https://server.test）：offline", vm.uploadMessage)
             vm.upload()
             runCurrent()
             assertEquals(2, calls)
