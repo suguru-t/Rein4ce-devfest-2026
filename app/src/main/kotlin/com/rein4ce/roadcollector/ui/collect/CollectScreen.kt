@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,12 +78,15 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.common.WalkNote
+import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.AppIcons
@@ -104,6 +108,9 @@ fun CollectScreen(
     vm: CollectViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val app = RoadCollectorApp.from(context)
+    // パーツを歩いたときの天気（記録のあとに WeatherService が取ってきて保存する）。記録のあとの窓に出す
+    val weathers by app.partRepository.weather.collectAsStateWithLifecycle()
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
@@ -259,29 +266,13 @@ fun CollectScreen(
                         // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
                         Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
                     }
-                    // 数字と単位を離さず、「・」の区切りで折り返す（文字を大きくしても崩れない注記。ui/common/Notes）
-                    Text(
-                        notes("L=${o.part.distanceM} m", "頂点 ${o.part.points.size}", "ε ${"%.0f".format(o.stats.epsilonM)} m"),
-                        style = noteStyle,
-                        fontFamily = Fieldbook.Data,
-                        fontSize = 11.sp,
-                        color = Fieldbook.Muted,
-                    )
-                    o.stats.fastestMps?.let { v ->
-                        Text(
-                            notes("最高 ${CollectViewModel.kmh(v)}（30 秒の窓）"),
-                            style = noteStyle,
-                            fontFamily = Fieldbook.Data,
-                            fontSize = 11.sp,
-                            color = Fieldbook.Muted,
-                        )
-                    }
-                    Text(
-                        notes("GPS ${o.stats.rawPoints} 点", "フィルタ後 ${o.stats.filteredPoints} 点", separator = " → "),
-                        style = noteStyle,
-                        fontFamily = Fieldbook.Data,
-                        fontSize = 11.sp,
-                        color = Fieldbook.Muted,
+                    // 歩いた長さ・日付・天気（コレクションのカード・大きく見る窓と同じ形。ui/common/WalkNote）。
+                    // 天気は記録のあとに取ってくるので、届いたら足す（届くまでは出さない）。
+                    // 変換の数字（頂点・ε・GPS の点など）は、見ても分からないので出さない（開発用に Logcat へ。CollectViewModel.keep）
+                    WalkNote(
+                        distanceM = o.part.distanceM,
+                        date = walkDate(o.part.walkedAt),
+                        weather = app.partRepository.weatherOf(o.part.id, weathers)?.sky?.label,
                     )
                 }
             },

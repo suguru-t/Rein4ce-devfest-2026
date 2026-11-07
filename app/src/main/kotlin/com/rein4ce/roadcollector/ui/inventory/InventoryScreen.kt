@@ -92,17 +92,16 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
@@ -554,20 +553,12 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
-                    notes(
-                        *listOfNotNull(
-                            "L=${part.distanceM} m",
-                            "頂点 ${part.points.size}",
-                            if (isSample) "見本" else formatDate(part.walkedAt),
-                            weather?.sky?.label,
-                        ).toTypedArray(),
-                    ),
-                    style = noteStyle,
-                    fontFamily = Fieldbook.Data,
-                    fontSize = 12.sp,
-                    color = Fieldbook.Muted,
+                // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
+                // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+                WalkNote(
+                    distanceM = part.distanceM,
+                    date = if (isSample) "見本" else walkDate(part.walkedAt),
+                    weather = weather?.sky?.label,
                 )
                 // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
                 if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
@@ -645,7 +636,7 @@ private fun PartCard(
     // 選んだ印（丸の数字・破線）は選択中だけ出す
     val selected = order != null && selecting && !editing
     // 主役は形そのもの。分類（L字など）は出さない
-    val date = if (isSample) "見本" else formatDate(part.walkedAt)
+    val date = if (isSample) "見本" else walkDate(part.walkedAt)
     // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない
     val angle = if (editing && !isDragging && !reduceMotion) {
         val wobble = rememberInfiniteTransition(label = "jiggle")
@@ -752,12 +743,13 @@ private fun PartCard(
         // どのカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる。それでも入らない分は「…」にする。
         // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
         val largeText = LocalDensity.current.fontScale > 1f
-        Text(
-            notes("L=${part.distanceM} m", "頂点 ${part.points.size}", date, separator = "・"),
-            style = noteStyle,
-            fontFamily = Fieldbook.Data,
+        // 歩いた長さ・日付・天気（記録のあとの窓・大きく見る窓と同じ形。ui/common/WalkNote）
+        WalkNote(
+            distanceM = part.distanceM,
+            date = date,
+            weather = sky?.label,
             fontSize = 10.5.sp,
-            color = Fieldbook.Muted,
+            separator = "・",
             minLines = if (largeText) 2 else 1,
             maxLines = if (largeText) 2 else 1,
             overflow = TextOverflow.Ellipsis,
@@ -836,10 +828,6 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
 
 /** パーツ 1 本ぶんの紙片の形（角を少しだけ丸める） */
 private val CardShape = RoundedCornerShape(4.dp)
-
-/** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
-private fun formatDate(epochMs: Long): String =
-    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
 
 /**
  * 選択中に出す「ランダムに選ぶ」の行。左にボタン、右に個数（1〜[GameSession.MAX_PARTS] 本）。
