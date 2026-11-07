@@ -210,7 +210,8 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
                             // 番号はいまの並びの上から（2 ページ目は 6 から）。1 番には並びに合わせた札（最長・最新・最多）
                             rank = current * PAGE_SIZE + i + 1,
                             sort = sort,
-                            mine = t.id in mine,
+                            // サーバの答え（持ち主の印が同じ）か、この端末から送った記録のどちらかなら「あなた」
+                            mine = t.mine || t.id in mine,
                             ratio = t.height / tallest,
                             onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
                         )

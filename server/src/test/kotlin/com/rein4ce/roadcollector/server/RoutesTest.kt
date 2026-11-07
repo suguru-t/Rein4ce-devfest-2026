@@ -21,6 +21,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
 
@@ -105,6 +106,35 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, png.status)
         assertTrue(png.contentType()?.match(ContentType.Image.PNG) == true)
         assertContains(png.headers[HttpHeaders.CacheControl].orEmpty(), "max-age")
+    }
+
+    @Test
+    fun `持ち主の印を送ると自分のタワーに mine が付き、印そのものは返らない`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val me = "a".repeat(64)
+        val other = "b".repeat(64)
+
+        val mineRes = client.postTower(sampleTower().copy(ownerId = me))
+        assertEquals(HttpStatusCode.Created, mineRes.status)
+        val mine = AppJson.decodeFromString(TowerCreated.serializer(), mineRes.bodyAsText())
+        client.postTower(sampleTower()) // 古いアプリから（印なし）
+
+        suspend fun summaries(owner: String?): List<TowerSummary> {
+            val body = client.get("/towers") { owner?.let { header(OWNER_HEADER, it) } }.bodyAsText()
+            return AppJson.decodeFromString(ListSerializer(TowerSummary.serializer()), body)
+        }
+        // 自分の印：自分のだけ true
+        assertEquals(mapOf(mine.id to true), summaries(me).filter { it.mine }.associate { it.id to it.mine })
+        // 他人の印・印なし・変な印：全部 false
+        assertTrue(summaries(other).none { it.mine })
+        assertTrue(summaries(null).none { it.mine })
+        assertTrue(summaries("not-a-hash").none { it.mine })
+        // 一覧にも 1 基の JSON にも、印そのものは出ない
+        val listBody = client.get("/towers") { header(OWNER_HEADER, me) }.bodyAsText()
+        assertFalse(me in listBody, "一覧に印が出ている")
+        val json = client.get("/towers/${mine.id}") { header(HttpHeaders.Accept, "application/json") }.bodyAsText()
+        assertFalse(me in json, "1 基の JSON に印が出ている")
+        assertEquals(null, AppJson.decodeFromString(Tower.serializer(), json).ownerId)
     }
 
     @Test

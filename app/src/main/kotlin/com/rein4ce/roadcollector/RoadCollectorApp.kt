@@ -5,6 +5,7 @@ import android.content.Context
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.MyTowers
+import com.rein4ce.roadcollector.data.OwnerId
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
@@ -42,9 +43,12 @@ class RoadCollectorApp : Application() {
         settings = AppSettings(this)
         // タワーを送るときの作者名は、設定のニックネーム（空なら名無し）
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
-        // 送信できたタワーは、自分のものとして端末に覚えておく
+        // 送信できたタワーは、自分のものとして端末に覚えておく（サーバが落ちていても印が出る）
         myTowers = MyTowers(this)
         ApiClient.onPosted = { myTowers.add(it.id) }
+        // 持ち主の印（端末ごと）。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。入れ直しや端末の引き継ぎでも残る
+        val owner = OwnerId.of(this)
+        ApiClient.ownerId = { owner }
         partRepository = PartRepository(this)
         weatherService = WeatherService(this, partRepository)
         gallery = TowerGallery()

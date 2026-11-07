@@ -22,8 +22,11 @@ interface TowerStore {
 
     suspend fun count(): Int
 
-    /** 新しい順。多すぎると重いので [SUMMARY_LIMIT] 件まで */
-    suspend fun summaries(): List<TowerSummary>
+    /**
+     * 新しい順。多すぎると重いので [SUMMARY_LIMIT] 件まで。
+     * @param owner 一覧を取るアプリの持ち主の印（X-Owner-Id）。送ったタワーなら [TowerSummary.mine] を true にする。null なら全部 false
+     */
+    suspend fun summaries(owner: String? = null): List<TowerSummary>
 
     companion object {
         const val SUMMARY_LIMIT = 500
@@ -65,7 +68,13 @@ internal object TowerIds {
     fun next(): String = buildString { repeat(8) { append(ALPHABET[random.nextInt(ALPHABET.length)]) } }
 }
 
-internal fun Tower.toSummary() = TowerSummary(id, height, parts.size, createdAt, author)
+/** 一覧の 1 行。持ち主の印は入れず、[owner] と同じかどうかだけを入れる */
+internal fun Tower.toSummary(owner: String? = null) = TowerSummary(id, height, parts.size, createdAt, author, mine = isOwnedBy(owner))
+
+/** [owner] が送ったタワーか。印が無いタワー・印を送っていない相手は、どちらも「違う」 */
+internal fun isOwnedBy(ownerId: String?, owner: String?): Boolean = !owner.isNullOrBlank() && ownerId == owner
+
+private fun Tower.isOwnedBy(owner: String?) = isOwnedBy(ownerId, owner)
 
 internal fun Tower.stamped(id: String) = copy(
     id = id,
@@ -90,9 +99,9 @@ class MemoryTowerStore(private val maxEntries: Int = TowerStore.SUMMARY_LIMIT) :
 
     override suspend fun count(): Int = towers.size
 
-    override suspend fun summaries(): List<TowerSummary> = towers.values
+    override suspend fun summaries(owner: String?): List<TowerSummary> = towers.values
         .sortedByDescending { it.createdAt }
-        .map { it.toSummary() }
+        .map { it.toSummary(owner) }
 
     private fun trim() {
         if (towers.size <= maxEntries) return

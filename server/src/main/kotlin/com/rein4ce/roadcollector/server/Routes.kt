@@ -28,9 +28,10 @@ import kotlinx.coroutines.withContext
  *
  *   GET  /                     動作確認
  *   GET  /health               ヘルスチェック（/healthz は Cloud Run の予約パスで届かないため使わない）
- *   GET  /towers               一覧（新しい順）
- *   POST /towers               保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）
- *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON
+ *   GET  /towers               一覧（新しい順）。X-Owner-Id ヘッダ（アプリの持ち主の印）を送ると、自分が送ったタワーに mine: true が付く
+ *   POST /towers               保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）。
+ *                              ownerId（持ち主の印）は保存するが、どの応答にも入れない
+ *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON（ownerId は null にして返す）
  *   GET  /towers/{id}/image.svg  タワーの絵（SVG）。共有ページの中に描く
  *   GET  /towers/{id}/image.png  タワーの絵（PNG、1200×630）。共有ページの og:image（LINE / X のプレビュー）
  *
@@ -48,7 +49,9 @@ fun Route.towerRoutes(store: TowerStore) {
     }
 
     get("/towers") {
-        call.respond(store.summaries())
+        // アプリは自分の持ち主の印を X-Owner-Id で送る。形が違うもの（他人の印を探る試しなど）は無いものとして扱う
+        val owner = call.request.header(OWNER_HEADER)?.takeIf { OWNER_ID_PATTERN.matches(it) }
+        call.respond(store.summaries(owner))
     }
 
     post("/towers") {
@@ -79,7 +82,8 @@ fun Route.towerRoutes(store: TowerStore) {
         }
         val wantsJson = call.request.accept()?.contains("application/json") == true
         if (wantsJson) {
-            call.respond(tower)
+            // 持ち主の印は誰にも返さない（返すと、同じ人のタワーをたどれてしまう）
+            call.respond(tower.copy(ownerId = null))
         } else {
             call.respondText(SharePage.render(tower, publicBaseUrl(call)), ContentType.Text.Html)
         }
