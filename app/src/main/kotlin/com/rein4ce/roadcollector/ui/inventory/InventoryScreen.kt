@@ -681,8 +681,10 @@ private fun PartCard(
             autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
             modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
         )
-        // 文字を大きくしている人には 1 行に入らないので、2 行に折り返す（切ると採集日が見えなくなる）。
-        // そのときは折り返さなかったカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる
+        // 文字の大きさが 1 倍なら、今までどおり 1 行（入らない分は切る）。どのカードも同じ高さになる。
+        // 文字を大きくしている人には 1 行に入らないので、3 行まで折り返す（切ると採集日が見えなくなる）。
+        // そのときは折り返さなかったカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる。
+        // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
         val largeText = LocalDensity.current.fontScale > 1f
         Text(
             notes("L=${part.distanceM} m", "頂点 ${part.points.size}", date, separator = "・"),
@@ -691,7 +693,8 @@ private fun PartCard(
             fontSize = 10.5.sp,
             color = Fieldbook.Muted,
             minLines = if (largeText) 2 else 1,
-            maxLines = 2,
+            maxLines = if (largeText) 3 else 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
     }
@@ -741,7 +744,7 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
             .toggleable(value = selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
             .semantics {
                 contentDescription = "「$name」を積むのに選ぶ"
-                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "5 本選んだので選べない"
+                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "${GameSession.MAX_PARTS} 本選んだので選べない"
             },
     ) {
         Box(

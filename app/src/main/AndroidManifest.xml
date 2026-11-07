@@ -27,7 +27,8 @@
             android:value="${MAPS_API_KEY}" />
 
         <!-- 画面は縦向きだけ。どの画面も縦長で作っていて、横にすると地図やカードが大きくなりすぎるため。
-             （Android 16 以降のタブレットや、開いた折りたたみスマホのような大きな画面では、この指定は無視されることがある） -->
+             targetSdk を 36（Android 16）以上に上げると、タブレットや開いた折りたたみスマホのような大きな画面では、
+             この指定が無視される（いまの targetSdk 35 なら、どの端末でも縦のまま） -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -6,7 +6,7 @@ import org.junit.Test
 /** 注記を「・」でつなぐ（文字を大きくして折り返すとき、数と単位を分けず、行を「・」で始めない） */
 class NotesTest {
 
-    private val nbsp = ' '
+    private val nbsp = '\u00A0' // 折り返さない空白（見えない字なので、エスケープで書く）
 
     @Test
     fun `spaces inside an item do not break`() {
