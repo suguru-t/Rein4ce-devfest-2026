@@ -25,6 +25,7 @@ dyn4j = "6.0.0"
 ktor = "3.1.3"
 logback = "1.5.18"
 genai = "1.57.0"
+firestore = "3.43.0"
 junit = "4.13.2"
 reorderable = "2.5.1"
 
@@ -71,6 +72,7 @@ ktor-server-cors = { group = "io.ktor", name = "ktor-server-cors", version.ref =
 logback-classic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
 ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 google-genai = { group = "com.google.genai", name = "google-genai", version.ref = "genai" }
+google-cloud-firestore = { group = "com.google.cloud", name = "google-cloud-firestore", version.ref = "firestore" }
 
 # テスト
 junit = { group = "junit", name = "junit", version.ref = "junit" }

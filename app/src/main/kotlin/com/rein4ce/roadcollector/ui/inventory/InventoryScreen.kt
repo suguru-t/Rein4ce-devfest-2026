@@ -14,8 +14,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,12 +40,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,37 +62,43 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
-import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * B 担当：手持ちパーツ一覧。タップで選択（最大 5 本）→「積む」へ。
+ * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
  *
- * 長押しで「並べ替え中」になる（iPhone のホーム画面の「アプリを並べ替え中」と同じ）：
- * - カードが小さく揺れ、左上の「×」で削除（確認あり）
- * - 長押しのまま動かすと並べ替え（素早く払えばスクロール）。長押しで並べ替え中に入るときも、そのまま動かせる
- * - タップしても選択は変わらない。「完了」か戻るで普段の状態に戻る
- *
- * 名前の右の虫めがねで、パーツを大きく見られる（普段も並べ替え中も）。
+ * - 普段：カードをタップすると大きく見られて、そこから名前を付けられる（RenameDialog.kt）
+ * - 選択中（右上の「選択」か、下の「積むパーツを選ぶ」で入る）：カードの左上に丸が出て、タップか丸で選ぶ（最大 5 本）。
+ *   丸には積む順の数字が入る。下の「選んだ n 本で積む」で積む画面へ。「キャンセル」か戻るで、選択を消して普段に戻る
+ * - 並べ替え中（普段の状態で長押し）：カードが小さく揺れ、長押しのまま動かすと並べ替え、左上の「×」で削除（確認あり）。
+ *   タップしても何も起きない。「完了」か戻るで普段に戻る
  *
  * 見た目は「測量野帳」（Fieldbook.kt）。
  */
@@ -101,6 +109,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     val savedOrder by repository.order.collectAsStateWithLifecycle()
+    // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
+    val places by repository.places.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
@@ -124,33 +134,64 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.selected.map { it.id }) } }
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
     val validSelected = selectedIds.filter { id -> parts.any { it.id == id } }
+    // 選択中か（積むパーツを選んでいる）。前回の選択は残してあり、「選択」を押すとそのまま出る。
+    // 「キャンセル」か戻るで、選択を消して普段に戻る（写真アプリと同じ）。
+    // ただし消すのはこの画面の選択（selectedIds）だけ。積む画面に渡した選択（GameSession.selected）には触らない
+    // （触ると、積んでいる途中のゲームが最初からやり直しになる）。なので、キャンセルしたあと別のタブから戻ると、
+    // selectedIds が GameSession.selected から作り直されて、「選択」で積む画面に渡した選択がまた出る
+    var selecting by remember { mutableStateOf(false) }
+    fun cancelSelecting() {
+        selectedIds.clear()
+        selecting = false
+    }
+    BackHandler(enabled = selecting) { cancelSelecting() }
+    fun toggleSelect(id: String) {
+        if (id in selectedIds) {
+            selectedIds.remove(id)
+        } else if (validSelected.size < GameSession.MAX_PARTS) {
+            selectedIds.add(id)
+        }
+    }
     val missingSamples = SampleParts.all.count { s -> parts.none { it.id == s.id } }
     // 削除の確認ダイアログを出しているパーツ（null なら出していない）
     var pendingDelete by remember { mutableStateOf<Part?>(null) }
-    // 虫めがねで大きく見ているパーツ（null なら見ていない）
-    var zoomed by remember { mutableStateOf<Part?>(null) }
+    // 大きく見ているパーツと、名前を付けているパーツの id（null なら開いていない）。
+    // id で持つのは、名前を付けたあと、大きく見る画面に新しい名前で戻るため
+    var zoomedId by remember { mutableStateOf<String?>(null) }
+    var renamingId by remember { mutableStateOf<String?>(null) }
 
+    // 方眼の地はアプリ全体（AppNav の Scaffold）で 1 枚敷いているので、ここでは描かない（二重になって端で線がずれる）
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fieldbookGrid()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）
-        CollectionMeter(
-            totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
-            walks = parts.size - sampleCount,
-            samples = sampleCount,
-            isLoaded = isLoaded,
-            editing = editing,
-            reduceMotion = reduceMotion,
-        )
+        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
+        // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
+        Row(verticalAlignment = Alignment.Top) {
+            CollectionMeter(
+                totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
+                walks = parts.size - sampleCount,
+                samples = sampleCount,
+                isLoaded = isLoaded,
+                editing = editing,
+                reduceMotion = reduceMotion,
+                modifier = Modifier.weight(1f),
+            )
+            if (!editing && isLoaded && parts.isNotEmpty()) {
+                SelectButton(
+                    selecting = selecting,
+                    onClick = { if (selecting) cancelSelecting() else selecting = true },
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (editing) {
-                    "長押しのまま動かして並べ替え ・ × で削除"
-                } else {
-                    "タップで選ぶ（${GameSession.MAX_PARTS} 本まで）・長押しで並べ替え／削除"
+                when {
+                    editing -> "長押しのまま動かして並べ替え ・ × で削除"
+                    selecting -> "タップで積むパーツを選ぶ（${GameSession.MAX_PARTS} 本まで）"
+                    else -> "タップで大きく見る ・ 長押しで並べ替え"
                 },
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
@@ -158,7 +199,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             )
             // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
             // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
-            if (!editing && isLoaded && missingSamples > 0) {
+            if (!editing && !selecting && isLoaded && missingSamples > 0) {
                 TextButton(onClick = { repository.restoreMissingSamples() }) {
                     Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
                 }
@@ -192,21 +233,26 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         isSample = SampleParts.byId(part.id) != null,
                         isDragging = isDragging,
                         editing = editing,
+                        selecting = selecting,
                         // 隣どうしで逆向きに揺らすと、iPhone のようにばらばらに揺れて見える
                         jiggleDirection = if (index % 2 == 0) 1f else -1f,
                         reduceMotion = reduceMotion,
+                        // 5 本選んだら、まだ選んでいないカードの丸は押せない
+                        canSelect = order != null || validSelected.size < GameSession.MAX_PARTS,
+                        // タップ：普段は大きく見る、選択中は選ぶ／外す。並べ替え中は何もしない
+                        // （長押しで並べ替え中に入ったあとに届くタップもここで止まる）
                         onClick = {
-                            // 並べ替え中のタップでは選択を変えない（長押しで並べ替え中に入ったあとに届くタップもここで止まる）
-                            if (editing) return@PartCard
-                            if (part.id in selectedIds) {
-                                selectedIds.remove(part.id)
-                            } else if (validSelected.size < GameSession.MAX_PARTS) {
-                                selectedIds.add(part.id)
+                            when {
+                                editing -> Unit
+                                selecting -> toggleSelect(part.id)
+                                else -> zoomedId = part.id
                             }
                         },
+                        onToggleSelect = { toggleSelect(part.id) },
                         onDeleteClick = { pendingDelete = part },
-                        onZoom = { zoomed = part },
+                        // 選択中は長押しで並べ替えに入らない（選ぶのと混ざらないように）
                         dragHandle = Modifier.longPressDraggableHandle(
+                            enabled = !selecting,
                             onDragStarted = {
                                 draggingId = part.id
                                 dragStartIndex = arranged.indexOfFirst { it.id == part.id }
@@ -216,7 +262,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             onDragStopped = {
                                 val now = arranged.indexOfFirst { it.id == part.id }
                                 draggingId = null
-                                if (now != dragStartIndex) saveArranged(arranged)
+                                if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
+                                // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
+                                // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
+                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
@@ -224,6 +273,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             CustomAccessibilityAction("先頭へ") { moveTo(0); true }.takeIf { index > 0 },
                             CustomAccessibilityAction("前へ") { moveTo(index - 1); true }.takeIf { index > 0 },
                             CustomAccessibilityAction("後ろへ") { moveTo(index + 1); true }.takeIf { index < arranged.size - 1 },
+                            CustomAccessibilityAction("名前を付ける") { renamingId = part.id; true },
                             CustomAccessibilityAction("削除") { pendingDelete = part; true },
                         ),
                     )
@@ -234,15 +284,17 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = {
-                if (editing) {
-                    editing = false
-                } else {
-                    val chosen = validSelected.mapNotNull { id -> parts.firstOrNull { it.id == id } }
-                    GameSession.selected = chosen
-                    onGoStack()
+                when {
+                    editing -> editing = false
+                    !selecting -> selecting = true
+                    else -> {
+                        val chosen = validSelected.mapNotNull { id -> parts.firstOrNull { it.id == id } }
+                        GameSession.selected = chosen
+                        onGoStack()
+                    }
                 }
             },
-            enabled = editing || validSelected.isNotEmpty(),
+            enabled = editing || !selecting || validSelected.isNotEmpty(),
             shape = RoundedCornerShape(6.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Fieldbook.Survey,
@@ -255,6 +307,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             Text(
                 when {
                     editing -> "完了"
+                    !selecting -> "積むパーツを選ぶ"
                     validSelected.isEmpty() -> "積むパーツを選んでください"
                     else -> "選んだ ${validSelected.size} 本で積む"
                 },
@@ -264,7 +317,26 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
     }
 
-    zoomed?.let { part -> ZoomDialog(part, onDismiss = { zoomed = null }) }
+    // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
+    val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
+    val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
+    if (renaming != null) {
+        RenameDialog(
+            part = renaming,
+            onSave = { name ->
+                repository.rename(renaming.id, name)
+                renamingId = null
+            },
+            onDismiss = { renamingId = null },
+        )
+    } else if (zoomed != null) {
+        ZoomDialog(
+            zoomed,
+            place = repository.placeOf(zoomed.id, places),
+            onRename = { renamingId = zoomed.id },
+            onDismiss = { zoomedId = null },
+        )
+    }
 
     pendingDelete?.let { part ->
         DeleteDialog(
@@ -287,7 +359,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
  * 読み込み中は parts が空なので、数字は出さない。
  */
 @Composable
-private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boolean, editing: Boolean, reduceMotion: Boolean) {
+private fun CollectionMeter(
+    totalM: Int,
+    walks: Int,
+    samples: Int,
+    isLoaded: Boolean,
+    editing: Boolean,
+    reduceMotion: Boolean,
+    modifier: Modifier = Modifier,
+) {
     // メーターの値。合計が変わったら、数字が回って新しい値まで動く
     val shownM by animateFloatAsState(
         targetValue = totalM.toFloat(),
@@ -295,10 +375,11 @@ private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boo
         label = "meter",
     )
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 $totalM メートル。見本 $samples" else "コレクション。読み込み中"
+                val total = totalDistance(totalM)
+                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "コレクション。読み込み中"
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -314,9 +395,12 @@ private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boo
                 Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
             }
         }
+        // 1 km 未満は m、1 km からは km で出す（totalDistance）。
+        // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
+        val shown = totalDistance(shownM.toInt())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (isLoaded) "%,d".format(shownM.roundToInt()) else "—",
+                if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
@@ -324,7 +408,7 @@ private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boo
                 color = Fieldbook.Ink,
             )
             Text(
-                "m",
+                if (isLoaded) shown.unit.label else DistanceUnit.M.label,
                 fontFamily = Fieldbook.Data,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -340,9 +424,54 @@ private fun CollectionMeter(totalM: Int, walks: Int, samples: Int, isLoaded: Boo
     }
 }
 
-/** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す */
+/** 見出しのメーターに出す合計距離。数字と単位に分けて持つ（単位は小さく出すため） */
+internal data class TotalDistance(val number: String, val unit: DistanceUnit)
+
+/**
+ * 合計距離の単位。画面に出す文字と、読み上げ（TalkBack）の言葉を一緒に持つ。
+ * 画面の文字を変えても（たとえば「㎞」にしても）、読み上げが別の単位にならないように
+ */
+internal enum class DistanceUnit(val label: String, val spoken: String) {
+    M("m", "メートル"),
+    KM("km", "キロメートル"),
+}
+
+/**
+ * 合計距離 [m] を、見出しのメーターに出す形にする。
+ * - 1 km 未満は m のまま（834 m）
+ * - 1 km からは km にして小数 1 桁（2,115 m → 2.1 km）。0.1 km に満たない分は切り捨てる。
+ *   車の距離計と同じく、歩いた分より多くは見せないため（999 m の次が 1.0 km、1,999 m は 1.9 km）
+ * - 桁区切りの「,」は使わない。言語の設定によらず、小数点は「.」
+ */
+internal fun totalDistance(m: Int): TotalDistance =
+    if (m < 1_000) {
+        TotalDistance("$m", DistanceUnit.M)
+    } else {
+        val tenths = m / 100
+        TotalDistance("${tenths / 10}.${tenths % 10}", DistanceUnit.KM)
+    }
+
+/**
+ * 小数点の前後を詰める。メーターの数字は等幅の字なので、そのままだと「.」も数字 1 文字分の幅を取って、前後が空いて見えるため。
+ * 字体は変えずに字間だけ詰める（「.」だけ別の字体にすると、行の高さが変わって、横の単位の位置が km のときだけずれることがある）
+ */
+private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString {
+    val i = number.indexOf('.')
+    if (i < 0) {
+        append(number)
+    } else {
+        append(number.substring(0, i))
+        withStyle(SpanStyle(letterSpacing = POINT_LETTER_SPACING)) { append('.') }
+        append(number.substring(i + 1))
+    }
+}
+
+/** 小数点の字間。等幅の字の 1 文字分（およそ 0.6 文字の高さ）のうち、半分ほどを詰める（左右に半分ずつ詰まる） */
+private val POINT_LETTER_SPACING = (-0.3).em
+
+/** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -353,7 +482,24 @@ private fun ZoomDialog(part: Part, onDismiss: () -> Unit) {
         title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                    // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                    // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
+                    if (mapPlace != null) {
+                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
+                    }
+                    Column {
+                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                        }
+                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ " + if (isSample) "見本" else formatDate(part.walkedAt),
@@ -365,6 +511,9 @@ private fun ZoomDialog(part: Part, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("閉じる", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onRename) { Text("名前を付ける", color = Fieldbook.Survey) }
         },
     )
 }
@@ -402,9 +551,13 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
 }
 
 /**
- * パーツ 1 本のカード。枠は付けず、方眼の上に図と注記だけを置く（選んだときだけ白地と破線の枠）。
+ * パーツ 1 本のカード。方眼の上に置いた白い紙片に、図と注記を載せる（選んだときは青い破線の枠）。
+ * - タップ（[onClick]）：普段は大きく見る、選択中は選ぶ／外す
+ * - 選択中は左上に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
  * @param order 選んだ順（＝積む順）。選んでいなければ null
- * @param editing 並べ替え中なら、揺らして左上に「×」を出す（選んだ順の ①② は出さない）
+ * @param canSelect 選べるか（5 本選んだあとの、まだ選んでいないカードは false）
+ * @param editing 並べ替え中なら、揺らして左上に「×」を出す
+ * @param selecting 選択中なら、左上に選ぶ丸を出し、選んだカードを青い破線で囲む
  */
 @Composable
 private fun PartCard(
@@ -413,15 +566,18 @@ private fun PartCard(
     isSample: Boolean,
     isDragging: Boolean,
     editing: Boolean,
+    selecting: Boolean,
     jiggleDirection: Float,
     reduceMotion: Boolean,
+    canSelect: Boolean,
     onClick: () -> Unit,
+    onToggleSelect: () -> Unit,
     onDeleteClick: () -> Unit,
-    onZoom: () -> Unit,
     dragHandle: Modifier,
     a11yActions: List<CustomAccessibilityAction>,
 ) {
-    val selected = order != null
+    // 選んだ印（丸の数字・破線）は選択中だけ出す
+    val selected = order != null && selecting && !editing
     // 主役は形そのもの。分類（L字など）は出さない
     val date = if (isSample) "見本" else formatDate(part.walkedAt)
     // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない
@@ -453,7 +609,7 @@ private fun PartCard(
             .then(
                 when {
                     isDragging -> Modifier.background(Color.White, CardShape)
-                    selected && !editing -> Modifier
+                    selected -> Modifier
                         .background(Fieldbook.Card, CardShape)
                         .dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
                     else -> Modifier
@@ -461,29 +617,33 @@ private fun PartCard(
                         .border(1.dp, Fieldbook.CardEdge, CardShape)
                 },
             )
-            // 読み上げでも「何番目に積むか」が伝わるように（①② は見た目だけなので、下で読み上げから外している）
+            // 読み上げでも「何番目に積むか」が伝わるように
             .semantics {
-                if (order != null && !editing) stateDescription = "$order 番目に積む"
+                if (selected) stateDescription = "$order 番目に積む"
                 customActions = a11yActions
             }
             .then(dragHandle)
             .clickable(
                 enabled = !editing,
                 // 読み上げ（TalkBack）で、タップの意味が伝わるように
-                onClickLabel = if (selected) "選択を外す" else "選択",
+                onClickLabel = when {
+                    !selecting -> "大きく見る"
+                    order != null -> "選択を外す"
+                    else -> "選ぶ"
+                },
                 onClick = onClick,
             )
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Box {
             FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-            if (order != null && !editing) {
-                Text(
-                    Fieldbook.orderMark(order),
-                    color = Fieldbook.Survey,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 6.dp, top = 2.dp).clearAndSetSemantics {},
+            if (selecting && !editing) {
+                SelectMark(
+                    order = order,
+                    enabled = canSelect,
+                    name = part.displayName,
+                    onToggle = onToggleSelect,
+                    modifier = Modifier.align(Alignment.TopStart),
                 )
             }
             if (editing && !isDragging) {
@@ -504,26 +664,16 @@ private fun PartCard(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                part.displayName,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Fieldbook.Ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 6.dp).weight(1f),
-            )
-            // 虫めがね：押すと大きく見られる（タップの「選ぶ」とは別）
-            IconButton(onClick = onZoom, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.Search,
-                    contentDescription = "「${part.displayName}」を大きく見る",
-                    tint = Fieldbook.Muted,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
+        // 名前は 10 文字まで（命名 API・名前を付けるダイアログと同じ）。長い名前は字を少し小さくして 1 行に収める。
+        // それでも入らない幅の端末では「…」で切る（タップして大きく見れば全部見られる）
+        BasicText(
+            part.displayName,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
+            modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
+        )
         Text(
             "L=${part.distanceM} m・頂点 ${part.points.size}・$date",
             fontFamily = Fieldbook.Data,
@@ -532,6 +682,71 @@ private fun PartCard(
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
+    }
+}
+
+/** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
+private const val MAP_LOGO_STRIP_DP = 28f
+
+/**
+ * 見出しの右上の「選択」ボタン（選択中は「キャンセル」）。写真アプリと同じ位置・言葉。
+ * 野帳に合わせて、測量の青の細い縁の小さな丸いボタンにする。
+ */
+@Composable
+private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(50)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Text(
+            if (selecting) "キャンセル" else "選択",
+            color = if (selecting) Color.White else Fieldbook.Survey,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(if (selecting) Fieldbook.Survey else Fieldbook.Card, shape)
+                .border(1.dp, Fieldbook.Survey, shape)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/**
+ * カードの左上の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
+ * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
+ */
+@Composable
+private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val selected = order != null
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(44.dp)
+            .toggleable(value = selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics {
+                contentDescription = "「$name」を積むのに選ぶ"
+                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "5 本選んだので選べない"
+            },
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(if (selected) Fieldbook.Survey else Color.White.copy(alpha = 0.92f))
+                .border(
+                    BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
+                    CircleShape,
+                ),
+        ) {
+            if (order != null) {
+                Text("$order", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
+            }
+        }
     }
 }
 

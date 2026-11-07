@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.core
 
+import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.geo.TrackFilter
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import org.junit.Assert.assertEquals
@@ -9,7 +10,7 @@ class TrackFilterTest {
 
     private val lat0 = 35.7496
     private val lng0 = 139.8049
-    private val mPerDegLat = 110_574.0
+    private val mPerDegLat = Projection.M_PER_DEG_LAT
 
     /** 北へ 4 m おき・1 秒おきに歩いた n 点（揺れなし） */
     private fun straight(n: Int): List<TrackPoint> = List(n) { i ->
@@ -18,7 +19,7 @@ class TrackFilterTest {
 
     /** 点を東へ [meters] m ずらす */
     private fun jumpEast(p: TrackPoint, meters: Double): TrackPoint =
-        p.copy(lng = p.lng + meters / (111_320.0 * Math.cos(Math.toRadians(lat0))))
+        p.copy(lng = p.lng + meters / Projection.metersPerDegLng(lat0))
 
     @Test
     fun `an isolated jump in the middle is dropped`() {

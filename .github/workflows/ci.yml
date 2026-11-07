@@ -1,6 +1,7 @@
 # main への push とプルリクエストのたびに、core・server・app のテスト、server のビルド、app の APK ビルドを走らせる。
 # （:server:build は :server:test を含む）
 # ビルドした APK は、実行結果ページの Artifacts から app-debug.apk としてダウンロードできる（14 日間保存）。
+# リポジトリの Secrets に MAPS_API_KEY があれば、その APK でも地図が出る。
 name: CI
 
 on:
@@ -32,8 +33,11 @@ jobs:
           java-version: 17
           cache: gradle
 
-      # local.properties が無いので、MAPS_API_KEY は空（地図なし）、SERVER_BASE_URL は本番の Cloud Run になる
+      # local.properties が無いので、MAPS_API_KEY は Secrets から環境変数で渡す（未設定なら空＝地図なし）。
+      # SERVER_BASE_URL は本番の Cloud Run になる。署名はリポジトリの app/debug.keystore（チーム共通）
       - name: core・server・app のテスト、server のビルド、app の APK ビルド
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: ./gradlew --no-daemon :core:test :server:build :app:testDebugUnitTest :app:assembleDebug
 
       - name: APK をアップロード

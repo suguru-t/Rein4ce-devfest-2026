@@ -21,7 +21,7 @@ fun main() {
     embeddedServer(Netty, port = port, host = "0.0.0.0") { module() }.start(wait = true)
 }
 
-fun Application.module(namer: PartNamer = PartNamer.fromEnvironment()) {
+fun Application.module(store: TowerStore = TowerStore.fromEnvironment(), namer: PartNamer = PartNamer.fromEnvironment()) {
     install(ContentNegotiation) { json(AppJson) }
     install(CallLogging)
     install(CORS) {
@@ -29,7 +29,6 @@ fun Application.module(namer: PartNamer = PartNamer.fromEnvironment()) {
         allowHeader(HttpHeaders.ContentType)
     }
 
-    val store = TowerStore()
     routing {
         towerRoutes(store)
         partRoutes(namer)

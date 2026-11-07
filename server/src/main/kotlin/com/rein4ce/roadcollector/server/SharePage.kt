@@ -7,7 +7,7 @@ import java.util.Locale
 /**
  * 共有ページ。LINE / X に貼ったときのプレビュー（OGP）と、タワーの絵（インライン SVG）。
  *
- * TODO(C): og:image は SVG を解釈しないクローラが多いので、PNG に変換して Cloud Storage に置く。
+ * og:image は PNG（/towers/{id}/image.png）。SVG を読まないクローラが多いため。PNG は TowerPng がその場で描く。
  */
 object SharePage {
 
@@ -15,7 +15,7 @@ object SharePage {
         val title = "高さ ${String.format(Locale.US, "%.2f", tower.height)} m のタワー"
         val desc = "${tower.parts.size} 個の散歩パーツで積みました — 道の採集家"
         val url = "$baseUrl/towers/${tower.id}"
-        val image = "$baseUrl/towers/${tower.id}/image.svg"
+        val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)
         val kinds = tower.parts.joinToString("、") { it.kind.label }
 
@@ -31,6 +31,10 @@ object SharePage {
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:image" content="${esc(image)}">
+<meta property="og:image:width" content="${TowerPng.WIDTH}">
+<meta property="og:image:height" content="${TowerPng.HEIGHT}">
+<meta property="og:image:alt" content="${esc(title)}">
+<meta name="twitter:image" content="${esc(image)}">
 <meta name="twitter:card" content="summary_large_image">
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; background: #FFF8F2; color: #1F2A37; }

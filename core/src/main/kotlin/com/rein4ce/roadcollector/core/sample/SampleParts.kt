@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.core.sample
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.TrackToPart
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 
 /**
  * 初回起動時に同梱する 5 種類のパーツ。
@@ -10,14 +11,19 @@ import com.rein4ce.roadcollector.core.model.Part
  */
 object SampleParts {
 
-    val all: List<Part> by lazy {
+    private val converted: List<TrackToPart.Result.Success> by lazy {
         SampleTracks.all.map { track ->
             when (val r = TrackToPart.convert(track.points, ConversionParams.DEFAULT, id = track.id)) {
-                is TrackToPart.Result.Success -> r.part.copy(name = track.name)
+                is TrackToPart.Result.Success -> r.copy(part = r.part.copy(name = track.name))
                 else -> error("sample track ${track.id} could not be converted: $r")
             }
         }
     }
+
+    val all: List<Part> by lazy { converted.map { it.part } }
+
+    /** 見本を歩いた場所（千住キャンパス付近）。拡大表示の背景の地図に使う */
+    val places: Map<String, PartPlace> by lazy { converted.associate { r -> r.part.id to r.place } }
 
     fun byId(id: String): Part? = all.firstOrNull { it.id == id }
 }
