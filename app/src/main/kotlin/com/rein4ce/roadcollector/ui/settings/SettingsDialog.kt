@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -32,10 +35,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +55,7 @@ import com.rein4ce.roadcollector.data.WeatherMotion
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import kotlin.math.roundToInt
 
 /**
  * 設定（採集画面の右上の歯車から開く）。選ぶとすぐに効き、スマホの中に保存する。
@@ -52,7 +63,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * 最初の画面は、項目の名前と今の設定だけの一覧（長くならないように）。項目を押すと、同じ枠の中で
  * 選ぶ画面に切り替わる（見出しの帯の左の「＜」・戻る・枠の外で一覧に戻る。「×」は設定ごと閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
- * - 背景の天気の動き：なめらか・ふつう・止める・出さない
+ * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
  * - その他：アプリについて
@@ -109,11 +120,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     )
                 }
             }
-            Page.MOTION -> Column(modifier = Modifier.selectableGroup().padding(top = 8.dp)) {
-                for (m in WeatherMotion.entries) {
-                    Choice(label = m.label, note = m.note, selected = m == motion, onSelect = { settings.setWeatherMotion(m) })
-                }
-            }
+            Page.MOTION -> MotionSlider(motion = motion, onChange = settings::setWeatherMotion)
             Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
@@ -149,6 +156,91 @@ private enum class Page(val title: String) {
 }
 
 private fun onOff(on: Boolean) = if (on) "オン" else "オフ"
+
+/**
+ * 背景の天気の動きを選ぶスライダー（左ほど動きが少ない）。目盛りの下に段階の名前、その下に選んでいる段階の説明。
+ * 動かすとすぐに効く（後ろの天気が変わる）。段階の名前を押しても選べる
+ */
+@Composable
+private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Unit) {
+    val stops = WeatherMotion.entries
+    fun select(i: Int) {
+        val m = stops[i.coerceIn(0, stops.lastIndex)]
+        if (m != motion) onChange(m)
+    }
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            // 段階の名前は等しい幅のます目のまん中に置き、スライダーの目盛りをそのまん中に合わせる
+            // （スライダーの両端を、ます目の半分 − つまみの半分だけ内側に寄せる）。文字が大きくても名前どうしが重ならない
+            val cell = maxWidth / stops.size
+            // 段階の名前の字の大きさ。ふだんは 14sp、文字を大きくしている端末では、いちばん長い名前がます目に 1 行で収まるまで
+            // 小さくする（4 つとも同じ大きさにそろえる。日本語の字はほぼ正方形なので、字数 × 字の大きさ ≒ 幅）
+            val longest = stops.maxOf { it.label.length }
+            val labelSize = with(LocalDensity.current) {
+                minOf(14.sp.toPx(), (cell - LabelPadding * 2).toPx() / (longest + 0.5f)).toSp()
+            }
+            Column {
+                Slider(
+                    value = motion.ordinal.toFloat(),
+                    onValueChange = { select(it.roundToInt()) },
+                    valueRange = 0f..stops.lastIndex.toFloat(),
+                    steps = stops.size - 2,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Fieldbook.Survey,
+                        activeTrackColor = Fieldbook.Survey,
+                        activeTickColor = Fieldbook.Card,
+                        inactiveTrackColor = Fieldbook.CardEdge,
+                        inactiveTickColor = Fieldbook.Muted,
+                    ),
+                    modifier = Modifier
+                        .padding(horizontal = (cell / 2 - SliderThumbHalfWidth).coerceAtLeast(0.dp))
+                        .semantics {
+                            contentDescription = Page.MOTION.title
+                            stateDescription = motion.label
+                        },
+                )
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    stops.forEachIndexed { i, m ->
+                        val selected = m == motion
+                        Text(
+                            m.label,
+                            fontSize = labelSize,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) Fieldbook.Survey else Fieldbook.Muted,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { select(i) }
+                                .padding(vertical = 6.dp, horizontal = LabelPadding)
+                                // 読み上げではスライダーだけを使う（同じ選択肢を 2 度読まない）
+                                .clearAndSetSemantics {},
+                        )
+                    }
+                }
+            }
+        }
+        // 選んでいる段階の説明。段階で行の数が変わっても、窓の高さが変わらないように 2 行ぶん取っておく
+        Text(
+            motion.note,
+            style = noteStyle,
+            fontSize = 14.sp,
+            color = Fieldbook.Ink,
+            minLines = 2,
+            modifier = Modifier
+                .padding(top = 14.dp, bottom = 8.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
+}
+
+/** スライダーの段階の名前の左右の余白 */
+private val LabelPadding = 2.dp
+
+/** M3 のスライダーのつまみの幅の半分（つまみのまん中は、スライダーの端からこれだけ内側までしか行かない） */
+private val SliderThumbHalfWidth = 2.dp
 
 /** オン・オフを切り替える画面：スイッチの行と、その下にくわしい説明 */
 @Composable
