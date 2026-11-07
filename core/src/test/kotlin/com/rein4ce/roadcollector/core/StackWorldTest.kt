@@ -117,11 +117,16 @@ class StackWorldTest {
         // 一言を出すのは、はっきり滑る霧雨・雨・雪だけ
         assertEquals(listOf(Grip.DAMP, Grip.WET, Grip.ICY), order.filter { it.label != null })
 
-        // 台の上で止まった棒を、横に同じ速さで押す：雪の日の棒のほうが遠くまで滑る
-        fun slide(grip: Grip): Double {
+        // 止まった棒を、横に同じ速さで押す。
+        // 晴れの棒の上に乗せた棒なら、雪の日の棒のほうが遠くまで滑る。台の上に直接置いた棒なら、雪の日でも晴れと同じ（台は滑らない）
+        fun slide(grip: Grip, onBar: Boolean): Double {
             val world = StackWorld()
             val bar = SampleParts.byId("sample-bar")!!
-            val body = world.place(bar, x = -0.4, y = 0.3, angle = Math.PI / 2, grip = grip)
+            if (onBar) {
+                world.place(bar, x = 0.0, y = 0.3, angle = Math.PI / 2)
+                settle(world)
+            }
+            val body = world.place(bar, x = -0.2, y = world.height() + 0.3, angle = Math.PI / 2, grip = grip)
             assertTrue(body.fixtures.all { it.friction == grip.friction })
             settle(world)
             val start = body.worldCenter.x
@@ -130,20 +135,30 @@ class StackWorldTest {
             repeat(120) { world.step(1.0 / 60.0) }
             return body.worldCenter.x - start
         }
-        val normal = slide(Grip.NORMAL)
-        val icy = slide(Grip.ICY)
-        assertTrue("normal $normal, icy $icy", icy > normal * 1.5)
+        val normalOnBar = slide(Grip.NORMAL, onBar = true)
+        val icyOnBar = slide(Grip.ICY, onBar = true)
+        assertTrue("on a bar: normal $normalOnBar, icy $icyOnBar", icyOnBar > normalOnBar * 1.5)
+        val normalOnPlatform = slide(Grip.NORMAL, onBar = false)
+        val icyOnPlatform = slide(Grip.ICY, onBar = false)
+        assertEquals("on the platform", normalOnPlatform, icyOnPlatform, 0.01)
     }
 
     @Test
-    fun `a slippery face makes the contact slippery whichever part it is`() {
+    fun `slippery parts slip on each other but never on the platform`() {
         val mixer = StackWorld().world.valueMixer
-        // 今までどおりの面どうし（パーツと台・パーツどうし）は、前と同じ（掛けて平方根）
-        assertEquals(kotlin.math.sqrt(0.7 * 0.9), mixer.mixFriction(Grip.NORMAL.friction, 0.9), 1e-9)
+        val platform = StackWorld.PLATFORM_FRICTION
+        val sunnyOnPlatform = kotlin.math.sqrt(Grip.NORMAL.friction * platform)
+        // 今までどおりの面どうし（晴れのパーツと台・晴れのパーツどうし）は、前と同じ（掛けて平方根）
+        assertEquals(sunnyOnPlatform, mixer.mixFriction(Grip.NORMAL.friction, platform), 1e-9)
         assertEquals(0.7, mixer.mixFriction(Grip.NORMAL.friction, Grip.NORMAL.friction), 1e-9)
-        // 滑りやすい面が触れる所は、滑りやすい方の値（乗せても、乗せられても滑る）
-        assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.ICY.friction, 0.9), 1e-9)
+        // 台との間は、どの天気のパーツでも晴れと同じ（台は滑らない）。どちらの順で渡しても同じ
+        for (grip in Grip.entries) {
+            assertEquals(grip.name, sunnyOnPlatform, mixer.mixFriction(grip.friction, platform), 1e-9)
+            assertEquals(grip.name, sunnyOnPlatform, mixer.mixFriction(platform, grip.friction), 1e-9)
+        }
+        // パーツどうしは、滑りやすい面があれば滑りやすい方の値（乗せても、乗せられても滑る）
         assertEquals(Grip.WET.friction, mixer.mixFriction(Grip.NORMAL.friction, Grip.WET.friction), 1e-9)
+        assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.ICY.friction, Grip.NORMAL.friction), 1e-9)
         assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.WET.friction, Grip.ICY.friction), 1e-9)
     }
 

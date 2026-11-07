@@ -10,6 +10,7 @@ import org.dyn4j.geometry.Polygon
 import org.dyn4j.geometry.Vector2
 import org.dyn4j.world.ValueMixer
 import org.dyn4j.world.World
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -61,7 +62,7 @@ class StackWorld(
             val rect = Geometry.createRectangle(platformWidth, platformThickness)
             rect.translate(0.0, -platformThickness / 2.0)
             val f = addFixture(rect)
-            f.friction = 0.9
+            f.friction = PLATFORM_FRICTION
             f.restitution = 0.0
             setMass(MassType.INFINITE)
             userData = PLATFORM_TAG
@@ -202,17 +203,25 @@ class StackWorld(
     }
 
     /**
-     * 2 つの面が触れたときの摩擦の決め方。どちらも今までどおりの面なら、今までと同じ（掛けて平方根。dyn4j の決まり）。
-     * 滑りやすい面（雨・雪の日のパーツ。[Grip]）が触れる所は、滑りやすい方の値にする。
-     * 雪のパーツを乗せても、雪のパーツの上に乗せても滑る（掛けて平方根だと、相手の面に引っ張られて、ほとんど滑らなかった）
+     * 2 つの面が触れたときの摩擦の決め方。
+     * - **台との間**：パーツの天気によらず、晴れのパーツと同じ値（台は滑らない）。雪や雨のパーツでも、台に置いたものは滑り落ちない。
+     *   台の上でも滑ると、5 本とも落ちて送れない回が増えたため（#71 の D のレビュー：雪だけで積むと 5% → 30.5%）
+     * - **パーツどうし**：滑りやすい面（雨・雪の日のパーツ。[Grip]）があれば、滑りやすい方の値。雪のパーツを乗せても、
+     *   雪のパーツの上に乗せても滑る（dyn4j の決まり（掛けて平方根）だと、相手の面に引っ張られて、ほとんど滑らなかった）
+     * - それ以外（晴れのパーツどうしなど）：今までどおり、掛けて平方根
+     *
+     * 台かどうかは摩擦の値で見分ける（台は [PLATFORM_FRICTION]、パーツはどれも [Grip.NORMAL] 以下）
      */
     private object GripMixer : ValueMixer {
-        override fun mixFriction(friction1: Double, friction2: Double): Double =
-            if (friction1 < Grip.NORMAL.friction || friction2 < Grip.NORMAL.friction) {
-                min(friction1, friction2)
-            } else {
-                ValueMixer.DEFAULT_MIXER.mixFriction(friction1, friction2)
+        override fun mixFriction(friction1: Double, friction2: Double): Double {
+            val platform = max(friction1, friction2)
+            val part = min(friction1, friction2)
+            return when {
+                platform >= PLATFORM_FRICTION -> ValueMixer.DEFAULT_MIXER.mixFriction(max(part, Grip.NORMAL.friction), platform)
+                part < Grip.NORMAL.friction -> part
+                else -> ValueMixer.DEFAULT_MIXER.mixFriction(friction1, friction2)
             }
+        }
 
         override fun mixRestitution(restitution1: Double, restitution2: Double): Double =
             ValueMixer.DEFAULT_MIXER.mixRestitution(restitution1, restitution2)
@@ -223,6 +232,9 @@ class StackWorld(
 
     companion object {
         const val PLATFORM_TAG = "platform"
+
+        /** 台の面の摩擦。パーツ（どれも [Grip.NORMAL] 以下）より大きいので、摩擦の混ぜ方で台を見分けるのにも使う */
+        const val PLATFORM_FRICTION = 0.9
 
         /** 台の幅と厚さ [m]。物理と、共有ページの絵（TowerSvg / TowerPng）と、アプリの絵（TowerSketch）で同じ値を使う */
         const val PLATFORM_WIDTH = 1.4
