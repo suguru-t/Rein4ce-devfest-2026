@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.content.res.Resources
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -18,10 +19,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.collect.TrackRecorder
+import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.ui.AppNav
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.theme.RoadCollectorTheme
@@ -50,6 +53,10 @@ class MainActivity : ComponentActivity() {
                 )
                 onDispose {}
             }
+            // 次に開くときの起動画面の明るさも、設定に合わせる（Android 13 以降。それより前は端末のダークテーマで決まる）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                LaunchedEffect(mode) { splashScreen.setSplashScreenTheme(splashThemeFor(mode)) }
+            }
             // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
             val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
             val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
@@ -62,6 +69,13 @@ class MainActivity : ComponentActivity() {
                 AppNav()
             }
         }
+    }
+
+    /** 起動画面のテーマ。「端末に合わせる」なら決めない（マニフェストのテーマのまま、端末のダークテーマで地の色が決まる） */
+    private fun splashThemeFor(mode: ThemeMode): Int = when (mode) {
+        ThemeMode.SYSTEM -> Resources.ID_NULL
+        ThemeMode.LIGHT -> R.style.Theme_RoadCollector_SplashDay
+        ThemeMode.DARK -> R.style.Theme_RoadCollector_SplashNight
     }
 
     /**

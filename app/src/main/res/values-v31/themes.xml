@@ -11,4 +11,18 @@
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon_animated</item>
         <item name="android:windowSplashScreenAnimationDuration">260</item>
     </style>
+
+    <!-- アプリの設定で「ライト」「ダーク」を選んだときの起動画面（Android 13 以降）。上の地の色と、時計・電池の字の色だけ変える。
+         MainActivity が splashScreen.setSplashScreenTheme で端末に覚えてもらい、次に開くときから効く。
+         「端末に合わせる」なら使わない（上のまま、端末のダークテーマで決まる） -->
+    <style name="Theme.RoadCollector.SplashDay">
+        <item name="android:windowSplashScreenBackground">@color/paper_day</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+    <style name="Theme.RoadCollector.SplashNight">
+        <item name="android:windowSplashScreenBackground">@color/paper_night</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>
