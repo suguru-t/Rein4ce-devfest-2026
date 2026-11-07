@@ -66,9 +66,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -364,7 +369,9 @@ private fun CollectionMeter(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 $totalM メートル。見本 $samples" else "コレクション。読み込み中"
+                val total = totalDistance(totalM)
+                val unit = if (total.unit == "km") "キロメートル" else "メートル"
+                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} $unit。見本 $samples" else "コレクション。読み込み中"
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -380,9 +387,11 @@ private fun CollectionMeter(
                 Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
             }
         }
+        // 1 km 未満は m、1 km からは km で出す（totalDistance）
+        val shown = totalDistance(shownM.roundToInt())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (isLoaded) "%,d".format(shownM.roundToInt()) else "—",
+                if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
@@ -390,7 +399,7 @@ private fun CollectionMeter(
                 color = Fieldbook.Ink,
             )
             Text(
-                "m",
+                if (isLoaded) shown.unit else "m",
                 fontFamily = Fieldbook.Data,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -403,6 +412,39 @@ private fun CollectionMeter(
             fontSize = 13.sp,
             color = Fieldbook.Ink,
         )
+    }
+}
+
+/** 見出しのメーターに出す合計距離。数字と単位に分けて持つ（単位は小さく出すため） */
+internal data class TotalDistance(val number: String, val unit: String)
+
+/**
+ * 合計距離 [m] を、見出しのメーターに出す形にする。
+ * - 1 km 未満は m のまま（834 m）
+ * - 1 km からは km にして小数 1 桁（2,115 m → 2.1 km）。0.1 km に満たない分は切り捨てる。
+ *   車の距離計と同じく、歩いた分より多くは見せないため（999 m の次が 1.0 km、1,999 m は 1.9 km）
+ * - 桁区切りの「,」は使わない。言語の設定によらず、小数点は「.」
+ */
+internal fun totalDistance(m: Int): TotalDistance =
+    if (m < 1_000) {
+        TotalDistance("$m", "m")
+    } else {
+        val tenths = m / 100
+        TotalDistance("${tenths / 10}.${tenths % 10}", "km")
+    }
+
+/**
+ * 小数点だけふつうの（等幅でない）字にする。メーターの数字は等幅の字なので、そのままだと「.」も
+ * 数字 1 文字分の幅を取って、前後が空いて見えるため
+ */
+private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString {
+    val i = number.indexOf('.')
+    if (i < 0) {
+        append(number)
+    } else {
+        append(number.substring(0, i))
+        withStyle(SpanStyle(fontFamily = FontFamily.Default)) { append('.') }
+        append(number.substring(i + 1))
     }
 }
 
