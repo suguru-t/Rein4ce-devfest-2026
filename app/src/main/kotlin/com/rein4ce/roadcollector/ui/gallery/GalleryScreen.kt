@@ -18,20 +18,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,74 +38,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/**
- * C 担当：サーバ（Cloud Run）から「みんなのタワー」を取ってくる。
- * サーバが無いときはエラーを表示するだけで、他の画面には影響しない。
- */
-class GalleryViewModel : ViewModel() {
-    sealed class State {
-        data object Loading : State()
-        data class Error(val message: String) : State()
-        data class Loaded(val towers: List<TowerSummary>) : State()
-    }
-
-    var state: State by mutableStateOf(State.Loading)
-        private set
-
-    /**
-     * 絵を描くためのタワーの中身（id → Tower）。一覧の JSON には置き方が入っていないので、カードが見えたときに 1 基ずつ取る。
-     * タワーは保存後に変わらないので、一度取れたら再読み込みでも捨てない
-     */
-    val sketches = mutableStateMapOf<String, Tower>()
-    private val fetching = mutableSetOf<String>()
-
-    /**
-     * 取れなかったタワーの id。スクロールで何度もカードが見えるたびに取り直すと、壊れた 1 基のせいで
-     * 10 秒待ちの通信を繰り返すことになるので、次の「再読み込み」まで取り直さない
-     */
-    private val failed = mutableSetOf<String>()
-
-    init {
-        refresh()
-    }
-
-    /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
-    fun loadSketch(id: String) {
-        if (id in sketches || id in failed || !fetching.add(id)) return
-        viewModelScope.launch {
-            runCatching { ApiClient.getTower(id) }
-                .onSuccess { sketches[id] = it }
-                .onFailure { failed.add(id) }
-            fetching.remove(id)
-        }
-    }
-
-    fun refresh() {
-        failed.clear()
-        state = State.Loading
-        viewModelScope.launch {
-            state = runCatching { ApiClient.listTowers() }
-                .fold(
-                    // 高さの順位表。同じ高さなら新しいほうを上に
-                    onSuccess = { State.Loaded(it.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt })) },
-                    onFailure = { State.Error(it.message ?: it.toString()) },
-                )
-        }
-    }
-}
 
 /**
  * 見た目は他の画面と同じ「測量野帳」（Fieldbook.kt）。
@@ -115,10 +54,23 @@ class GalleryViewModel : ViewModel() {
  * タワーをタップすると、サーバの共有ページ（LINE / X に貼るのと同じもの）をブラウザで開く。
  */
 @Composable
-fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
+fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.current).gallery) {
     val uriHandler = LocalUriHandler.current
-    val state = vm.state
-    val towers = (state as? GalleryViewModel.State.Loaded)?.towers.orEmpty()
+    val state = gallery.state
+    val towers = (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
+
+    // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。積んで送信した直後に来ても、押さずに新しいタワーが出る。
+    // 起動時の先読み（TowerGallery.prefetch）がまだ走っていれば止めずに待ち、その結果を先に出す
+    LaunchedEffect(Unit) { gallery.refresh() }
+
+    // 一覧の位置。取り直して新しいタワーが①（いちばん高い）に入ったとき、上のほうを見ていたなら①から見せる。
+    // 一覧を残したまま取り直すので同じ LazyColumn が使われ続け、項目に key を付けていると Compose は
+    // 「見えていた項目」を先頭に残す。何もしないと前の①が先頭のままで、新しい①は画面の上に隠れる（#49 のレビュー）。
+    // 下のほうまでスクロールして見ていたなら、その位置は動かさない
+    val listState = rememberLazyListState()
+    LaunchedEffect(towers.firstOrNull()?.id) {
+        if (listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+    }
 
     // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
     Column(
@@ -131,7 +83,7 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
             Text("みんなのタワー", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
             Spacer(Modifier.weight(1f))
             Text(
-                if (state is GalleryViewModel.State.Loaded) "${towers.size} 基" else "—",
+                if (state is TowerGallery.State.Loaded) "${towers.size} 基" else "—",
                 fontFamily = Fieldbook.Data,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
@@ -141,30 +93,35 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
 
         // 状態行：読み込み中は青、つながらないときは赤。右に「再読み込み」
         val status = when (state) {
-            GalleryViewModel.State.Loading -> StatusLine("サーバから読み込み中…", Fieldbook.Survey)
-            is GalleryViewModel.State.Error -> StatusLine("サーバに接続できません", Fieldbook.Danger)
-            is GalleryViewModel.State.Loaded -> StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
+            TowerGallery.State.Loading -> StatusLine("サーバから読み込み中…", Fieldbook.Survey)
+            is TowerGallery.State.Error -> StatusLine("サーバに接続できません", Fieldbook.Danger)
+            // 一覧を出したまま裏で取り直しているときは青い点と「更新中」、取り直せなかったときは赤い点で分かるようにする
+            is TowerGallery.State.Loaded -> when {
+                gallery.refreshing -> StatusLine("更新中… ・ ${serverHost()}", Fieldbook.Survey)
+                gallery.refreshFailed -> StatusLine("取り直せませんでした（前の一覧のまま）", Fieldbook.Danger)
+                else -> StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
+            }
         }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
             Text(status.text, fontSize = 12.sp, color = Fieldbook.Muted, modifier = Modifier.weight(1f))
-            TextButton(onClick = { vm.refresh() }, enabled = state != GalleryViewModel.State.Loading) {
+            TextButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
                 Text("再読み込み", color = Fieldbook.Survey, fontSize = 13.sp)
             }
         }
 
         when (state) {
-            GalleryViewModel.State.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+            TowerGallery.State.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Fieldbook.Survey)
             }
             // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明（手元のサーバの使い方）は出さない。
             // 手元のサーバにつなぐ方法は README「サーバの接続先」にある
-            is GalleryViewModel.State.Error -> Note {
+            is TowerGallery.State.Error -> Note {
                 Text("少し待って「再読み込み」を押してください。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
                 Text("電波のない場所か、サーバが起動中かもしれません。", fontSize = 12.sp, color = Fieldbook.Muted)
             }
-            is GalleryViewModel.State.Loaded -> if (towers.isEmpty()) {
+            is TowerGallery.State.Loaded -> if (towers.isEmpty()) {
                 Note {
                     Text("まだタワーがありません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
                     Text("積んで「サーバに送信」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
@@ -172,15 +129,16 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
             } else {
                 val tallest = towers.maxOf { it.height }.coerceAtLeast(0.01f)
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
                 ) {
                     itemsIndexed(towers, key = { _, t -> t.id }, contentType = { _, _ -> "tower" }) { i, t ->
                         // 絵の中身はカードが見えたときに取る（一覧の JSON には入っていない）
-                        LaunchedEffect(t.id) { vm.loadSketch(t.id) }
+                        LaunchedEffect(t.id) { gallery.loadSketch(t.id) }
                         TowerCard(
                             tower = t,
-                            sketch = vm.sketches[t.id],
+                            sketch = gallery.sketches[t.id],
                             rank = i + 1,
                             ratio = t.height / tallest,
                             onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
@@ -236,7 +194,7 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, ratio: Flo
         // タワーの絵（野帳の図）。コレクションのカードと同じ「紙の上の図」の見せ方
         Box(
             modifier = Modifier
-                .size(width = 56.dp, height = 64.dp)
+                .size(width = 72.dp, height = 80.dp)
                 // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
                 .clip(SketchShape)
                 .background(Fieldbook.Paper, SketchShape)

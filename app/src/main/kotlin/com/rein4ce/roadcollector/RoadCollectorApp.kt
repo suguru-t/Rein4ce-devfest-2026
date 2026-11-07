@@ -7,6 +7,7 @@ import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
+import com.rein4ce.roadcollector.ui.gallery.TowerGallery
 
 /**
  * アプリ全体で共有するもの（リポジトリなど）の置き場。
@@ -23,6 +24,12 @@ class RoadCollectorApp : Application() {
 
     /** アプリの設定（画面の明るさなど） */
     lateinit var settings: AppSettings
+
+    /**
+     * 「みんなのタワー」の一覧（サーバから）。画面ではなくアプリ全体で持ち、画面が出たときに先読みする（AppNav）。
+     * ここ（Application.onCreate）では通信を始めない：記録サービスだけが裏で立ち上がったときにも呼ばれるため
+     */
+    lateinit var gallery: TowerGallery
         private set
 
     override fun onCreate() {
@@ -32,6 +39,7 @@ class RoadCollectorApp : Application() {
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
         partRepository = PartRepository(this)
         weatherService = WeatherService(this, partRepository)
+        gallery = TowerGallery()
         LocationRecordingService.createNotificationChannel(this)
     }
 

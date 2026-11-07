@@ -47,6 +47,12 @@ class TowerSketchTest {
     }
 
     @Test
+    fun `台の上に乗っているパーツは、下には範囲を広げない`() {
+        val b = sketchBounds(tower(height = 0.2f, Placement("p1", x = 0.3f, y = 0.07f, angleRad = 0f)))
+        assertEquals(-PLATFORM_THICKNESS - 0.1f, b.minY, 1e-6f)
+    }
+
+    @Test
     fun `高いタワーは高さが範囲を決める`() {
         val b = sketchBounds(tower(height = 2.4f, Placement("p1", x = 0f, y = 2.3f, angleRad = 0f)))
         assertTrue("maxY=${b.maxY}", b.maxY >= 2.4f)

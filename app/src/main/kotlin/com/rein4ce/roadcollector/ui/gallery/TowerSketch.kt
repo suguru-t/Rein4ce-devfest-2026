@@ -8,15 +8,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * タワー 1 基の小さな絵（野帳の図）。コレクションの [com.rein4ce.roadcollector.ui.inventory.FieldbookPart] と同じ描き方で、
- * 台の上に積んだパーツを、縁取りのある道の線で描く。形と置き方は共有ページの絵（TowerSvg / TowerPng）と同じ
- * `PartGeometry` と `placements` を使うので、アプリと共有ページで同じタワーに見える。
+ * タワー 1 基の小さな絵。台の上に積んだパーツを、細い墨の縁取りを付けて描く。
+ * 色は積む画面・共有ページの絵と同じ「種類ごとの色」（棒は黄、輪は青など）。小さな絵では色が
+ * いちばんの手がかりで、野帳の道の色 1 色だとどのパーツか分からず「同じタワー」に見えなかったため。
+ * 形と置き方は共有ページの絵（TowerSvg / TowerPng）と同じ `PartGeometry` と `placements` を使う。
  *
  * 見える範囲は [sketchBounds] で決め、タワー全体が収まるように縮める。
  */
@@ -38,9 +41,9 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier) {
             cornerRadius = CornerRadius(1.5f * scale * 0.05f),
         )
 
-        // 道：縁取りを全部描いてから本体を重ねる（重なった道が 1 本につながって見える）
+        // パーツ：細い墨の縁取りを全部描いてから、種類ごとの色で本体を重ねる（縁取りは細く。太いと輪の穴や棒の細さがつぶれる）
         val partsById = tower.parts.associateBy { it.id }
-        val edgePx = max(1f, 0.035f * scale)
+        val edgePx = max(1f, 0.02f * scale)
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
             drawPart(
@@ -48,12 +51,12 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier) {
                 center = Offset(sx(pl.x), sy(pl.y)),
                 scalePx = scale,
                 angleRad = pl.angleRad,
-                color = Fieldbook.RoadCasing,
+                color = Fieldbook.Ink,
             )
         }
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
-            drawPart(part, center = Offset(sx(pl.x), sy(pl.y)), scalePx = scale, angleRad = pl.angleRad, color = Fieldbook.Road)
+            drawPart(part, center = Offset(sx(pl.x), sy(pl.y)), scalePx = scale, angleRad = pl.angleRad, color = part.kind.color())
         }
     }
 }
@@ -88,8 +91,10 @@ internal fun sketchBounds(tower: Tower): SketchBounds {
     for (p in tower.placements) {
         minX = min(minX, p.x - PART_REACH)
         maxX = max(maxX, p.x + PART_REACH)
-        minY = min(minY, p.y - PART_REACH)
         maxY = max(maxY, p.y + PART_REACH)
+        // 台の上に乗っているパーツは台より下には行けないので、下に広げるのは台の端より外に置かれたものだけ。
+        // 全部に広げると、台の下に無駄な余白ができてタワーが小さく描かれる
+        if (abs(p.x) > PLATFORM_WIDTH / 2) minY = min(minY, p.y - PART_REACH)
     }
     return SketchBounds(minX, maxX, minY, maxY)
 }
