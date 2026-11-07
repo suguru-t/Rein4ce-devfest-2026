@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.ui.collect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -44,10 +46,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +65,7 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
+import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.TrackPoint
@@ -102,38 +108,41 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に画面名、右に測量の数値（手持ちの「採集 n ・ 見本 n」と同じ位置・字）
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Text("採集", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+        // 見出し：左にアプリのアイコン（画面名の字は出さない）、右に測量の数値（手持ちの「採集 n ・ 見本 n」と同じ位置・字）
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            AppIconMark(size = 56.dp)
             Spacer(Modifier.weight(1f))
             Text(
                 "L=${distance.toInt()} m ・ ${points.size} 点",
                 fontFamily = Fieldbook.Data,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
-                modifier = Modifier.padding(bottom = 4.dp),
             )
         }
 
-        // 状態行：記録中だけ赤い点。文は短く、注記の字で
+        // 状態行：記録中・再生中のときだけ出す（停止中は何も出さない）。記録中は赤い点。文は短く、注記の字で
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
-            else -> StatusLine("停止中・「記録開始」で歩き始める", Fieldbook.Mark)
+            else -> null
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(status.color),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(status.text, fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
+        if (status != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(status.color),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(status.text, fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
         }
 
         // 図：地図 or 軌跡。四隅の見当を地図の外側に描く（地図は Android の View なので、上には描けない）
@@ -251,6 +260,27 @@ fun CollectScreen(
 
 /** 記録中の赤。野帳の赤鉛筆のイメージで、少し落ち着いた色 */
 private val RecordingRed = Color(0xFFC0392B)
+
+/**
+ * 画面の左上に出すアプリのアイコン。ランチャーと同じ見た目になるよう、背景色の角丸の上に前景の絵を載せる。
+ * 前景（ic_launcher_foreground）は 108dp のうち内側の 72dp だけが見える決まりなので、その分だけ拡大して端を切る
+ */
+@Composable
+private fun AppIconMark(size: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(size / 4))
+            .background(colorResource(R.color.ic_launcher_background)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = "採集",
+            modifier = Modifier.fillMaxSize().scale(108f / 72f),
+        )
+    }
+}
 
 private data class StatusLine(val text: String, val color: Color)
 
