@@ -118,6 +118,7 @@ fun AppNav() {
         val backdrop = when (currentDestination?.route) {
             Dest.Collect.route -> BackdropScreen.COLLECT
             Dest.Inventory.route -> BackdropScreen.COLLECTION
+            Dest.Gallery.route -> BackdropScreen.GALLERY
             else -> BackdropScreen.OTHER
         }
         WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
