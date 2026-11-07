@@ -1,5 +1,7 @@
 package com.rein4ce.roadcollector.data
 
+import com.rein4ce.roadcollector.core.weather.Moon
+import com.rein4ce.roadcollector.core.weather.Sky
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,6 +17,30 @@ class AppSettingsTest {
         override fun put(key: String, value: String) {
             map[key] = value
         }
+    }
+
+    @Test
+    fun `the demo sky is the real weather at first, is saved, and covers every weather`() {
+        val store = MapStore()
+        assertEquals(DemoSky.REAL, AppSettings(store).demoSky.value)
+        assertEquals(null, DemoSky.REAL.weather)
+        AppSettings(store).setDemoSky(DemoSky.SNOW)
+        assertEquals(DemoSky.SNOW, AppSettings(store).demoSky.value)
+        // 7 つの天気を全部選べる。晴れの夜は昼でない、満月は満月の時刻
+        assertEquals(Sky.entries.toSet(), DemoSky.entries.mapNotNull { it.weather?.sky }.toSet())
+        assertEquals(false, DemoSky.CLEAR_NIGHT.weather!!.isDay)
+        assertTrue(DemoSky.FULL_MOON.fullMoon && Moon.isFull(Moon.phase(DemoSky.FULL_MOON_TIME_MS)))
+    }
+
+    @Test
+    fun `when the demo settings are turned off, a saved demo sky is ignored and cannot be set`() {
+        val store = MapStore()
+        AppSettings(store).setDemoSky(DemoSky.RAIN)
+        // 発表が終わって DEMO_SETTINGS を false にした端末：雨を選んだままでも、本当の天気に戻る
+        val off = AppSettings(store, demoEnabled = false)
+        assertEquals(DemoSky.REAL, off.demoSky.value)
+        off.setDemoSky(DemoSky.SNOW)
+        assertEquals(DemoSky.REAL, off.demoSky.value)
     }
 
     @Test

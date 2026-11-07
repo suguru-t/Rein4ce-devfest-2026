@@ -93,7 +93,17 @@ class WeatherTest {
     }
 
     @Test
-    fun `every sample has a weather`() {
+    fun `every sample has a weather and the samples show all seven`() {
         SampleParts.all.forEach { assertTrue(it.id, SampleParts.weather.containsKey(it.id)) }
+        // 見本だけで 7 つの天気が全部見られる（デモで見せるため）
+        assertEquals(Sky.entries.toSet(), SampleParts.weather.values.map { it.sky }.toSet())
+    }
+
+    @Test
+    fun `samples range from short to long walks`() {
+        // 積むときの大きさの違い（0.7〜1.4 倍）が見本で見られるように、短い道と長い道がある
+        val distances = SampleParts.all.map { it.distanceM }
+        assertTrue("shortest ${distances.min()}", distances.min() <= 200)
+        assertTrue("longest ${distances.max()}", distances.max() >= 1_500)
     }
 }

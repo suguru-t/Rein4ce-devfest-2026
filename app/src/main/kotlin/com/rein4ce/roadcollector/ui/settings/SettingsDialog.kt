@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.data.DEMO_SETTINGS
+import com.rein4ce.roadcollector.data.DemoSky
 import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.data.WeatherMotion
 import com.rein4ce.roadcollector.ui.common.FramedDialog
@@ -66,6 +69,8 @@ import kotlin.math.roundToInt
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
+ * - デモ（発表用）：見本のパーツ（コレクションに出す・出さない）、デモの天気（背景とデモ散歩の天気を選んだ天気にする）。
+ *   [DEMO_SETTINGS] が false なら出さない
  * - その他：使い方（初めて開いたときに出すものと同じ）、アプリについて
  *
  * 説明の文は「です・ます」で書く
@@ -78,6 +83,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
     val aiNaming by settings.aiNaming.collectAsStateWithLifecycle()
     val nickname by settings.nickname.collectAsStateWithLifecycle()
+    val demoSky by settings.demoSky.collectAsStateWithLifecycle()
+    // 見本のパーツがコレクションにあるか（1 本でもあればオン。読み込み中は切り替えさせない）
+    val repository = RoadCollectorApp.from(LocalContext.current).partRepository
+    val parts by repository.parts.collectAsStateWithLifecycle()
+    val partsLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    val samplesShown = parts.any { SampleParts.byId(it.id) != null }
     val systemDark = isSystemInDarkTheme()
     var page by remember { mutableStateOf(Page.LIST) }
     var editingNickname by remember { mutableStateOf(false) }
@@ -104,6 +115,14 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 }
                 Section("みんなのタワー") {
                     LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
+                }
+                // 発表が終わったら、DEMO_SETTINGS（AppSettings.kt）を false にすれば出なくなる
+                if (DEMO_SETTINGS) {
+                    Section("デモ（発表用）") {
+                        LinkRow(Page.SAMPLES.title, if (samplesShown) "出す" else "出さない") { page = Page.SAMPLES }
+                        ItemDivider()
+                        LinkRow(Page.DEMO_SKY.title, demoSky.label) { page = Page.DEMO_SKY }
+                    }
                 }
                 Section("その他") {
                     LinkRow(Page.HOWTO.title, null) { page = Page.HOWTO }
@@ -134,6 +153,40 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 explanation = "記録したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
                     "オフにすると何も送りません。",
             )
+            Page.SAMPLES -> {
+                Toggle(
+                    label = if (samplesShown) "出す" else "出さない",
+                    note = null,
+                    checked = samplesShown,
+                    onChange = { on ->
+                        if (!partsLoaded) return@Toggle
+                        if (on) repository.restoreMissingSamples() else repository.removeSamples()
+                    },
+                )
+                Text(
+                    "コレクションに見本のパーツ（${SampleParts.all.size} 本）を出します。見本は、7 つの天気と、短い道から長い道までがそろっています。" +
+                        "オフにすると見本を全部外し、オンにすると全部戻します。記録したパーツには触りません。",
+                    style = noteStyle,
+                    fontSize = 14.sp,
+                    color = Fieldbook.Ink,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+            }
+            Page.DEMO_SKY -> Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "発表のときに、その日の天気に関係なく見せたい天気を選べます。記録とみんなの背景と、デモ散歩でできるパーツの天気が、選んだ天気になります。" +
+                        "ふだんは「本当の天気」にしておいてください。",
+                    style = noteStyle,
+                    fontSize = 14.sp,
+                    color = Fieldbook.Ink,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                Column(modifier = Modifier.selectableGroup()) {
+                    for (sky in DemoSky.entries) {
+                        Choice(label = sky.label, note = null, selected = sky == demoSky, onSelect = { settings.setDemoSky(sky) })
+                    }
+                }
+            }
             Page.HOWTO -> HowToContent()
             Page.ABOUT -> AboutContent()
         }
@@ -155,6 +208,8 @@ private enum class Page(val title: String) {
     MOTION("背景の天気の動き"),
     KEEP_ON("記録中は画面を消さない"),
     AI("AI に名前を考えてもらう"),
+    SAMPLES("見本のパーツ"),
+    DEMO_SKY("デモの天気"),
     HOWTO("使い方"),
     ABOUT("アプリについて"),
 }

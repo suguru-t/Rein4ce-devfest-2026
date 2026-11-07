@@ -47,7 +47,23 @@ object SampleTracks {
         listOf(0.0 to 0.0, 150.0 to 0.0, 150.0 to 120.0, 300.0 to 120.0, 300.0 to 240.0), seed = 5,
     )
 
-    val all: List<SampleTrack> = listOf(bar, l, u, ring, zigzag)
+    /** 短い L 字：東へ 90 m、北へ 70 m（パーツになる最短の 150 m に近い、短い道の見本。積むと小さい） */
+    val corner = build(
+        "sample-corner", "となりの角まで", Kind.L,
+        listOf(0.0 to 0.0, 90.0 to 0.0, 90.0 to 70.0), seed = 6,
+    )
+
+    /** 長い棒：土手の上を北東へ 1.6 km（長い道の見本。積むと大きい） */
+    val river = build(
+        "sample-river", "土手をずっと歩く", Kind.BAR,
+        listOf(0.0 to 0.0, 900.0 to 1300.0), seed = 7,
+    )
+
+    /**
+     * 見本の 7 本。天気は 7 つ全部がそろうように決めてある（[SampleParts.weather]）。
+     * 長さも短い道（160 m）から長い道（1.6 km）まであるので、積むときの大きさの違い（PartSize）も見られる
+     */
+    val all: List<SampleTrack> = listOf(bar, l, u, ring, zigzag, corner, river)
 
     fun byId(id: String): SampleTrack? = all.firstOrNull { it.id == id }
 
