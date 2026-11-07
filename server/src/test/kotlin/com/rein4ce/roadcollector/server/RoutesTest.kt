@@ -28,8 +28,7 @@ import org.junit.Test
  * API の振る舞いのテスト。アプリと共有ページが頼っている約束事を確かめる。
  * テストごとに module() を起動し直すので、保存データはテストをまたがない。
  *
- * TowerStore を Firestore に替えるときは、テストが本物の Firestore につながないように、
- * module() に保存先を渡せるようにして、ここではメモリ版を使う。
+ * 本物の Firestore にはつながないよう、module() にはメモリ版の保存先を渡す。
  */
 class RoutesTest {
 
@@ -52,7 +51,7 @@ class RoutesTest {
 
     @Test
     fun `動作確認とヘルスチェックが応答する`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val root = client.get("/")
         assertEquals(HttpStatusCode.OK, root.status)
@@ -65,7 +64,7 @@ class RoutesTest {
 
     @Test
     fun `保存したタワーが一覧・JSON・共有ページ・画像で取れる`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val res = client.postTower(sampleTower())
         assertEquals(HttpStatusCode.Created, res.status)
@@ -110,7 +109,7 @@ class RoutesTest {
 
     @Test
     fun `Cloud Run 経由（X-Forwarded-Proto が https）なら共有 URL も https になる`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val res = client.postTower(sampleTower(), forwardedProto = "https")
         val created = AppJson.decodeFromString(TowerCreated.serializer(), res.bodyAsText())
@@ -119,7 +118,7 @@ class RoutesTest {
 
     @Test
     fun `パーツや配置が空のタワーは 400 で断る`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         val empty = sampleTower().copy(parts = emptyList(), placements = emptyList())
         assertEquals(HttpStatusCode.BadRequest, client.postTower(empty).status)
@@ -128,7 +127,7 @@ class RoutesTest {
 
     @Test
     fun `存在しない ID は 404`() = testApplication {
-        application { module() }
+        application { module(MemoryTowerStore()) }
 
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.svg").status)

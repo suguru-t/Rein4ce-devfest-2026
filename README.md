@@ -10,7 +10,7 @@
 いまできること：
 
 1. **採集**：「デモ散歩」を再生するとサンプル軌跡が流れてパーツになる。「ファイルから再生」で実機で録った GPX / JSON も流せる。実機なら「記録開始」で GPS 記録（画面ロック中も続く）
-2. **コレクション**（旧：手持ち）：同梱の見本 5 種類＋採集したパーツ。最大 5 本選んで「積む」。長押しで並べ替え中（ドラッグで並べ替え・× で削除）、虫めがねで拡大
+2. **コレクション**（旧：手持ち）：同梱の見本 5 種類＋採集したパーツ。右上の「選択」で最大 5 本選んで「積む」。タップで拡大して名前を付ける（Maps API キーがあれば、拡大した図の背景に歩いた場所の地図が出る。場所を残す前に採集したパーツは出ない）。長押しで並べ替え中（ドラッグで並べ替え・× で削除）
 3. **積む**：ドラッグで位置、15° 回転、「置く」で落下。全部静止したら次へ。落ちたら消える。5 個置き切ったら高さ確定
 4. **みんな**：サーバの `/towers` 一覧。完成したタワーは「サーバに送信」で共有ページ URL が返る
 
@@ -20,9 +20,19 @@
 
 1. Android Studio（Narwhal 以降）で、このフォルダを開く
 2. Studio が作る `local.properties` に `local.properties.example` の 2 行を足す
-   - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画）
+   - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画。下の「地図（Maps API キー）」を参照）
    - `SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app`（本番サーバ。下の「サーバの接続先」を参照）
 3. Run。エミュレータでも実機でも可（minSdk 26）
+
+### 地図（Maps API キー）
+
+採集画面の地図は Google Maps で、`MAPS_API_KEY` が無いと軌跡だけを Canvas に描く。キーは A が管理している 1 つをチームで共有する（Slack で A から受け取って `local.properties` に書く。**リポジトリには入れない**）。
+
+- デバッグ署名はチーム共通の鍵 `app/debug.keystore`（パスワードは Android 標準と同じ `android`）。全員と GitHub Actions のビルドが同じ署名になるので、キーの「Android アプリ」制限にはこの鍵の SHA-1 だけ登録してある。自分の PC で作った鍵は使わない
+- 同じ署名なので、手元のビルドと Actions の APK を同じ端末に入れ替えてもアンインストールは要らない
+- **共通の鍵になる前のビルド（2026-11-06 以前）が入っている端末・エミュレータは、最初の 1 回だけアンインストールしてから入れる**（署名が変わるため）。アンインストールするとコレクション（集めたパーツ）も消えるので、残したいものがあれば先にタワーをサーバに送るなどしておく
+- キーは「API の制限」で Maps SDK for Android だけに絞ってある（リポジトリが公開で、Actions の APK からキーを取り出せるため。地図の表示は課金されない）
+- 鍵を作り直したときは、Google Cloud Console のキーの制限に新しい SHA-1 を登録し直す（`keytool -list -v -keystore app/debug.keystore -storepass android` で出る）
 
 実機で GPS を試すときは、権限ダイアログで「アプリの使用中のみ許可」でよい（バックグラウンド権限は使わない）。
 エミュレータで歩くには Extended Controls → Location で GPX を再生するか、アプリ内の「デモ散歩」を使う。
@@ -63,8 +73,8 @@ main への push とプルリクエストのたびに、`core`・`server`・`app
 
 ビルドした APK は、各実行結果ページの Artifacts にある `app-debug.apk` からダウンロードできる（GitHub へのログインが必要。14 日間保存）。
 
-- この APK は本番サーバにつながる。地図は表示されず、軌跡を Canvas で描く（`MAPS_API_KEY` なし）
-- 手元でビルドしたアプリが入っている端末では、署名が違うので、いったんアンインストールしてから入れる
+- この APK は本番サーバにつながる。リポジトリの Secrets に `MAPS_API_KEY` が入っていれば地図も出る（無ければ軌跡を Canvas で描く）
+- 署名はチーム共通の `app/debug.keystore` なので、手元でビルドしたアプリが入っている端末にもそのまま上書きで入る
 
 ## 構成と担当
 
@@ -90,7 +100,7 @@ app/    com.rein4ce.roadcollector
 server/ com.rein4ce.roadcollector.server                                                  … C
   Application.kt  Ktor 起動（PORT 環境変数）
   Routes.kt       GET /, /health, /towers, POST /towers, GET /towers/{id}, /towers/{id}/image.svg
-  TowerStore.kt   いまはメモリ。Firestore に置き換える
+  TowerStore.kt   保存先のインターフェースとメモリ版。FirestoreTowerStore.kt が Firestore 版
   SharePage.kt    OGP 付き共有ページ
 ```
 
@@ -98,7 +108,7 @@ server/ com.rein4ce.roadcollector.server                                        
 
 - **A（採集）**：Android 実機で歩いて `ConversionParams` の数値（最低 150 m、精度 30 m、最小移動 5 m、最大速度 5 m/s、ε 10 m（GPS が粗いときは精度に合わせて大きくする）、頂点 24 個）を確認。特に Android の精度値で ε がどこまで上がるか（結果ダイアログに出る）。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みと、iPhone の GPX 6 本での調整は済み。Issue #1）
 - **B（変換・手持ち）**：`TrackToPart.classify` の精度（実データで棒/L/U/輪/ジグザグがどう出るか）。手持ち画面の見た目、削除、並び替え
-- **C（サーバ）**：Day1 に Cloud Run へ Hello World をデプロイ（server/README.md）。`TowerStore` を Firestore に。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
+- **C（サーバ）**：`TowerStore` の Firestore 版を Cloud Run にデプロイして確認。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
 - **D（ゲーム）**：操作感（ドラッグ感度、回転の刻み）、台の幅、摩擦などの調整。静止判定の待ち時間。対戦モード（交互置き or 非同期スコアバトル）
 
 ## データ形式（ここだけは全員で守る）
@@ -118,11 +128,13 @@ data class Part(
 
 生の GPS 点列（`TrackPoint`）は `Part` に入れない。サーバにも送らない。
 
+パーツを歩いた場所（形の中心の緯度・経度と長辺の長さ。`PartPlace`）も `Part` には入れない。コレクションの拡大表示の背景に地図を敷くためだけに、スマホの中の別のファイル（`parts_places.json`）に持つ。`Part` はタワーと一緒にサーバへ送られて共有ページに出るので、入れると歩いた場所が分かってしまうため。
+
 ## 検証状況（正直に。2026-11-06 時点）
 
-- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 34 本が通る
-- `app`：手持ちの保存と並び順のユニットテスト 19 本が通る。エミュレータ（Android 17）で「デモ散歩 → コレクション → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
-- `server`：API のテスト 5 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する
+- `core`（変換・物理・サンプル・SVG・軌跡ファイル読み込み）：ユニットテスト 37 本が通る
+- `app`：手持ちの保存・並び順・名前の文字数・地図の縮尺・合計距離の出し方のユニットテスト 37 本が通る。エミュレータ（Android 17）で「デモ散歩 → コレクション → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
+- `server`：API のテスト 11 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する。保存先の Firestore 版は、手元から本物の Firestore につないで「保存 → 再起動 → 読み出し」まで確認済み。**Cloud Run にはまだデプロイしていない**（本番はまだメモリ版）
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）
 - `gradle/libs.versions.toml` の版はすべて公開済みのもの。Studio が新しい版を勧めてきたら上げて構わない
 
