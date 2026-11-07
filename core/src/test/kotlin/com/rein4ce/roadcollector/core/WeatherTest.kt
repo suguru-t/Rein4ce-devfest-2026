@@ -1,6 +1,8 @@
 package com.rein4ce.roadcollector.core
 
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.model.AppJson
+import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.OpenMeteo
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
@@ -9,6 +11,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 /** 天気：天気コードの読み替え、Open-Meteo に送る URL と返事の読み取り */
 class WeatherTest {
@@ -51,6 +54,42 @@ class WeatherTest {
         assertEquals(WalkWeather(2, 0.0), OpenMeteo.parseHour(hour))
         assertNull(OpenMeteo.parseHour("""{"error":true,"reason":"out of range"}"""))
         assertNull(OpenMeteo.parseCurrent("not json"))
+    }
+
+    @Test
+    fun `day or night is asked and read, and missing means day`() {
+        assertTrue(OpenMeteo.currentUrl(35.7, 139.8).contains("current=weather_code,precipitation,is_day"))
+        assertTrue(OpenMeteo.hourUrl(35.7, 139.8, 0L).contains("hourly=weather_code,precipitation,is_day"))
+        val night = """{"current":{"time":"2026-11-07T15:00","weather_code":0,"precipitation":0.0,"is_day":0}}"""
+        assertEquals(WalkWeather(0, 0.0, isDay = false), OpenMeteo.parseCurrent(night))
+        val hour = """{"hourly":{"time":["2026-11-07T03:00"],"weather_code":[1],"precipitation":[0.0],"is_day":[1]}}"""
+        assertEquals(WalkWeather(1, 0.0, isDay = true), OpenMeteo.parseHour(hour))
+        // 前の版の答え（is_day が無い）は昼
+        assertEquals(true, OpenMeteo.parseCurrent("""{"current":{"weather_code":0,"precipitation":0.0}}""")?.isDay)
+    }
+
+    @Test
+    fun `weather saved before day and night existed reads as day`() {
+        val old = AppJson.decodeFromString(WalkWeather.serializer(), """{"code":0,"precipitationMm":0.0}""")
+        assertTrue(old.isDay)
+    }
+
+    @Test
+    fun `the moon phase follows known new and full moons`() {
+        // 2024-04-08 18:21 UTC は新月（皆既日食の日）、2024-04-23 23:49 UTC は満月。1 日ほどのずれは許す
+        val newMoon = Moon.phase(Instant.parse("2024-04-08T18:21:00Z").toEpochMilli())
+        assertTrue("new moon: $newMoon", newMoon < 0.04 || newMoon > 0.96)
+        val fullMoon = Moon.phase(Instant.parse("2024-04-23T23:49:00Z").toEpochMilli())
+        assertEquals(0.5, fullMoon, 0.04)
+        assertEquals(0.0, Moon.illumination(0.0), 1e-9)
+        assertEquals(1.0, Moon.illumination(0.5), 1e-9)
+        assertEquals(0.5, Moon.illumination(0.25), 1e-9)
+        // 満月の夜は前後 1 日まで（満月は日本時間 4/24 朝なので、4/23 の夜も 4/24 の夜も満月）。半月や新月は満月ではない
+        assertTrue(Moon.isFull(fullMoon))
+        assertTrue(Moon.isFull(Moon.phase(Instant.parse("2024-04-23T12:00:00Z").toEpochMilli())))
+        assertTrue(Moon.isFull(Moon.phase(Instant.parse("2024-04-24T12:00:00Z").toEpochMilli())))
+        assertFalse(Moon.isFull(0.25))
+        assertFalse(Moon.isFull(newMoon))
     }
 
     @Test
