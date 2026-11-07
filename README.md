@@ -101,7 +101,7 @@ app/    com.rein4ce.roadcollector
   ui/gallery/    みんなのタワー                                                             … C
   net/           ApiClient（Ktor client）                                                  … C
   data/          PartRepository（JSON ファイル保存。Room に替えるならここ）, GameSession, WeatherService（天気を取ってくる。B）, AppSettings（設定。B）
-  ui/common/     PartDrawing（パーツの描画。物理と同じ PartGeometry を使う）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, PaperBand（方眼の上の字の下地）
+  ui/common/     PartDrawing（パーツの描画。物理と同じ PartGeometry を使う）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, PaperBand（方眼の上の字の下地）, WalkNote（パーツの注記：足跡・長さ・日付・天気）
   ui/settings/   設定（SettingsDialog）、ニックネーム、アプリについて                                  … B
 
 server/ com.rein4ce.roadcollector.server                                                  … C
@@ -115,7 +115,7 @@ server/ com.rein4ce.roadcollector.server                                        
 
 ### 各担当の「次にやること」
 
-- **A（採集）**：Android 実機で歩いて `ConversionParams` の数値（最低 150 m、精度 30 m、最小移動 5 m、最大速度 5 m/s、歩き・ジョギングの上限 3.9 m/s（時速 14 km。30 秒の窓の直線距離で測る。記録中に超えた状態が 10 秒続いたら自動で止めて、そこまでをパーツにする）、ε 10 m（GPS が粗いときは精度に合わせて大きくする）、頂点 24 個）を確認。特に Android の精度値で ε がどこまで上がるか（結果ダイアログに出る）。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みと、iPhone の GPX 6 本での調整は済み。Issue #1）
+- **A（採集）**：Android 実機で歩いて `ConversionParams` の数値（最低 150 m、精度 30 m、最小移動 5 m、最大速度 5 m/s、歩き・ジョギングの上限 3.9 m/s（時速 14 km。30 秒の窓の直線距離で測る。記録中に超えた状態が 10 秒続いたら自動で止めて、そこまでをパーツにする）、ε 10 m（GPS が粗いときは精度に合わせて大きくする）、頂点 24 個）を確認。特に Android の精度値で ε がどこまで上がるか（画面には出さず、Logcat の `CollectViewModel` に出る）。Maps API キーを入れて地図表示を確認（GPX / JSON の読み込みと、iPhone の GPX 6 本での調整は済み。Issue #1）
 - **B（変換・手持ち）**：`TrackToPart.classify` の精度（実データで棒/L/U/輪/ジグザグがどう出るか）。手持ち画面の見た目、削除、並び替え
 - **C（サーバ）**：`TowerStore` の Firestore 版を Cloud Run にデプロイして確認。`og:image` を PNG に。`POST /parts/name`（Vertex AI / Gemini）。対戦方式が決まれば `/challenges`
 - **D（ゲーム）**：操作感（ドラッグ感度、回転の刻み）、台の幅、摩擦などの調整。静止判定の待ち時間。対戦モード（交互置き or 非同期スコアバトル）
