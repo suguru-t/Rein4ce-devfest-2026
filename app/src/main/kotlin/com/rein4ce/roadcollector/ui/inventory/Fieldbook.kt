@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -21,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
@@ -135,7 +135,11 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 @Composable
 fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
-    val label = TextStyle(fontFamily = Fieldbook.Data, fontSize = 9.sp, color = Fieldbook.Ink)
+    // 図の中の字（縮尺・北）は図の一部なので、文字の大きさの設定では大きくしない。図の大きさは決まっているので、
+    // 大きくすると四隅の見当や道にぶつかる。距離は図の下の注記にも字で出ている
+    val density = LocalDensity.current
+    val label = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Ink)
+    val northSize = with(density) { 8.dp.toSp() }
     Canvas(modifier) {
         val s = min(size.width, size.height)
         val u = s / 150f
@@ -163,7 +167,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         drawPart(part, center, scalePx, color = Fieldbook.Road)
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
-        drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = 8.sp))
+        drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = northSize))
 
         // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
         val len = normalizedLength(part)

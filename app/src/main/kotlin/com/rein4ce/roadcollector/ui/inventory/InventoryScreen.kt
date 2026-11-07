@@ -44,6 +44,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -72,6 +74,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -189,10 +192,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when {
-                    editing -> "長押しのまま動かして並べ替え ・ × で削除"
-                    selecting -> "タップで積むパーツを選ぶ（${GameSession.MAX_PARTS} 本まで）"
-                    else -> "タップで大きく見る ・ 長押しで並べ替え"
+                    editing -> notes("長押しのまま動かして並べ替え", "× で削除")
+                    selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                    else -> notes("タップで大きく見る", "長押しで並べ替え")
                 },
+                style = noteStyle,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
                 modifier = Modifier.weight(1f),
@@ -417,7 +421,8 @@ private fun CollectionMeter(
             )
         }
         Text(
-            if (isLoaded) "これまでに集めた道 $walks 本 ・ 見本 $samples" else "読み込み中…",
+            if (isLoaded) notes("これまでに集めた道 $walks 本", "見本 $samples") else "読み込み中…",
+            style = noteStyle,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
         )
@@ -502,7 +507,8 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ " + if (isSample) "見本" else formatDate(part.walkedAt),
+                    notes("L=${part.distanceM} m", "頂点 ${part.points.size}", if (isSample) "見本" else formatDate(part.walkedAt)),
+                    style = noteStyle,
                     fontFamily = Fieldbook.Data,
                     fontSize = 12.sp,
                     color = Fieldbook.Muted,
@@ -536,6 +542,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "採集したパーツは、削除すると元に戻せません。",
+                    style = noteStyle,
                     fontSize = 13.sp,
                     color = Fieldbook.Muted,
                 )
@@ -674,12 +681,17 @@ private fun PartCard(
             autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
             modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
         )
+        // 文字を大きくしている人には 1 行に入らないので、2 行に折り返す（切ると採集日が見えなくなる）。
+        // そのときは折り返さなかったカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる
+        val largeText = LocalDensity.current.fontScale > 1f
         Text(
-            "L=${part.distanceM} m・頂点 ${part.points.size}・$date",
+            notes("L=${part.distanceM} m", "頂点 ${part.points.size}", date, separator = "・"),
+            style = noteStyle,
             fontFamily = Fieldbook.Data,
             fontSize = 10.5.sp,
             color = Fieldbook.Muted,
-            maxLines = 1,
+            minLines = if (largeText) 2 else 1,
+            maxLines = 2,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
     }
@@ -744,7 +756,10 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
                 ),
         ) {
             if (order != null) {
-                Text("$order", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
+                // 丸の大きさは決まっている（26dp）ので、数字は文字の大きさの設定で大きくしない（大きくすると丸からはみ出す）。
+                // 行の高さも同じ大きさにする（行の高さだけ大きくなると、数字が下にずれて切れる）
+                val numberSize = with(LocalDensity.current) { 14.dp.toSp() }
+                Text("$order", color = Color.White, fontSize = numberSize, lineHeight = numberSize, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
             }
         }
     }
@@ -752,6 +767,33 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
 
 /** パーツ 1 本ぶんの紙片の形（角を少しだけ丸める） */
 private val CardShape = RoundedCornerShape(4.dp)
+
+/**
+ * 注記を「・」でつなぐ（「タップで大きく見る ・ 長押しで並べ替え」など）。
+ * 文字を大きくして折り返すときに、「6 本」「488 m」の数と単位が別の行に分かれたり、行が「・」で始まったりしないよう、
+ * 項目の中の空白と「・」の前の空白は、折り返さない空白（U+00A0）にする。どこで折り返すかは [noteStyle] で決める
+ *
+ * @param separator つなぎの字。前後の空白も含める（カードの狭い注記は空白なしの「・」）
+ */
+internal fun notes(vararg items: String, separator: String = " ・ "): String {
+    val dot = separator.trimEnd()
+    val glued = dot.replace(' ', NBSP) + separator.substring(dot.length)
+    return items.joinToString(glued) { it.replace(' ', NBSP) }
+}
+
+/** 折り返さない空白 */
+private const val NBSP = '\u00A0'
+
+/**
+ * 注記や説明の字の設定。いまの字の設定（`LocalTextStyle`）はそのままで、折り返し方だけを変える。文字を大きくして 1 行に入らないときに、日本語の文節（「タップで」「大きく」「見る」）の切れ目で
+ * 折り返し、「見本」「頂点」「削除」のような言葉の途中や、「・」「）」で始まる行を作らない。
+ * 文節で折り返すのは、端末の言語が日本語で、Android 13 以降のとき（それ以外は字の間で折り返す）。
+ * 言語をここで日本語に決めないのは、英語の端末で字の形がこの字だけ変わってしまうため
+ */
+internal val noteStyle: TextStyle
+    @Composable get() = LocalTextStyle.current.copy(lineBreak = NoteLineBreak)
+
+private val NoteLineBreak = LineBreak.Simple.copy(strictness = LineBreak.Strictness.Strict, wordBreak = LineBreak.WordBreak.Phrase)
 
 /** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
 private fun formatDate(epochMs: Long): String =

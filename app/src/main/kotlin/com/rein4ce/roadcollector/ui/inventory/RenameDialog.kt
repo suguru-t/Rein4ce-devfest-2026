@@ -69,6 +69,7 @@ internal fun RenameDialog(part: Part, onSave: (String) -> Unit, onDismiss: () ->
                     Row(Modifier.fillMaxWidth()) {
                         Text(
                             if (tooLong) "$MAX_NAME_LENGTH 文字までです" else "空なら「$fallback」に戻る",
+                            style = noteStyle,
                             modifier = Modifier.weight(1f).padding(end = 8.dp),
                         )
                         Text("$length/$MAX_NAME_LENGTH", fontFamily = Fieldbook.Data)
