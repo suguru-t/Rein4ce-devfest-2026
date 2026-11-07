@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +46,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.Font
@@ -104,30 +108,38 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ
-        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Text(
+        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ。
+        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）。
+        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。それでも右の長さと近づく幅の端末では、
+        // 題字のほうを縮めて 1 行に収める（長さの字は折り返さない）
+        val density = LocalDensity.current
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            BasicText(
                 "michitsumi",
-                fontFamily = TitleSans,
-                fontSize = 32.sp,
-                letterSpacing = (-0.5).sp,
-                color = Fieldbook.Ink,
-                modifier = Modifier.alignByBaseline().padding(start = 8.dp),
+                style = TextStyle(fontFamily = TitleSans, letterSpacing = (-0.5).sp, color = Fieldbook.Ink),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = with(density) { 20.dp.toSp() },
+                    maxFontSize = with(density) { 32.dp.toSp() },
+                    stepSize = with(density) { 1.dp.toSp() },
+                ),
+                modifier = Modifier.alignByBaseline().padding(start = 8.dp, end = 12.dp).weight(1f, fill = false),
             )
-            Spacer(Modifier.weight(1f))
             Text(
                 "L=${distance.toInt()} m",
                 fontFamily = Fieldbook.Data,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Fieldbook.Ink,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.alignByBaseline(),
             )
         }
 
-        // 状態行：記録中・再生中のときだけ出す（停止中は空）。
-        // 高さは状態の有無で変えない（記録を始めた瞬間に地図が下にずれないように）
+        // 状態行：記録中・再生中のときだけ丸と文を出す（停止中は空の文）。
+        // 高さは文字の大きさに合わせて決まり、状態の有無では変えない（記録を始めた瞬間に地図が下にずれないように。
+        // 文字を大きくしている人でも字が切れないように、固定の高さにはしない）
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
@@ -135,7 +147,7 @@ fun CollectScreen(
             else -> null
         }
         Row(
-            modifier = Modifier.fillMaxWidth().height(28.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (status != null) {
@@ -146,8 +158,8 @@ fun CollectScreen(
                         .background(status.color),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(status.text, fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
             }
+            Text(status?.text ?: "", fontSize = 12.sp, color = if (isRecording) Fieldbook.Ink else Fieldbook.Muted)
         }
         Spacer(Modifier.height(4.dp))
 
