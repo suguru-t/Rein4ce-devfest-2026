@@ -1,9 +1,17 @@
 package com.rein4ce.roadcollector.ui.weather
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -30,9 +38,9 @@ import kotlin.random.Random
  * - 雨・雷雨：斜めに落ちる雨粒（奥のものほど細く・短く・遅く・うすい）と、紙に当たってできる小さな輪
  * - 霧雨：細かく短い雨粒
  * - 雪：揺れながらゆっくり落ちる白い粒
- * - 霧：紙の色のもやが横に流れて、方眼の線がところどころ薄れる。くもり：上のほうに雲の影がゆっくり流れる
- * - 晴れ：右上の角に太陽（白く光り、外へ黄色く溶ける）と、まぶしい光、ゆっくり回る細い光芒、
- *   画面を斜めに横切るぼんやりしたレンズのきらめき（ゆっくり動く）
+ * - 霧：紙の色のもやが横に流れて、方眼の線がところどころ薄れる。くもり：灰色がかった空を、雲がゆっくり横に流れる
+ * - 晴れ：天気アプリの晴れの画面のように、上のほうにうすい空の色、白く飛んだ太陽とクリーム色のまぶしさ、
+ *   細い光の筋、うすい虹色の輪と六角形のレンズのきらめき。スマホを傾けると太陽ときらめきが少し動く
  * - 天気が分からないとき：何も描かない
  *
  * 「動きを減らす」設定（アニメーションをオフ）の人には、止まった絵を出す。雷の光る演出は、光の点滅が苦手な人がいるので入れていない。
@@ -53,7 +61,38 @@ fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier) {
             while (true) withFrameNanos { time.floatValue = (it - start) / 1e9f }
         }
     }
-    Canvas(modifier) { particles.draw(this, time.floatValue) }
+    // 晴れのときだけ、スマホの傾きで太陽ときらめきを少し動かす（天気アプリと同じ）。動きを減らす設定なら動かさない
+    val tilt = rememberTilt(enabled = sky == Sky.CLEAR && !reduceMotion)
+    Canvas(modifier) { particles.draw(this, time.floatValue, tilt.value) }
+}
+
+/**
+ * スマホの傾き（-1〜1 の x・y。まっすぐ持つと 0 付近）。重力センサーの値をなめらかにして返す。
+ * 使わないとき（[enabled] が false）はセンサーを聞かない（電池のため）
+ */
+@Composable
+private fun rememberTilt(enabled: Boolean): State<Offset> {
+    val context = LocalContext.current
+    val tilt = remember { mutableStateOf(Offset.Zero) }
+    DisposableEffect(enabled) {
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = manager?.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: manager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (!enabled || manager == null || sensor == null) return@DisposableEffect onDispose { }
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                // 画面の横（x）と縦（y）の向きの重力 ÷ 9.8。左右に傾けると x、前後に倒すと y が変わる
+                val x = (-event.values[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+                val y = ((event.values[1] / SensorManager.GRAVITY_EARTH) - 0.7f).coerceIn(-1f, 1f)
+                val old = tilt.value
+                tilt.value = Offset(old.x + (x - old.x) * 0.12f, old.y + (y - old.y) * 0.12f)
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+        onDispose { manager.unregisterListener(listener) }
+    }
+    return tilt
 }
 
 /** 雨粒・雪の粒などの、動かない値（位置の種・奥行き）。毎コマの位置は時刻から計算する */
@@ -64,7 +103,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         Sky.DRIZZLE -> 70
         Sky.SNOW -> (70 + precipitationMm * 20).toInt().coerceIn(70, 150)
         Sky.FOG -> 7
-        Sky.CLOUDY -> 4
+        Sky.CLOUDY -> 7
         Sky.CLEAR -> 0
     }
     private val random = Random(SEED)
@@ -72,7 +111,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
     private val phase = FloatArray(count) { random.nextFloat() }
     private val depth = FloatArray(count) { random.nextFloat() }
 
-    fun draw(scope: DrawScope, t: Float) = with(scope) {
+    fun draw(scope: DrawScope, t: Float, tilt: Offset = Offset.Zero) = with(scope) {
         when (sky) {
             Sky.RAIN, Sky.THUNDER -> {
                 if (sky == Sky.THUNDER) drawRect(Color(0x0F1B2633)) // 雷雨は紙を少し暗く
@@ -83,7 +122,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             Sky.SNOW -> snow(t)
             Sky.FOG -> fog(t)
             Sky.CLOUDY -> clouds(t)
-            Sky.CLEAR -> sun(t)
+            Sky.CLEAR -> sun(t, tilt)
         }
     }
 
@@ -172,33 +211,34 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
     }
 
     /**
-     * 晴れ：右上の角に太陽を描く。ひと目で太陽と分かり、かつ自然に見えるように、くっきりした縁や輪は付けない。
-     * - 紙の上のほうを、日が当たったように少し暖かい色にする
-     * - 太陽のまわりのまぶしさと、大きくうすい光（どちらも段を多くして、なめらかに薄れる）
-     * - 細くうすい光芒（光の筋）を放射状に並べ、ゆっくり回す。長さ・太さ・向きは少しずつばらつかせる
-     * - 太陽：まん中は白く、外へ向かって黄色になりながら、ふちは光に溶ける
-     * - 太陽から画面のまん中への線の上に、ぼんやりしたレンズのきらめき。線がゆっくり傾いて動く
+     * 晴れ（天気アプリの晴れの画面に近づける）。
+     * - 紙の上のほうに、うすく空の色を差す（白い太陽が、空を背にまぶしく見えるように）
+     * - 太陽：まん中は白く飛び、外へクリーム色の光がなめらかに広がる（黄色く塗った円にはしない）
+     * - 細くうすい光の筋がゆっくり回る
+     * - レンズのきらめき：太陽から画面のまん中を通る線の上に、六角形のうすい光（色は少しずつ違う）
+     * - スマホを傾けると、太陽は傾けた向きへ、きらめきは反対へ少し動く（[tilt]）。止めて持っていても、ゆっくり揺れる
      */
-    private fun DrawScope.sun(t: Float) {
+    private fun DrawScope.sun(t: Float, tilt: Offset) {
         val w = size.width
         val h = size.height
-        val pulse = 0.93f + 0.07f * sin(t * 0.6f)
-        // 紙の上のほうに日が当たる（上の 3 割だけ）
+        val pulse = 0.95f + 0.05f * sin(t * 0.6f)
+        // 空の色（上の 4 割）と、太陽の側だけ少し明るい空
         drawRect(
             brush = Brush.verticalGradient(
-                0f to SunWash.copy(alpha = 0.24f),
-                0.3f to SunWash.copy(alpha = 0f),
+                0f to Sky1.copy(alpha = 0.75f),
+                0.2f to Sky1.copy(alpha = 0.4f),
+                0.45f to Sky1.copy(alpha = 0f),
             ),
         )
-        val sun = Offset(w * 0.86f, h * 0.045f)
-        val disc = 34.dp.toPx()
-        // 光のにじみ。なめらかに薄れるよう段を多くする（段が少ないと、薄れ方の折れ目が輪に見える）
-        fun glow(radius: Float, color: Color, alpha: Float, center: Offset = sun) = drawCircle(
+        val sway = Offset(sin(t * 0.09f) * 6.dp.toPx(), sin(t * 0.07f) * 3.dp.toPx())
+        val sun = Offset(w * 0.82f, h * 0.05f) + Offset(tilt.x * 18.dp.toPx(), -tilt.y * 10.dp.toPx()) + sway
+        fun bloom(radius: Float, color: Color, alpha: Float, center: Offset = sun) = drawCircle(
             brush = Brush.radialGradient(
                 0f to color.copy(alpha = alpha),
-                0.2f to color.copy(alpha = alpha * 0.7f),
-                0.45f to color.copy(alpha = alpha * 0.32f),
-                0.7f to color.copy(alpha = alpha * 0.1f),
+                0.15f to color.copy(alpha = alpha * 0.8f),
+                0.35f to color.copy(alpha = alpha * 0.42f),
+                0.6f to color.copy(alpha = alpha * 0.15f),
+                0.8f to color.copy(alpha = alpha * 0.04f),
                 1f to color.copy(alpha = 0f),
                 center = center,
                 radius = radius,
@@ -206,77 +246,158 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             radius = radius,
             center = center,
         )
-        glow(w * 0.95f, SunGlow, 0.22f * pulse) // 大きくうすい光
-        glow(disc * 4f, SunBloom, 0.6f * pulse) // 太陽のまわりのまぶしさ
-        // 光芒：太陽から外へ、細くうすく。長さはばらばらにして、ゆっくり回す
-        val spin = t * 2f // 度/秒
+        bloom(w * 1.0f, SunWarm, 0.3f * pulse) // 空いっぱいに広がる暖かい光
+        bloom(210.dp.toPx(), SunWarm, 0.55f * pulse) // 太陽のまわりの暖かいまぶしさ
+        bloom(140.dp.toPx(), SunCream, 0.9f * pulse) // まぶしさ
+        // 細くうすい光の筋（白っぽい）
+        val spin = t * 1.5f
+        val disc = 30.dp.toPx()
         for (i in 0 until RAY_COUNT) {
-            val angle = Math.toRadians((i * 360.0 / RAY_COUNT) + spin + (hash(i, 40) - 0.5f) * 8f)
-            // まわりのまぶしさ（半径は円盤の 4 倍）の外まで届くようにする（中だけだと、まぶしさに埋もれて見えない）
-            val length = disc * lerp(4f, 7.5f, hash(i, 41)) * (0.9f + 0.1f * sin(t * 0.7f + i))
-            val half = Math.toRadians(lerp(1f, 2f, hash(i, 42)).toDouble())
-            val start = disc * 0.6f
+            val angle = Math.toRadians((i * 360.0 / RAY_COUNT) + spin + (hash(i, 40) - 0.5f) * 10f)
+            val length = disc * lerp(4.5f, 8f, hash(i, 41)) * (0.9f + 0.1f * sin(t * 0.7f + i))
+            val half = Math.toRadians(lerp(0.6f, 1.3f, hash(i, 42)).toDouble())
             val ray = Path().apply {
-                moveTo(sun.x + cos(angle - half).toFloat() * start, sun.y + sin(angle - half).toFloat() * start)
+                moveTo(sun.x + cos(angle - half).toFloat() * disc * 0.5f, sun.y + sin(angle - half).toFloat() * disc * 0.5f)
                 lineTo(sun.x + cos(angle).toFloat() * length, sun.y + sin(angle).toFloat() * length)
-                lineTo(sun.x + cos(angle + half).toFloat() * start, sun.y + sin(angle + half).toFloat() * start)
+                lineTo(sun.x + cos(angle + half).toFloat() * disc * 0.5f, sun.y + sin(angle + half).toFloat() * disc * 0.5f)
                 close()
             }
             drawPath(
                 ray,
                 brush = Brush.radialGradient(
-                    0f to SunRay.copy(alpha = 0.65f),
-                    0.6f to SunRay.copy(alpha = 0.28f),
-                    1f to SunRay.copy(alpha = 0f),
+                    0f to SunCream.copy(alpha = 0.7f),
+                    0.6f to SunCream.copy(alpha = 0.25f),
+                    1f to SunCream.copy(alpha = 0f),
                     center = sun,
                     radius = length,
                 ),
             )
         }
-        // 太陽：まん中は白く、外へ向かって黄色になりながら、ふちは光に溶ける（くっきりした縁は付けない）
-        val core = disc * 1.5f
+        // 太陽：白く飛んだまん中から、縁を作らずに外へ溶ける（くっきりした丸にすると、貼ったように見える）
+        val core = disc * 3f
         drawCircle(
             brush = Brush.radialGradient(
                 0f to Color.White,
-                0.35f to Color.White,
-                0.55f to SunCore,
-                0.75f to SunGlow.copy(alpha = 0.55f),
-                1f to SunGlow.copy(alpha = 0f),
+                0.22f to Color.White,
+                0.4f to Color.White.copy(alpha = 0.8f),
+                0.6f to SunCream.copy(alpha = 0.4f),
+                0.8f to SunCream.copy(alpha = 0.12f),
+                1f to SunCream.copy(alpha = 0f),
                 center = sun,
                 radius = core,
             ),
             radius = core,
             center = sun,
         )
-        // レンズのきらめき：太陽 → 画面のまん中 → その先 の線の上に並べる
-        val center = Offset(w / 2, h / 2)
-        val tilt = 0.1f * sin(t * 0.15f) // 線がゆっくり傾く
-        val axis = (center - sun).let { Offset(it.x * cos(tilt) - it.y * sin(tilt), it.x * sin(tilt) + it.y * cos(tilt)) }
-        for ((k, flare) in FLARE_SET.withIndex()) {
-            val c = sun + axis * flare.at
-            val r = flare.radiusDp.dp.toPx()
-            val a = flare.alpha * (0.85f + 0.15f * sin(t * 0.5f + k))
-            glow(r, flare.color, a, center = c)
+        // レンズのきらめき：太陽 → 画面のまん中（傾きと反対へずれる）→ その先
+        val center = Offset(w / 2, h / 2) - Offset(tilt.x * 40.dp.toPx(), -tilt.y * 30.dp.toPx())
+        val axis = center - sun
+        // 虹色の輪：太陽から少し先に中心を置いた、うすい虹色の輪（内側が紫、外側が赤）。天気アプリの晴れのきらめき
+        val ringCenter = sun + axis * 0.12f
+        val ringR = 150.dp.toPx()
+        val band = 13.dp.toPx()
+        val outer = ringR + band
+        fun at(r: Float) = (r / outer).coerceIn(0f, 1f)
+        val ringAlpha = 0.075f * (0.85f + 0.15f * sin(t * 0.4f)) // ごくうすく（目立つと不自然）
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to Color.Transparent,
+                at(ringR - band) to Color.Transparent,
+                at(ringR - band * 0.65f) to Color(0xFF9B7BFF).copy(alpha = ringAlpha * 0.6f),
+                at(ringR - band * 0.35f) to Color(0xFF6FA8FF).copy(alpha = ringAlpha),
+                at(ringR - band * 0.05f) to Color(0xFF6FE0A8).copy(alpha = ringAlpha),
+                at(ringR + band * 0.25f) to Color(0xFFFFE36A).copy(alpha = ringAlpha),
+                at(ringR + band * 0.55f) to Color(0xFFFFA64D).copy(alpha = ringAlpha * 0.9f),
+                at(ringR + band * 0.8f) to Color(0xFFFF6B6B).copy(alpha = ringAlpha * 0.6f),
+                1f to Color.Transparent,
+                center = ringCenter,
+                radius = outer,
+            ),
+            radius = outer,
+            center = ringCenter,
+        )
+        for ((k, f) in FLARE_SET.withIndex()) {
+            val c = sun + axis * f.at
+            val r = f.radiusDp.dp.toPx()
+            val a = f.alpha * (0.85f + 0.15f * sin(t * 0.5f + k))
+            if (f.hexagon) {
+                val hex = Path().apply {
+                    for (n in 0 until 6) {
+                        val ang = Math.toRadians(30.0 + n * 60.0)
+                        val p = Offset(c.x + cos(ang).toFloat() * r, c.y + sin(ang).toFloat() * r)
+                        if (n == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
+                    }
+                    close()
+                }
+                drawPath(
+                    hex,
+                    brush = Brush.radialGradient(
+                        0f to f.color.copy(alpha = a * 0.5f),
+                        0.75f to f.color.copy(alpha = a),
+                        1f to f.color.copy(alpha = a * 0.6f),
+                        center = c,
+                        radius = r,
+                    ),
+                )
+            } else {
+                bloom(r, f.color, a, center = c)
+            }
         }
     }
 
-    /** 上のほうをゆっくり流れる雲の影 */
+    /**
+     * くもり：上のほうを、雲がゆっくり横に流れる（左から右へ。奥の雲ほど小さく、遅く、うすい）。
+     * 雲は、ふわっとした丸をいくつか重ねた塊（外へやわらかく溶ける）。下側に少し影を付けて、明るい紙の上でも形が分かるようにする。
+     * 空は少し灰色がかった色にする
+     */
     private fun DrawScope.clouds(t: Float) {
         val w = size.width
         val h = size.height
-        for (i in 0 until count) {
-            val r = w * lerp(0.35f, 0.6f, depth[i])
-            val cx = wrap(x0[i] * w + t * w * lerp(0.006f, 0.015f, depth[i]), w + 2 * r) - r
-            val cy = h * lerp(0.0f, 0.18f, phase[i])
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(CloudShade.copy(alpha = 0.10f), CloudShade.copy(alpha = 0f)),
-                    center = Offset(cx, cy),
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to Overcast.copy(alpha = 0.6f),
+                0.25f to Overcast.copy(alpha = 0.3f),
+                0.5f to Overcast.copy(alpha = 0f),
+            ),
+        )
+        // 奥の雲から描く
+        val order = (0 until count).sortedBy { depth[it] }
+        for (i in order) {
+            val d = depth[i]
+            val scale = lerp(55f, 120f, d).dp.toPx() // 雲の大きさ
+            val speed = lerp(4f, 14f, d).dp.toPx() // 1 秒に流れる距離
+            val span = w + scale * 4
+            val cx = (x0[i] * span + t * speed) % span - scale * 2
+            val cy = h * lerp(0.02f, 0.3f, phase[i]) + sin(t * 0.05f + i) * 4.dp.toPx()
+            val alpha = lerp(0.45f, 0.9f, d)
+            // 塊をつくる丸（数と並びは雲ごとに決まっている）
+            for (k in 0 until PUFFS) {
+                val px = cx + (hash(i, 60 + k) - 0.5f) * scale * 2.4f
+                val py = cy + (hash(i, 80 + k) - 0.6f) * scale * 0.6f
+                val r = scale * lerp(0.45f, 0.85f, hash(i, 100 + k))
+                // 下側の影
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        listOf(CloudShade.copy(alpha = alpha * 0.22f), CloudShade.copy(alpha = 0f)),
+                        center = Offset(px, py + r * 0.25f),
+                        radius = r * 1.1f,
+                    ),
+                    radius = r * 1.1f,
+                    center = Offset(px, py + r * 0.25f),
+                )
+                // 雲の白（ふんわり外へ溶ける）
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        0f to CloudWhite.copy(alpha = alpha),
+                        0.55f to CloudWhite.copy(alpha = alpha * 0.85f),
+                        1f to CloudWhite.copy(alpha = 0f),
+                        center = Offset(px, py),
+                        radius = r,
+                    ),
                     radius = r,
-                ),
-                radius = r,
-                center = Offset(cx, cy),
-            )
+                    center = Offset(px, py),
+                )
+            }
         }
     }
 
@@ -297,29 +418,33 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         private val SnowEdge = Color(0xFF5F86A8)
         private val SnowShadow = Color(0xFF2F4A62)
 
-        /** 雲の影 */
+        /** 雲の下側の影、雲の白、くもりの空の色、雲 1 つをつくる丸の数 */
         private val CloudShade = Color(0xFF55606B)
+        private val CloudWhite = Color(0xFFFBFCFD)
+        private val Overcast = Color(0xFFB9C3CC)
+        private const val PUFFS = 6
 
-        /** 太陽（まん中の明るい黄色）、まわりのまぶしさ、大きな光、光芒、紙に当たる日の色 */
-        private val SunCore = Color(0xFFFFF1A6)
-        private val SunBloom = Color(0xFFFFE07A)
-        private val SunGlow = Color(0xFFFFC447)
-        private val SunRay = Color(0xFFFFD36A)
-        private val SunWash = Color(0xFFFFE2A0)
+        /** 空の色、太陽のまわりのクリーム色のまぶしさ、空いっぱいの暖かい光 */
+        private val Sky1 = Color(0xFFAED3F1)
+        private val SunCream = Color(0xFFFFF4D6)
+        private val SunWarm = Color(0xFFFFE3A3)
 
-        /** 光芒の数 */
-        private const val RAY_COUNT = 14
+        /** 光の筋の数 */
+        private const val RAY_COUNT = 10
 
-        /** レンズのきらめき（ぼんやりした丸）。[at] は太陽から画面のまん中までを 1 としたときの位置 */
-        private class Flare(val at: Float, val radiusDp: Float, val color: Color, val alpha: Float)
+        /**
+         * レンズのきらめき。[at] は太陽から画面のまん中までを 1 としたときの位置。
+         * [hexagon] なら六角形（カメラの絞りの形。天気アプリのきらめきに近い）、そうでなければぼんやりした丸
+         */
+        private class Flare(val at: Float, val radiusDp: Float, val color: Color, val alpha: Float, val hexagon: Boolean = false)
 
-        // 太陽の近く（見出しのあたり）にも置いて、画面の部品に隠れにくくする
         private val FLARE_SET = listOf(
-            Flare(0.24f, 9f, Color(0xFFFFC95C), 0.35f),
-            Flare(0.36f, 22f, Color(0xFF9ED9C9), 0.2f),
-            Flare(0.5f, 12f, Color(0xFFFFB27A), 0.25f),
-            Flare(0.7f, 40f, Color(0xFFFFD36E), 0.14f),
-            Flare(1.0f, 18f, Color(0xFFB9A8F0), 0.16f),
+            Flare(0.2f, 10f, Color(0xFFFFF0C2), 0.45f),
+            Flare(0.34f, 18f, Color(0xFFB8E3D6), 0.22f, hexagon = true),
+            Flare(0.46f, 8f, Color(0xFFFFD9B0), 0.35f, hexagon = true),
+            Flare(0.62f, 30f, Color(0xFFD6CCF5), 0.16f, hexagon = true),
+            Flare(0.9f, 14f, Color(0xFFFFE7A8), 0.22f),
+            Flare(1.25f, 52f, Color(0xFFB8E3D6), 0.1f, hexagon = true),
         )
 
         /** 霧のもや（方眼紙の地の色。線を隠す） */
