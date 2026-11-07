@@ -61,12 +61,12 @@ import kotlin.math.roundToInt
  * 設定（採集画面の右上の歯車から開く）。選ぶとすぐに効き、スマホの中に保存する。
  *
  * 最初の画面は、項目の名前と今の設定だけの一覧（長くならないように）。項目を押すと、同じ枠の中で
- * 選ぶ画面に切り替わる（見出しの帯の左の「＜」・戻る・枠の外で一覧に戻る。「×」は設定ごと閉じる）。
+ * 選ぶ画面に切り替わる（枠の下の丸いボタンが「＜」になり、それか戻る・枠の外で一覧に戻る。一覧では「×」で設定を閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
- * - その他：アプリについて
+ * - その他：使い方（初めて開いたときに出すものと同じ）、アプリについて
  *
  * 説明の文は「です・ます」で書く
  */
@@ -106,6 +106,8 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
                 }
                 Section("その他") {
+                    LinkRow(Page.HOWTO.title, null) { page = Page.HOWTO }
+                    ItemDivider()
                     LinkRow(Page.ABOUT.title, null) { page = Page.ABOUT }
                 }
             }
@@ -129,9 +131,10 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.AI -> SwitchPage(
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
-                explanation = "採集したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
+                explanation = "記録したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
                     "オフにすると何も送りません。",
             )
+            Page.HOWTO -> HowToContent()
             Page.ABOUT -> AboutContent()
         }
     }
@@ -152,6 +155,7 @@ private enum class Page(val title: String) {
     MOTION("背景の天気の動き"),
     KEEP_ON("記録中は画面を消さない"),
     AI("AI に名前を考えてもらう"),
+    HOWTO("使い方"),
     ABOUT("アプリについて"),
 }
 

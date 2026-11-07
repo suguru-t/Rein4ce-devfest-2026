@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.collect
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -49,7 +50,6 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
          */
         data class Created(
             val part: Part,
-            val stats: TrackToPart.Stats,
             val note: String? = null,
             val naming: Naming = Naming.ASKING,
         ) : Outcome()
@@ -170,7 +170,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
             is TrackToPart.Result.TooFast ->
                 outcome = Outcome.Rejected(
                     "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps, RoundingMode.CEILING)}）。" +
-                        "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で採集してください",
+                        "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で記録してください",
                 )
         }
     }
@@ -183,12 +183,18 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun keep(r: TrackToPart.Result.Success, note: String? = null) {
         // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う）
         repository.add(r.part, r.place)
+        // 変換の数字は画面に出さない（見ても分からないため）。実機で ε などを確かめるとき用に、Logcat にだけ出す（場所は出さない）
+        Log.i(
+            "CollectViewModel",
+            "パーツ: ${r.part.distanceM} m, 頂点 ${r.part.points.size}, ε ${"%.0f".format(r.stats.epsilonM)} m, " +
+                "最高 ${r.stats.fastestMps?.let { kmh(it) } ?: "—"}, GPS ${r.stats.rawPoints} 点 → フィルタ後 ${r.stats.filteredPoints} 点",
+        )
         // 設定（歯車）で AI の名前付けをオフにしていたら、聞かない（形・距離・日時もサーバに送らない）
         if (!settings.aiNaming.value) {
-            outcome = Outcome.Created(r.part, r.stats, note = note, naming = Naming.OFF)
+            outcome = Outcome.Created(r.part, note = note, naming = Naming.OFF)
             return
         }
-        outcome = Outcome.Created(r.part, r.stats, note = note)
+        outcome = Outcome.Created(r.part, note = note)
         // ダイアログを閉じても、名前は考え続けて保存する
         viewModelScope.launch {
             val suggested = ApiClient.namePart(r.part)

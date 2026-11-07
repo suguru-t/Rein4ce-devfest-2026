@@ -19,13 +19,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -42,7 +42,8 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  *
  * @param onDismiss 戻るボタン・枠の外を押したとき
  * @param onClose 枠の下の「×」を押したとき（ふつうは [onDismiss] と同じ）
- * @param onBack あれば、見出しの帯の左に「＜」を出す（設定の中の「アプリについて」などから、設定に戻る）
+ * @param onBack あれば、枠の下の丸いボタンを「×」ではなく「＜」にして、押すとこれを呼ぶ
+ *   （設定の中の「画面の明るさ」などから、設定の一覧に戻る。戻るボタンも閉じるボタンと同じ場所にそろえる）
  */
 @Composable
 fun FramedDialog(
@@ -73,11 +74,6 @@ fun FramedDialog(
                             .padding(horizontal = 48.dp, vertical = 14.dp)
                             .semantics { heading() },
                     )
-                    if (onBack != null) {
-                        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "戻る", tint = Fieldbook.Ink)
-                        }
-                    }
                 }
                 // 見出しが変わったら（設定 → アプリについて など）、いちばん上から見せる
                 val scroll = remember(title) { ScrollState(0) }
@@ -89,25 +85,29 @@ fun FramedDialog(
                     content = content,
                 )
             }
-            // 枠の下の「×」で閉じる
+            // 枠の下の丸いボタン：ふつうは「×」で閉じる。戻る先があるときは「＜」で戻る
             Spacer(Modifier.height(16.dp))
-            CloseButton(onClick = onClose)
+            if (onBack != null) {
+                RoundButton(Icons.AutoMirrored.Filled.KeyboardArrowLeft, label = "戻る", onClick = onBack)
+            } else {
+                RoundButton(Icons.Filled.Close, label = "閉じる", onClick = onClose)
+            }
         }
     }
 }
 
-/** 枠の下に出す、丸い「×」のボタン（押せる大きさは 48dp）。暗い幕の上でも見えるよう、紙の色の丸に縁を付ける */
+/** 枠の下に出す、丸いボタン（「×」か「＜」。押せる大きさは 48dp）。暗い幕の上でも見えるよう、紙の色の丸に縁を付ける */
 @Composable
-private fun CloseButton(onClick: () -> Unit) {
+private fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(48.dp)
             .clip(CircleShape)
             .background(Fieldbook.Paper)
             .border(1.dp, Fieldbook.CardEdge, CircleShape)
-            .clickable(onClick = onClick, role = Role.Button, onClickLabel = "閉じる"),
+            .clickable(onClick = onClick, role = Role.Button, onClickLabel = label),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Close, contentDescription = "閉じる", tint = Fieldbook.Ink, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = label, tint = Fieldbook.Ink, modifier = Modifier.size(24.dp))
     }
 }
