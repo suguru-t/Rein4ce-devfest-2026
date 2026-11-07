@@ -74,9 +74,9 @@ class GalleryViewModel : ViewModel() {
     val sketches = mutableStateMapOf<String, Tower>()
     private val fetching = mutableSetOf<String>()
 
-    init {
-        refresh()
-    }
+    /** 一覧を取り直している最中か（表示中の一覧は残したまま）。「再読み込み」を押せなくするのに使う */
+    var refreshing: Boolean by mutableStateOf(false)
+        private set
 
     /** カードが見えたときに呼ぶ。取れなかったら、次にカードが見えたときにもう一度取る */
     fun loadSketch(id: String) {
@@ -88,15 +88,24 @@ class GalleryViewModel : ViewModel() {
         }
     }
 
+    /**
+     * 一覧を取り直す。画面を開くたび（タブを切り替えて戻ったときも）と、「再読み込み」で呼ぶ。
+     * この ViewModel はタブを切り替えても生きているので、開くたびに取り直さないと、送信したばかりのタワーが出ない。
+     * 既に一覧が出ているときは消さずに裏で取り直し、取れなかったら今の一覧を残す（通信が悪いときに一覧が消えないように）
+     */
     fun refresh() {
-        state = State.Loading
+        if (refreshing) return
+        val shown = state as? State.Loaded
+        if (shown == null) state = State.Loading
+        refreshing = true
         viewModelScope.launch {
             state = runCatching { ApiClient.listTowers() }
                 .fold(
                     // 高さの順位表。同じ高さなら新しいほうを上に
                     onSuccess = { State.Loaded(it.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt })) },
-                    onFailure = { State.Error(it.message ?: it.toString()) },
+                    onFailure = { shown ?: State.Error(it.message ?: it.toString()) },
                 )
+            refreshing = false
         }
     }
 }
@@ -111,6 +120,9 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
     val uriHandler = LocalUriHandler.current
     val state = vm.state
     val towers = (state as? GalleryViewModel.State.Loaded)?.towers.orEmpty()
+
+    // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。積んで送信した直後に来ても、押さずに新しいタワーが出る
+    LaunchedEffect(Unit) { vm.refresh() }
 
     // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
     Column(
@@ -135,13 +147,16 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
         val status = when (state) {
             GalleryViewModel.State.Loading -> StatusLine("サーバから読み込み中…", Fieldbook.Survey)
             is GalleryViewModel.State.Error -> StatusLine("サーバに接続できません", Fieldbook.Danger)
-            is GalleryViewModel.State.Loaded -> StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
+            // 一覧を出したまま裏で取り直しているときは、青い点と「更新中」で分かるようにする
+            is GalleryViewModel.State.Loaded ->
+                if (vm.refreshing) StatusLine("更新中… ・ ${serverHost()}", Fieldbook.Survey)
+                else StatusLine("高さの順位表 ・ ${serverHost()}", Fieldbook.Mark)
         }
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
             Text(status.text, fontSize = 12.sp, color = Fieldbook.Muted, modifier = Modifier.weight(1f))
-            TextButton(onClick = { vm.refresh() }, enabled = state != GalleryViewModel.State.Loading) {
+            TextButton(onClick = { vm.refresh() }, enabled = !vm.refreshing) {
                 Text("再読み込み", color = Fieldbook.Survey, fontSize = 13.sp)
             }
         }
