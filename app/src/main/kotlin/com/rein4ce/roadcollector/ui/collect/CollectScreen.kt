@@ -163,6 +163,8 @@ fun CollectScreen(
                     autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
                 )
             }
+            // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
+            Spacer(Modifier.width(10.dp))
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "設定", tint = Fieldbook.Ink)
             }
