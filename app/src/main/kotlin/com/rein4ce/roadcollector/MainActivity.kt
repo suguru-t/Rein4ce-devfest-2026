@@ -97,7 +97,8 @@ class MainActivity : ComponentActivity() {
         val animStart = splash.iconAnimationStart
         val animDuration = splash.iconAnimationDuration
         val wait = if (animStart != null && animDuration != null) {
-            (animStart.toEpochMilli() + animDuration.toMillis() - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
+            // 収まってから、一瞬（PAUSE_MS）置いてからくぐる
+            (animStart.toEpochMilli() + animDuration.toMillis() + PAUSE_MS - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
         } else {
             0L
         }
@@ -120,7 +121,10 @@ class MainActivity : ComponentActivity() {
         const val GATE_DY_DP = -35.8f
 
         /** 起動画面のアイコンの動きを待つのは、長くてもこれだけ [ms]（起動が遅くなりすぎないように） */
-        const val MAX_WAIT_MS = 350L
+        const val MAX_WAIT_MS = 500L
+
+        /** 「ミ」が収まってから、門をくぐり始めるまでの間 [ms] */
+        const val PAUSE_MS = 150L
 
         /** 穴が画面いっぱいより大きくなるまで、アイコンを大きくする倍率 */
         const val GATE_ZOOM = 40f
