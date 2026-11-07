@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.core.geo
 
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import kotlin.math.abs
@@ -22,7 +23,10 @@ import kotlin.math.max
 object TrackToPart {
 
     sealed class Result {
-        data class Success(val part: Part, val stats: Stats) : Result()
+        /**
+         * @param place 歩いた場所（形の中心と長辺の長さ）。**Part とは別に、スマホの中だけに保存する**（PartPlace のコメント）
+         */
+        data class Success(val part: Part, val stats: Stats, val place: PartPlace) : Result()
         data class TooShort(val distanceM: Double, val minDistanceM: Double) : Result()
         data class TooFewPoints(val pointCount: Int) : Result()
     }
@@ -92,7 +96,10 @@ object TrackToPart {
             longSideM = longSide,
             epsilonM = epsilon,
         )
-        return Result.Success(part, stats)
+        // 歩いた場所：形の中心（バウンディングボックスの中心）を緯度・経度に戻す。長辺の長さはパーツの 1.0 にあたる
+        val (centerLat, centerLng) = Projection.toLatLng(filtered.first(), XY(bbox.centerX, bbox.centerY))
+        val place = PartPlace(lat = centerLat, lng = centerLng, sizeM = longSide)
+        return Result.Success(part, stats, place)
     }
 
     /**

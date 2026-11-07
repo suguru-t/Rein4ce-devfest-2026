@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -66,20 +67,26 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
-import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -102,6 +109,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     val savedOrder by repository.order.collectAsStateWithLifecycle()
+    // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
+    val places by repository.places.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
@@ -321,7 +330,12 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             onDismiss = { renamingId = null },
         )
     } else if (zoomed != null) {
-        ZoomDialog(zoomed, onRename = { renamingId = zoomed.id }, onDismiss = { zoomedId = null })
+        ZoomDialog(
+            zoomed,
+            place = repository.placeOf(zoomed.id, places),
+            onRename = { renamingId = zoomed.id },
+            onDismiss = { zoomedId = null },
+        )
     }
 
     pendingDelete?.let { part ->
@@ -364,7 +378,8 @@ private fun CollectionMeter(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 $totalM メートル。見本 $samples" else "コレクション。読み込み中"
+                val total = totalDistance(totalM)
+                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "コレクション。読み込み中"
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -380,9 +395,12 @@ private fun CollectionMeter(
                 Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
             }
         }
+        // 1 km 未満は m、1 km からは km で出す（totalDistance）。
+        // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
+        val shown = totalDistance(shownM.toInt())
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                if (isLoaded) "%,d".format(shownM.roundToInt()) else "—",
+                if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
                 fontSize = 40.sp,
                 fontWeight = FontWeight.Bold,
@@ -390,7 +408,7 @@ private fun CollectionMeter(
                 color = Fieldbook.Ink,
             )
             Text(
-                "m",
+                if (isLoaded) shown.unit.label else DistanceUnit.M.label,
                 fontFamily = Fieldbook.Data,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -406,9 +424,54 @@ private fun CollectionMeter(
     }
 }
 
+/** 見出しのメーターに出す合計距離。数字と単位に分けて持つ（単位は小さく出すため） */
+internal data class TotalDistance(val number: String, val unit: DistanceUnit)
+
+/**
+ * 合計距離の単位。画面に出す文字と、読み上げ（TalkBack）の言葉を一緒に持つ。
+ * 画面の文字を変えても（たとえば「㎞」にしても）、読み上げが別の単位にならないように
+ */
+internal enum class DistanceUnit(val label: String, val spoken: String) {
+    M("m", "メートル"),
+    KM("km", "キロメートル"),
+}
+
+/**
+ * 合計距離 [m] を、見出しのメーターに出す形にする。
+ * - 1 km 未満は m のまま（834 m）
+ * - 1 km からは km にして小数 1 桁（2,115 m → 2.1 km）。0.1 km に満たない分は切り捨てる。
+ *   車の距離計と同じく、歩いた分より多くは見せないため（999 m の次が 1.0 km、1,999 m は 1.9 km）
+ * - 桁区切りの「,」は使わない。言語の設定によらず、小数点は「.」
+ */
+internal fun totalDistance(m: Int): TotalDistance =
+    if (m < 1_000) {
+        TotalDistance("$m", DistanceUnit.M)
+    } else {
+        val tenths = m / 100
+        TotalDistance("${tenths / 10}.${tenths % 10}", DistanceUnit.KM)
+    }
+
+/**
+ * 小数点の前後を詰める。メーターの数字は等幅の字なので、そのままだと「.」も数字 1 文字分の幅を取って、前後が空いて見えるため。
+ * 字体は変えずに字間だけ詰める（「.」だけ別の字体にすると、行の高さが変わって、横の単位の位置が km のときだけずれることがある）
+ */
+private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString {
+    val i = number.indexOf('.')
+    if (i < 0) {
+        append(number)
+    } else {
+        append(number.substring(0, i))
+        withStyle(SpanStyle(letterSpacing = POINT_LETTER_SPACING)) { append('.') }
+        append(number.substring(i + 1))
+    }
+}
+
+/** 小数点の字間。等幅の字の 1 文字分（およそ 0.6 文字の高さ）のうち、半分ほどを詰める（左右に半分ずつ詰まる） */
+private val POINT_LETTER_SPACING = (-0.3).em
+
 /** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, onRename: () -> Unit, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -419,7 +482,24 @@ private fun ZoomDialog(part: Part, onRename: () -> Unit, onDismiss: () -> Unit) 
         title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                    // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                    // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
+                    if (mapPlace != null) {
+                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
+                    }
+                    Column {
+                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                        }
+                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ " + if (isSample) "見本" else formatDate(part.walkedAt),
@@ -604,6 +684,9 @@ private fun PartCard(
         )
     }
 }
+
+/** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
+private const val MAP_LOGO_STRIP_DP = 28f
 
 /**
  * 見出しの右上の「選択」ボタン（選択中は「キャンセル」）。写真アプリと同じ位置・言葉。
