@@ -31,7 +31,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -53,43 +56,54 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val systemDark = isSystemInDarkTheme()
     Dialog(onDismissRequest = onDismiss) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // 枠（野帳の紙）
+            // 枠（野帳の紙）。上に灰色の帯を敷いて、まん中に「設定」
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Fieldbook.Paper)
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                    .background(Fieldbook.Paper),
             ) {
-                Text("設定", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Spacer(Modifier.height(16.dp))
-                Text("画面の明るさ", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
-                Column(modifier = Modifier.selectableGroup()) {
-                    for (m in ThemeMode.entries) {
-                        val selected = m == mode
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .selectable(selected = selected, onClick = { settings.setThemeMode(m) }, role = Role.RadioButton),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = selected,
-                                onClick = null, // 行ごと押せる（selectable）
-                                colors = RadioButtonDefaults.colors(selectedColor = Fieldbook.Survey, unselectedColor = Fieldbook.Muted),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                Text(m.label, fontSize = 16.sp, color = Fieldbook.Ink)
-                                if (m == ThemeMode.SYSTEM) {
-                                    // 端末の設定がいまどちらかも出す（選んだときにどちらになるか分かるように）
-                                    Text(
-                                        if (systemDark) "いまはダーク" else "いまはライト",
-                                        style = noteStyle,
-                                        fontSize = 12.sp,
-                                        color = Fieldbook.Muted,
-                                    )
+                Text(
+                    "設定",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Fieldbook.Ink,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Fieldbook.Band)
+                        .padding(vertical = 14.dp)
+                        .semantics { heading() },
+                )
+                Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp)) {
+                    Text("画面の明るさ", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
+                    Column(modifier = Modifier.selectableGroup()) {
+                        for (m in ThemeMode.entries) {
+                            val selected = m == mode
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .selectable(selected = selected, onClick = { settings.setThemeMode(m) }, role = Role.RadioButton),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = selected,
+                                    onClick = null, // 行ごと押せる（selectable）
+                                    colors = RadioButtonDefaults.colors(selectedColor = Fieldbook.Survey, unselectedColor = Fieldbook.Muted),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Text(m.label, fontSize = 16.sp, color = Fieldbook.Ink)
+                                    if (m == ThemeMode.SYSTEM) {
+                                        // 端末の設定がいまどちらかも出す（選んだときにどちらになるか分かるように）
+                                        Text(
+                                            if (systemDark) "いまはダーク" else "いまはライト",
+                                            style = noteStyle,
+                                            fontSize = 12.sp,
+                                            color = Fieldbook.Muted,
+                                        )
+                                    }
                                 }
                             }
                         }

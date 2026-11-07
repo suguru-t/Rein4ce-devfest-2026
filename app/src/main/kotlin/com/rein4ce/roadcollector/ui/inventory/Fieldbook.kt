@@ -81,6 +81,9 @@ object Fieldbook {
     val Needle: Color get() = c(0xFFD63A2A, 0xFFE5533F)
     val NeedleEdge: Color get() = c(0xFF8E2418, 0xFFB83A2A)
 
+    /** 見出しの帯（設定の画面の「設定」の下に敷く灰色） */
+    val Band: Color get() = c(0xFFDDE1DB, 0xFF2A302B)
+
     /** パーツ 1 本ぶんの紙片（方眼の上に置いた白い紙。ダークでは少し明るい黒）と、その縁 */
     val Card: Color get() = c(0xFFFBFCF9, 0xFF20271F)
     val CardEdge: Color get() = c(0xFFB8C5B3, 0xFF3A463C)
