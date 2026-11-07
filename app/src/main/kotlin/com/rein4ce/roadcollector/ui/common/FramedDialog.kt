@@ -84,7 +84,8 @@ fun FramedDialog(
                 Column(
                     modifier = Modifier
                         .verticalScroll(scroll)
-                        .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
+                        // 左右・下は 24dp。上は、中身の最初の見出しや行の上の余白と合わせて 24dp ほどになるように
+                        .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 24.dp),
                     content = content,
                 )
             }
