@@ -56,7 +56,7 @@ class PartRoutesTest {
     @Test
     fun `名前が付けば 200 で name を返し、パーツの中身が命名に渡る`() = testApplication {
         val namer = FakePartNamer { "稲妻の小道" }
-        application { module(namer = namer) }
+        application { module(store = MemoryTowerStore(), namer = namer) }
 
         val res = client.postName(zigzag.json())
 
@@ -67,14 +67,14 @@ class PartRoutesTest {
 
     @Test
     fun `命名が null なら 503`() = testApplication {
-        application { module(namer = FakePartNamer { null }) }
+        application { module(store = MemoryTowerStore(), namer = FakePartNamer { null }) }
 
         assertEquals(HttpStatusCode.ServiceUnavailable, client.postName(zigzag.json()).status)
     }
 
     @Test
     fun `命名が例外を投げても 503 で、サーバは落ちない`() = testApplication {
-        application { module(namer = FakePartNamer { error("Gemini が落ちた") }) }
+        application { module(store = MemoryTowerStore(), namer = FakePartNamer { error("Gemini が落ちた") }) }
 
         assertEquals(HttpStatusCode.ServiceUnavailable, client.postName(zigzag.json()).status)
         // 続けて呼んでも普通に応答する
@@ -83,14 +83,14 @@ class PartRoutesTest {
 
     @Test
     fun `命名なし（手元の既定）なら 503`() = testApplication {
-        application { module(namer = DisabledPartNamer) }
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         assertEquals(HttpStatusCode.ServiceUnavailable, client.postName(zigzag.json()).status)
     }
 
     @Test
     fun `長すぎる名前は 10 文字に切り詰めて返す`() = testApplication {
-        application { module(namer = FakePartNamer { "とてもとても長い名前の道でございます" }) }
+        application { module(store = MemoryTowerStore(), namer = FakePartNamer { "とてもとても長い名前の道でございます" }) }
 
         val res = client.postName(zigzag.json())
 
@@ -102,7 +102,7 @@ class PartRoutesTest {
     @Test
     fun `読めない JSON や頂点の数がおかしいパーツは 400 で、命名は呼ばない`() = testApplication {
         val namer = FakePartNamer { "呼ばれないはず" }
-        application { module(namer = namer) }
+        application { module(store = MemoryTowerStore(), namer = namer) }
 
         assertEquals(HttpStatusCode.BadRequest, client.postName("""{"id":""").status)
         assertEquals(HttpStatusCode.BadRequest, client.postName(zigzag.copy(points = emptyList()).json()).status)

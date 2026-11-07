@@ -2,6 +2,8 @@ package com.rein4ce.roadcollector.server
 
 import com.google.genai.Client
 import com.google.genai.types.GenerateContentConfig
+import com.google.genai.types.HttpOptions
+import com.google.genai.types.HttpRetryOptions
 import com.google.genai.types.Schema
 import com.google.genai.types.ThinkingConfig
 import com.google.genai.types.ThinkingLevel
@@ -12,7 +14,9 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -28,17 +32,23 @@ import kotlinx.serialization.json.Json
  * - 考える時間（thinking）は最小（MINIMAL）。長く考えさせると 3 秒の打ち切り（PartNamer.TIMEOUT_MS）を超える
  * - 返事は {"name": "..."} の JSON に固定して、読み取りを安定させる
  * - 長さの切り詰めや空の判定は nameSafely / cleanName がやるので、ここでは読み取るだけ
+ * - HTTP の期限と再試行は SDK 側にも設定する（[httpOptions]）。nameSafely が 3 秒で待つのをやめても、
+ *   SDK の通信や再試行（既定は 5 回まで）はそのままでは裏で続くため
  */
 class GeminiPartNamer(
     private val client: Client,
     private val model: String = DEFAULT_MODEL,
 ) : PartNamer {
 
-    override suspend fun name(part: Part): String? {
+    // SDK の async 版でも、リクエストを組み立てる段階の認証トークンの更新は呼び出し元のスレッドで同期的に走る。
+    // Ktor の処理スレッドを塞がないよう IO 用のスレッドで呼ぶ（更新を 3 秒で打ち切れるようにする対策ではない）
+    override suspend fun name(part: Part): String? = withContext(Dispatchers.IO) {
         val response = client.async.models
             .generateContent(model, buildNamingPrompt(part), CONFIG)
-            .await() // 時間切れで nameSafely がキャンセルすると、待っている future もキャンセルされる
-        return parseNameResponse(response.text())
+            // 時間切れで nameSafely がキャンセルすると、この future はキャンセルされる。
+            // ただし SDK はそれを HTTP の中断には伝えないので、通信の打ち切りは httpOptions の期限に頼る
+            .await()
+        parseNameResponse(response.text())
     }
 
     companion object {
@@ -66,9 +76,22 @@ class GeminiPartNamer(
                 .vertexAI(true)
                 .project(projectId)
                 .location(location)
+                .httpOptions(httpOptions().build())
                 .build()
             return GeminiPartNamer(client, model)
         }
+
+        /**
+         * SDK の HTTP の設定。
+         * - 期限：1 回の HTTP 呼び出し全体を [PartNamer.TIMEOUT_MS] で打ち切る（SDK の既定は無期限）
+         * - 再試行：しない。attempts(1) は「初回だけ」。さらに再試行の対象コードを空にして、
+         *   429 などのあとに SDK が待ち時間（バックオフ）を入れるのも避ける。
+         *   この API は 3 秒で諦めて 503 を返す約束なので、SDK に粘らせる意味がない
+         * 認証トークンの更新は HTTP の期限の外側なので、全体が必ず 3 秒で終わる保証にはならない
+         */
+        internal fun httpOptions(timeoutMs: Long = PartNamer.TIMEOUT_MS): HttpOptions.Builder = HttpOptions.builder()
+            .timeout(timeoutMs.toInt())
+            .retryOptions(HttpRetryOptions.builder().attempts(1).httpStatusCodes(emptyList()))
 
         /**
          * Vertex AI を呼ぶプロジェクト ID。

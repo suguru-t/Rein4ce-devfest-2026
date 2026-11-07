@@ -123,7 +123,9 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
   -d '{"id":"p1","points":[{"x":-0.5,"y":0},{"x":0,"y":0.3},{"x":0.5,"y":0}],"kind":"ZIGZAG","distanceM":820,"walkedAt":1793952000000}'
 ```
 
-起動ログに `PartNamer: Gemini（project=..., location=global, model=gemini-3.5-flash-lite）` と出れば Gemini につながっている。名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
+起動ログの `PartNamer: Gemini（project=..., location=global, model=gemini-3.5-flash-lite）` は、**Gemini 版のクライアントを作れて接続先の設定が決まった**ことを示す。この時点では命名 API の成功は未確認（モデル名の間違い・権限不足・割当切れは、実際に呼んで初めて分かる）。上の `curl` で `POST /parts/name` を呼び、200 と名前が返ることを確認する。503 のときはサーバのログを見る：「パーツの命名が時間切れ」「パーツの命名に失敗」「パーツの命名なし（命名が無効か、空の応答）」のどれかが所要時間つきで出る。
+
+名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
 
 ## 次にやること（C 担当）
 

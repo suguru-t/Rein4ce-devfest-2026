@@ -77,19 +77,46 @@ object DisabledPartNamer : PartNamer {
  * - 例外は握りつぶしてログに出す（命名が落ちてもサーバは落とさない）
  * - 前後の空白・かぎ括弧・引用符を取り、空なら失敗
  * - [PartNamer.MAX_NAME_LENGTH] 文字を超えたら切り詰める（絵文字などを途中で切らないよう、コードポイント単位）
+ *
+ * 503 の原因（時間切れ・失敗・名前なし）をアクセスログだけでは見分けられないので、それぞれ所要時間つきでログに出す。
+ * 3 秒が適切かはこのログで判断する。リクエスト自体のキャンセルは失敗に数えず、そのまま上に投げる。
  */
 suspend fun PartNamer.nameSafely(part: Part, timeoutMs: Long = PartNamer.TIMEOUT_MS): String? {
-    val raw = withTimeoutOrNull(timeoutMs) {
+    val log = LoggerFactory.getLogger(PartNamer::class.java)
+    val startedAt = System.nanoTime()
+    fun elapsedMs() = (System.nanoTime() - startedAt) / 1_000_000
+    // name() 自身も「名前なし」として null を返すので、時間切れの null と区別するために包む
+    val outcome: NamingOutcome? = withTimeoutOrNull(timeoutMs) {
         try {
-            name(part)
+            NamingOutcome.Named(name(part))
         } catch (e: CancellationException) {
             throw e // 時間切れ・キャンセルは withTimeoutOrNull に任せる
         } catch (e: Exception) {
-            LoggerFactory.getLogger(PartNamer::class.java).warn("パーツの命名に失敗: ${e.message}", e)
-            null
+            log.warn("パーツの命名に失敗（${elapsedMs()} ms）: ${e.message}", e)
+            NamingOutcome.Failed
         }
-    } ?: return null
-    return cleanName(raw)
+    }
+    val raw = when (outcome) {
+        null -> {
+            log.warn("パーツの命名が時間切れ（上限 $timeoutMs ms、実測 ${elapsedMs()} ms）")
+            return null
+        }
+        NamingOutcome.Failed -> return null
+        is NamingOutcome.Named -> outcome.raw
+    }
+    val name = raw?.let(::cleanName)
+    if (name == null) {
+        log.info("パーツの命名なし（${elapsedMs()} ms。命名が無効か、空の応答）")
+    } else {
+        log.info("パーツの命名に成功（${elapsedMs()} ms）")
+    }
+    return name
+}
+
+/** [nameSafely] の中の結果。時間切れ（withTimeoutOrNull の null）と「名前なし」を見分けるため */
+private sealed interface NamingOutcome {
+    data class Named(val raw: String?) : NamingOutcome
+    data object Failed : NamingOutcome
 }
 
 internal fun cleanName(raw: String): String? {
