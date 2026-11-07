@@ -12,6 +12,7 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.PartPlace
 import kotlin.math.cos
 import kotlin.math.log2
@@ -24,6 +25,7 @@ import kotlin.math.log2
  * - 野帳の上で道が主役になるよう、白黒にしてお店や駅の印を消す。うすさは呼ぶ側で紙の色を重ねて出す（[MAP_FADE]）
  * - 地図は図（幅いっぱいの正方形）より [belowDp] だけ下に長くする。Google のロゴ（地図の左下。隠してはいけない）を
  *   その帯に置いて、上に重ねる道や縮尺がロゴを隠さないようにするため。中心は図の中心に合わせる
+ * - 図と同じ縮尺にできない場所（[mapCanMatch] が false）では呼ばない
  *
  * @param belowDp 図の下に足す帯の高さ [dp]
  */
@@ -32,7 +34,10 @@ fun PlaceMap(place: PartPlace, belowDp: Float, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
         val figureDp = maxWidth.value
         val camera = rememberCameraPositionState(key = "${place.lat},${place.lng},${place.sizeM},$figureDp,$belowDp") {
-            position = CameraPosition.fromLatLngZoom(cameraTarget(place, figureDp, belowDp), zoomFor(place, figureDp))
+            position = CameraPosition.fromLatLngZoom(
+                cameraTarget(place, figureDp, belowDp),
+                zoomFor(place, figureDp).coerceIn(MIN_MAP_ZOOM, MAX_MAP_ZOOM),
+            )
         }
         GoogleMap(
             cameraPositionState = camera,
@@ -68,7 +73,7 @@ fun PlaceMap(place: PartPlace, belowDp: Float, modifier: Modifier = Modifier) {
 internal fun cameraTarget(place: PartPlace, figureDp: Float, belowDp: Float): LatLng {
     val metersPerDp = place.sizeM / (figureDp * FIGURE_ROAD_RATIO)
     val southM = belowDp / 2 * metersPerDp
-    return LatLng(place.lat - southM / M_PER_DEG_LAT, place.lng)
+    return LatLng(place.lat - southM / Projection.M_PER_DEG_LAT, place.lng)
 }
 
 /**
@@ -81,13 +86,20 @@ internal fun cameraTarget(place: PartPlace, figureDp: Float, belowDp: Float): La
 internal fun zoomFor(place: PartPlace, figureDp: Float): Float {
     val metersPerDp = place.sizeM / (figureDp * FIGURE_ROAD_RATIO)
     val metersPerDpAtZoom0 = EARTH_CIRCUMFERENCE_M * cos(Math.toRadians(place.lat)) / 256.0
-    return log2(metersPerDpAtZoom0 / metersPerDp).toFloat().coerceIn(2f, 21f)
+    return log2(metersPerDpAtZoom0 / metersPerDp).toFloat()
 }
 
-private const val EARTH_CIRCUMFERENCE_M = 40_075_016.686
+/**
+ * 図と同じ縮尺まで地図を拡大できるか。
+ * とても短い散歩（図の幅が 300dp なら、長辺がおよそ 12 m 未満）は、地図をいちばん拡大しても図より縮尺が小さく、道と地図がずれるので、地図を出さない
+ */
+internal fun mapCanMatch(place: PartPlace, figureDp: Float): Boolean = zoomFor(place, figureDp) <= MAX_MAP_ZOOM
 
-/** 緯度 1 度あたりのメートル（core の Projection と同じ値） */
-private const val M_PER_DEG_LAT = 110_574.0
+/** Google マップ（ふつうの地図）の拡大率の範囲 */
+private const val MIN_MAP_ZOOM = 2f
+private const val MAX_MAP_ZOOM = 21f
+
+private const val EARTH_CIRCUMFERENCE_M = 40_075_016.686
 
 /**
  * 地図を静かにする見た目の設定：色を抜いて白黒にし、お店・駅・バスの印と名前は消す。

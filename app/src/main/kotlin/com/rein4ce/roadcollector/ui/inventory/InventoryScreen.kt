@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -331,7 +332,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     } else if (zoomed != null) {
         ZoomDialog(
             zoomed,
-            place = places[zoomed.id] ?: SampleParts.places[zoomed.id],
+            place = repository.placeOf(zoomed.id, places),
             onRename = { renamingId = zoomed.id },
             onDismiss = { zoomedId = null },
         )
@@ -472,8 +473,6 @@ private val POINT_LETTER_SPACING = (-0.3).em
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
-    // 歩いた場所が分かっていて、地図のキーがあるときだけ、図の背景に地図を敷く（無ければ今までどおり紙だけ）
-    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() }
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(8.dp),
@@ -483,7 +482,10 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
         title = { Text(part.displayName, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+                    // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                    // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                    val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
                     if (mapPlace != null) {
                         // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
                         // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く

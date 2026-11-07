@@ -1,8 +1,8 @@
 package com.rein4ce.roadcollector.core.sample
 
+import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.TrackPoint
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.random.Random
 
@@ -65,8 +65,8 @@ object SampleTracks {
         startTimeMs: Long = 1_760_000_000_000L,
     ): SampleTrack {
         val rnd = Random(seed)
-        val mPerDegLat = 110_574.0
-        val mPerDegLng = 111_320.0 * cos(Math.toRadians(ORIGIN_LAT))
+        val mPerDegLat = Projection.M_PER_DEG_LAT
+        val mPerDegLng = Projection.metersPerDegLng(ORIGIN_LAT)
         val pts = ArrayList<TrackPoint>()
         var t = startTimeMs
         var first = true

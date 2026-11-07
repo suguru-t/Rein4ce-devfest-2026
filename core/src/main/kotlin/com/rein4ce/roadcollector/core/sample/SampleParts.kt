@@ -23,7 +23,7 @@ object SampleParts {
     val all: List<Part> by lazy { converted.map { it.part } }
 
     /** 見本を歩いた場所（千住キャンパス付近）。拡大表示の背景の地図に使う */
-    val places: Map<String, PartPlace> by lazy { converted.associate { r -> r.part.id to requireNotNull(r.place) } }
+    val places: Map<String, PartPlace> by lazy { converted.associate { r -> r.part.id to r.place } }
 
     fun byId(id: String): Part? = all.firstOrNull { it.id == id }
 }
