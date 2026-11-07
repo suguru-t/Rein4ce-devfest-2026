@@ -41,9 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -103,6 +103,12 @@ fun AppNav() {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentDestination = backStack?.destination
+
+    // 「みんなのタワー」の一覧を、画面が出た時点で裏で取り始める（C）。本番のサーバはしばらく使われないと止まっていて
+    // 起きるまで 5 秒ほどかかるので、「みんな」を押してから取りに行くとそこで待つ。先に取り始めておけば、
+    // 押すころには届いていることが多い。失敗しても何も出さない（「みんな」を開いたときに取り直す）
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { RoadCollectorApp.from(context).gallery.prefetch() }
 
     fun go(dest: Dest) {
         navController.navigate(dest.route) {
