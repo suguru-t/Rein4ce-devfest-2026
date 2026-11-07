@@ -236,7 +236,7 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, ratio: Flo
         // タワーの絵（野帳の図）。コレクションのカードと同じ「紙の上の図」の見せ方
         Box(
             modifier = Modifier
-                .size(width = 56.dp, height = 64.dp)
+                .size(width = 72.dp, height = 80.dp)
                 // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
                 .clip(SketchShape)
                 .background(Fieldbook.Paper, SketchShape)
