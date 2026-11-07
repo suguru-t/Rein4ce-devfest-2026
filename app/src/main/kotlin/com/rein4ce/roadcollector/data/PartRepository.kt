@@ -260,6 +260,31 @@ class PartRepository(
     }
 
     /**
+     * 採集したばかりのパーツに、AI（命名 API）が考えた名前を付ける（decisions.md の 5）。
+     * 名前が届くまでのあいだに自分で名前を付けていたら、そちらを残す。パーツが消されていたら何もしない。
+     *
+     * @return 付けた名前。付けなかったら null
+     */
+    fun nameIfUnnamed(id: String, name: String): String? {
+        val cleaned = name.trim().takeIf { it.isNotEmpty() } ?: return null
+        var applied = false
+        _parts.update { list ->
+            applied = false // update は競合すると関数を呼び直すので、毎回数え直す
+            list.map { p ->
+                if (p.id == id && !p.hasName) {
+                    applied = true
+                    p.copy(name = cleaned)
+                } else {
+                    p
+                }
+            }
+        }
+        if (!applied) return null
+        persist()
+        return cleaned
+    }
+
+    /**
      * parts.json に保存する。
      * - 起動時の読み込みが終わるまで待つ（読む前に書くと、保存済みの手持ちを上書きしてしまう）
      * - 書き込みは 1 本ずつ順番に行い、書く直前の最新の状態を書く（古い状態が後から上書きして、消したパーツが復活しないように）
