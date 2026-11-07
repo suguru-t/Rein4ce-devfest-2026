@@ -24,7 +24,6 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -77,12 +76,15 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.common.WalkNote
+import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.AppIcons
@@ -104,6 +106,9 @@ fun CollectScreen(
     vm: CollectViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val app = RoadCollectorApp.from(context)
+    // パーツを歩いたときの天気（記録のあとに WeatherService が取ってきて保存する）。記録のあとの窓に出す
+    val weathers by app.partRepository.weather.collectAsStateWithLifecycle()
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
@@ -242,54 +247,32 @@ fun CollectScreen(
         }
     }
 
-    // 結果ダイアログ：手持ちと同じ野帳の図（見当・北・縮尺）と注記
+    // 結果の窓：コレクションと同じ野帳の図（見当・北・縮尺）と注記
     when (val o = vm.outcome) {
-        is CollectViewModel.Outcome.Created -> AlertDialog(
-            onDismissRequest = { vm.dismissOutcome() },
-            containerColor = Fieldbook.Paper,
-            titleContentColor = Fieldbook.Ink,
-            textContentColor = Fieldbook.Ink,
-            title = { Text("パーツができました", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    FieldbookPart(o.part, modifier = Modifier.size(180.dp))
-                    Spacer(Modifier.height(4.dp))
-                    PartNameLine(o)
-                    o.note?.let { note ->
-                        // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
-                        Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                    Text(
-                        "L=${o.part.distanceM} m ・ 頂点 ${o.part.points.size} ・ ε ${"%.0f".format(o.stats.epsilonM)} m",
-                        fontFamily = Fieldbook.Data,
-                        fontSize = 11.sp,
-                        color = Fieldbook.Muted,
-                    )
-                    o.stats.fastestMps?.let { v ->
-                        Text(
-                            "最高 ${CollectViewModel.kmh(v)}（30 秒の窓）",
-                            fontFamily = Fieldbook.Data,
-                            fontSize = 11.sp,
-                            color = Fieldbook.Muted,
-                        )
-                    }
-                    Text(
-                        "GPS ${o.stats.rawPoints} 点 → フィルタ後 ${o.stats.filteredPoints} 点",
-                        fontFamily = Fieldbook.Data,
-                        fontSize = 11.sp,
-                        color = Fieldbook.Muted,
-                    )
+        // 設定・拡大表示と同じ形：灰色の帯の見出し、枠の中のいちばん下に「コレクションを見る」、枠の下の丸い「×」で閉じる。
+        // 見出しは「パーツができました」だと機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
+        is CollectViewModel.Outcome.Created -> FramedDialog(title = "道を 1 本集めました", onDismiss = { vm.dismissOutcome() }) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                FieldbookPart(o.part, modifier = Modifier.size(180.dp))
+                Spacer(Modifier.height(4.dp))
+                PartNameLine(o)
+                o.note?.let { note ->
+                    // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
+                    Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }) {
+                // 歩いた長さ・日付・天気（コレクションのカード・大きく見る窓と同じ形。ui/common/WalkNote）。
+                // 天気は記録のあとに取ってくるので、届いたら足す（届くまでは出さない）。
+                // 変換の数字（頂点・ε・GPS の点など）は、見ても分からないので出さない（開発用に Logcat へ。CollectViewModel.keep）
+                WalkNote(
+                    distanceM = o.part.distanceM,
+                    date = walkDate(o.part.walkedAt),
+                    weather = app.partRepository.weatherOf(o.part.id, weathers)?.sky?.label,
+                )
+                TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { vm.dismissOutcome() }) { Text("閉じる", color = Fieldbook.Muted) }
-            },
-        )
+            }
+        }
         // 設定と同じ形：灰色の帯の見出しと、枠の下の丸い「×」で閉じる（枠の外を押しても閉じる）
         is CollectViewModel.Outcome.Rejected -> FramedDialog(title = "パーツになりませんでした", onDismiss = { vm.dismissOutcome() }) {
             Text(o.reason, style = noteStyle, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 10.dp))
