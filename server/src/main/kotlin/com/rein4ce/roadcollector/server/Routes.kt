@@ -51,6 +51,8 @@ fun Route.towerRoutes(store: TowerStore) {
     get("/towers") {
         // アプリは自分の持ち主の印を X-Owner-Id で送る。形が違うもの（他人の印を探る試しなど）は無いものとして扱う
         val owner = call.request.header(OWNER_HEADER)?.takeIf { OWNER_ID_PATTERN.matches(it) }
+        // 答えが人（印）によって違うので、途中のキャッシュ（CDN など）に共有させない
+        call.response.header(HttpHeaders.CacheControl, "private, no-store")
         call.respond(store.summaries(owner))
     }
 

@@ -25,8 +25,8 @@ object OwnerId {
         val androidId = runCatching { Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) }.getOrNull()
         val seed = androidId?.takeIf { it.isNotBlank() } ?: fallbackSeed(context)
         val mark = hash(seed)
-        // 手元の確認用（サーバに curl で同じ印のタワーを入れて「あなた」が出るか見る）。デバッグ版だけ
-        if (BuildConfig.DEBUG) Log.d("OwnerId", "owner=$mark")
+        // 手元の確認用（サーバに入れた印と見比べる）。デバッグ版だけ、しかも印そのものは出さず先頭の 8 桁だけ
+        if (BuildConfig.DEBUG) Log.d("OwnerId", "owner=${mark.take(8)}…")
         return mark
     }
 

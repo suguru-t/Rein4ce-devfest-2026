@@ -46,7 +46,7 @@ class RoadCollectorApp : Application() {
         // 送信できたタワーは、自分のものとして端末に覚えておく（サーバが落ちていても印が出る）
         myTowers = MyTowers(this)
         ApiClient.onPosted = { myTowers.add(it.id) }
-        // 持ち主の印（端末ごと）。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。入れ直しや端末の引き継ぎでも残る
+        // 持ち主の印（端末ごと）。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。入れ直しても残る（端末を替えると変わる）
         val owner = OwnerId.of(this)
         ApiClient.ownerId = { owner }
         partRepository = PartRepository(this)

@@ -14,8 +14,13 @@ object SharePage {
     fun render(tower: Tower, baseUrl: String): String {
         val title = "高さ ${String.format(Locale.US, "%.2f", tower.height)} m のタワー"
         // 作者名（アプリの設定のニックネーム）があれば、説明に入れる。LINE / X のプレビューにも出る
-        val author = tower.author?.trim().orEmpty()
-        val who = if (author.isEmpty()) "" else "$author さんが "
+        val author = cleanAuthor(tower.author)
+        // 「〜さん」で終わる名前には「さん」を重ねない
+        val who = when {
+            author.isEmpty() -> ""
+            author.endsWith("さん") -> "$author が "
+            else -> "$author さんが "
+        }
         val desc = "$who${tower.parts.size} 個の散歩パーツで積みました — ミチツミ"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
@@ -59,6 +64,15 @@ object SharePage {
 </html>
 """.trimIndent()
     }
+
+    /**
+     * 共有ページに出す作者名：前後の空白を落とし、制御文字と「文字の向きを変える字」（U+202E など）を取り除く。
+     * 向きを変える字が混ざると、LINE や X のプレビューで文の並びを入れ替えられてしまうため
+     */
+    internal fun cleanAuthor(author: String?): String =
+        author.orEmpty()
+            .filterNot { it.isISOControl() || it.category == CharCategory.FORMAT }
+            .trim()
 
     private fun esc(s: String): String = s
         .replace("&", "&amp;")

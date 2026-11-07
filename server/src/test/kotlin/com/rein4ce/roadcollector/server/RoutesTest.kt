@@ -130,8 +130,11 @@ class RoutesTest {
         assertTrue(summaries(null).none { it.mine })
         assertTrue(summaries("not-a-hash").none { it.mine })
         // 一覧にも 1 基の JSON にも、印そのものは出ない
-        val listBody = client.get("/towers") { header(OWNER_HEADER, me) }.bodyAsText()
+        val listRes = client.get("/towers") { header(OWNER_HEADER, me) }
+        val listBody = listRes.bodyAsText()
         assertFalse(me in listBody, "一覧に印が出ている")
+        // 人によって答えが違うので、途中のキャッシュに共有させない
+        assertContains(listRes.headers[HttpHeaders.CacheControl].orEmpty(), "private")
         val json = client.get("/towers/${mine.id}") { header(HttpHeaders.Accept, "application/json") }.bodyAsText()
         assertFalse(me in json, "1 基の JSON に印が出ている")
         assertEquals(null, AppJson.decodeFromString(Tower.serializer(), json).ownerId)
@@ -149,6 +152,13 @@ class RoutesTest {
         val anon = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower()).bodyAsText())
         val anonHtml = client.get("/towers/${anon.id}").bodyAsText()
         assertContains(anonHtml, "content=\"2 個の散歩パーツで積みました")
+
+        // 「〜さん」で終わる名前に「さん」を重ねない。向きを変える字（U+202E）や制御文字は落とす
+        val san = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower().copy(author = "みち‮さん\u0007")).bodyAsText())
+        val sanHtml = client.get("/towers/${san.id}").bodyAsText()
+        assertContains(sanHtml, "みちさん が 2 個の散歩パーツで積みました")
+        assertFalse("‮" in sanHtml)
+        assertEquals("みちさん", SharePage.cleanAuthor("  みち‮さん\u0007 "))
     }
 
     @Test
