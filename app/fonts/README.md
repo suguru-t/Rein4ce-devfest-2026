@@ -5,7 +5,7 @@
 
 | ファイル | 元のフォント | ライセンス |
 |---|---|---|
-| `res/font/mplus_rounded_michitsumi.ttf` | [M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) Black | `OFL-MPLUSRounded1c.txt`（フォントに埋め込まれた著作権表示と OFL の文） |
+| `res/font/mplus_rounded_michitsumi.ttf` | [M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) Black | `OFL-MPLUSRounded1c.txt`（著作権表示と OFL 1.1 の本文） |
 
 切り出し方（fonttools）：
 
