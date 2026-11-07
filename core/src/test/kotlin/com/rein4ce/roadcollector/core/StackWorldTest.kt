@@ -22,12 +22,16 @@ class StackWorldTest {
     }
 
     @Test
-    fun `part body has one fixture per segment plus joints`() {
+    fun `part body has one fixture per segment plus one per corner`() {
         val bar = SampleParts.byId("sample-bar")!!
         val body = PartBodyFactory.create(bar)
-        // 棒：線分 1 本 + 関節 2 個
-        assertEquals(bar.points.size - 1 + bar.points.size, body.fixtureCount)
+        // 棒：線分 1 本だけ（両端は四角く切った長方形。継ぎ目は無い）
+        assertEquals(bar.points.size - 1, body.fixtureCount)
         assertTrue(body.mass.mass > 0)
+        // L 字：線分 2 本＋曲がり角の継ぎ目 1 つ
+        val l = SampleParts.byId("sample-l")!!
+        assertEquals(3, l.points.size)
+        assertEquals(3, PartBodyFactory.create(l).fixtureCount)
     }
 
     @Test

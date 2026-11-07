@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,9 +65,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -149,12 +152,17 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // （触ると、積んでいる途中のゲームが最初からやり直しになる）。なので、キャンセルしたあと別のタブから戻ると、
     // selectedIds が GameSession.selected から作り直されて、「選択」で積む画面に渡した選択がまた出る
     var selecting by remember { mutableStateOf(false) }
+    // 「ランダムに選ぶ」の個数と、選んだあとの一言（手で選び直したら消す）
+    var pickCount by remember { mutableIntStateOf(GameSession.MAX_PARTS) }
+    var pickNote by remember { mutableStateOf<String?>(null) }
     fun cancelSelecting() {
         selectedIds.clear()
+        pickNote = null
         selecting = false
     }
     BackHandler(enabled = selecting) { cancelSelecting() }
     fun toggleSelect(id: String) {
+        pickNote = null
         if (id in selectedIds) {
             selectedIds.remove(id)
         } else if (validSelected.size < GameSession.MAX_PARTS) {
@@ -214,6 +222,24 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
                 }
             }
+        }
+
+        // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
+        // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
+        if (selecting && !editing && isLoaded) {
+            RandomPickRow(
+                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                enabled = parts.isNotEmpty(),
+                count = pickCount,
+                onCountChange = { pickCount = it },
+                note = pickNote,
+                onPick = {
+                    val picked = pickRandom(parts.map { it.id }, pickCount)
+                    selectedIds.clear()
+                    selectedIds.addAll(picked)
+                    pickNote = randomPickNote(picked.size, pickCount)
+                },
+            )
         }
 
         val gridState = rememberLazyGridState()
@@ -807,3 +833,50 @@ private val CardShape = RoundedCornerShape(4.dp)
 /** 採集日。見本はカードの側で「見本」と出すので、ここには来ない。日時の無いパーツ（古いデータなど）は「—」 */
 private fun formatDate(epochMs: Long): String =
     if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
+
+/**
+ * 選択中に出す「ランダムに選ぶ」の行。左にボタン、右に個数（1〜[GameSession.MAX_PARTS] 本）。
+ * 選んだあとは、その下に一言（何本選んだか。足りなかったときはそのこと）を出し、読み上げでも知らせる
+ */
+@Composable
+private fun RandomPickRow(enabled: Boolean, count: Int, onCountChange: (Int) -> Unit, note: String?, onPick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onPick, enabled = enabled) {
+                Text("ランダムに選ぶ", color = if (enabled) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.weight(1f))
+            StepButton("−", "1 本減らす", enabled = count > 1) { onCountChange(count - 1) }
+            Text(
+                notes("$count 本"),
+                fontFamily = Fieldbook.Data,
+                fontSize = 13.sp,
+                color = Fieldbook.Ink,
+                modifier = Modifier.semantics { contentDescription = "ランダムに選ぶ数、$count 本" },
+            )
+            StepButton("+", "1 本増やす", enabled = count < GameSession.MAX_PARTS) { onCountChange(count + 1) }
+        }
+        if (note != null) {
+            Text(
+                note,
+                style = noteStyle,
+                fontSize = 12.sp,
+                color = Fieldbook.Muted,
+                modifier = Modifier.padding(start = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+    }
+}
+
+/** 個数を増やす・減らすボタン（押せる大きさは 48dp） */
+@Composable
+private fun StepButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(48.dp).semantics { contentDescription = description },
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Text(symbol, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (enabled) Fieldbook.Survey else Fieldbook.Mark)
+    }
+}
