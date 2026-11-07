@@ -90,6 +90,7 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
+import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -144,9 +145,19 @@ fun CollectScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TitleBlocks(modifier = Modifier.padding(start = 4.dp, end = 12.dp))
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+            // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
+            val walkedM = distance.toInt()
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) { contentDescription = "歩いた長さ $walkedM メートル" },
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(AppIcons.Footprints, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(4.dp))
                 BasicText(
-                    "L=${distance.toInt()} m",
+                    "$walkedM m",
                     style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
                     maxLines = 1,
                     autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
