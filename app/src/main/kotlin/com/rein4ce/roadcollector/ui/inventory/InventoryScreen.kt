@@ -47,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -84,9 +85,13 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.weather.BackdropFocus
+import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
@@ -114,6 +119,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
+    val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
@@ -233,6 +239,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     fun moveTo(to: Int) = saveArranged(arranged.moved(index, to))
                     PartCard(
                         part = part,
+                        sky = repository.weatherOf(part.id, weathers)?.sky,
                         order = order,
                         isSample = SampleParts.byId(part.id) != null,
                         isDragging = isDragging,
@@ -321,6 +328,12 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
     }
 
+    // 大きく見ている間は、背景にそのパーツを歩いたときの天気を降らせる（ui/weather/WeatherLayer）
+    DisposableEffect(zoomedId) {
+        BackdropFocus.partId.value = zoomedId
+        onDispose { BackdropFocus.partId.value = null }
+    }
+
     // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
     val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
     val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
@@ -337,6 +350,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         ZoomDialog(
             zoomed,
             place = repository.placeOf(zoomed.id, places),
+            weather = repository.weatherOf(zoomed.id, weathers),
             onRename = { renamingId = zoomed.id },
             onDismiss = { zoomedId = null },
         )
@@ -345,6 +359,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     pendingDelete?.let { part ->
         DeleteDialog(
             part = part,
+            sky = repository.weatherOf(part.id, weathers)?.sky,
             onConfirm = {
                 repository.remove(part.id)
                 // この画面の選択からは外す。積む画面に渡した選択（GameSession.selected）には触らない。
@@ -476,7 +491,7 @@ private val POINT_LETTER_SPACING = (-0.3).em
 
 /** 虫めがねで開く拡大表示。削除の確認と同じ野帳の紙に、大きな図と注記を出す。ここから名前を付けられる */
 @Composable
-private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDismiss: () -> Unit) {
+private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -500,19 +515,29 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
                         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                             // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
                             if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                            FieldbookPart(part, modifier = Modifier.matchParentSize())
+                            FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
                         }
                         if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    notes("L=${part.distanceM} m", "頂点 ${part.points.size}", if (isSample) "見本" else formatDate(part.walkedAt)),
+                    // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+                    notes(
+                        *listOfNotNull(
+                            "L=${part.distanceM} m",
+                            "頂点 ${part.points.size}",
+                            if (isSample) "見本" else formatDate(part.walkedAt),
+                            weather?.sky?.label,
+                        ).toTypedArray(),
+                    ),
                     style = noteStyle,
                     fontFamily = Fieldbook.Data,
                     fontSize = 12.sp,
                     color = Fieldbook.Muted,
                 )
+                // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+                if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
             }
         },
         confirmButton = {
@@ -525,7 +550,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
 }
 
 @Composable
-private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     // 採集画面の結果ダイアログと同じ、野帳の紙のダイアログ。どれを消すのか分かるように図も出す
     AlertDialog(
@@ -537,7 +562,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
         title = { Text("パーツを削除", fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.size(132.dp))
+                FieldbookPart(part, modifier = Modifier.size(132.dp), sky = sky)
                 Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -569,6 +594,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
 @Composable
 private fun PartCard(
     part: Part,
+    sky: Sky?,
     order: Int?,
     isSample: Boolean,
     isDragging: Boolean,
@@ -643,7 +669,14 @@ private fun PartCard(
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Box {
-            FieldbookPart(part, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
+            // 道の色は歩いたときの天気で変わる。読み上げでは天気を言葉で伝える
+            FieldbookPart(
+                part,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).semantics {
+                    if (sky != null) contentDescription = "${sky.label}の日に歩いた道"
+                },
+                sky = sky,
+            )
             if (selecting && !editing) {
                 SelectMark(
                     order = order,

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
 import kotlin.math.min
@@ -43,6 +44,18 @@ object Fieldbook {
     val Mark = Color(0xFF7B8C7A)
     val Road = Color(0xFFF08A3C)
     val RoadCasing = Color(0xFF6E2A10)
+
+    /**
+     * 歩いたときの天気で変える道の色（本体と縁取り）。雨のなかまは青、雪は水色、くもり・霧は灰色。
+     * 晴れ・天気が分からないときは、いつものオレンジ（[Road]）。
+     * 白い紙片の上でも道の形が見えるよう、縁取りはどれも濃い色にする（雪の水色も、縁で形が分かる）
+     */
+    fun roadColors(sky: Sky?): Pair<Color, Color> = when (sky) {
+        Sky.DRIZZLE, Sky.RAIN, Sky.THUNDER -> Color(0xFF3F7FC4) to Color(0xFF1B3A60)
+        Sky.SNOW -> Color(0xFF8CCBEA) to Color(0xFF235777)
+        Sky.CLOUDY, Sky.FOG -> Color(0xFF8D959C) to Color(0xFF3B4247)
+        Sky.CLEAR, null -> Road to RoadCasing
+    }
     val Survey = Color(0xFF1F5FA8)
     val SelectedPaper = Color(0xBFFFFFFF)
     /** 削除など、取り消せない操作の赤（野帳の赤鉛筆） */
@@ -131,9 +144,11 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 /**
  * パーツを野帳の図として描く：四隅の見当、北、縁取りの道、縮尺。
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
+ * @param sky 歩いたときの空のようす。道の色が変わる（[Fieldbook.roadColors]）。分からなければ null（いつもの色）
  */
 @Composable
-fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
+fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
+    val (road, casing) = Fieldbook.roadColors(sky)
     val measurer = rememberTextMeasurer()
     // 図の中の字（縮尺・北）は図の一部なので、図と同じ大きさのままにする（文字の大きさの設定では大きくしない）。
     // 図の大きさは決まっているので、字だけ大きくすると四隅の見当や道にぶつかる。
@@ -164,8 +179,8 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
         val scalePx = s * FIGURE_ROAD_RATIO
         val center = Offset(ox + s / 2, oy + s / 2)
         val edgePx = 1.8f * u
-        drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = Fieldbook.RoadCasing)
-        drawPart(part, center, scalePx, color = Fieldbook.Road)
+        drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
+        drawPart(part, center, scalePx, color = road)
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
         drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = northSize))
