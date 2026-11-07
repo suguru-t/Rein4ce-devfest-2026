@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,14 +40,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.Font
@@ -118,23 +120,14 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「michitsumi」（道積）、右に歩いた長さ。
-        // 2 つの字はベースライン（字の下の線）をそろえる（下そろえだと、字の上下の余白の差で浮いて見える）。
-        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。それでも右の長さと近づく幅の端末では、
-        // 題字のほうを縮めて 1 行に収める（長さの字は折り返さない）
-        val density = LocalDensity.current
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText(
-                "michitsumi",
-                style = TextStyle(fontFamily = TitleSans, letterSpacing = (-0.5).sp, color = Fieldbook.Ink),
-                maxLines = 1,
-                autoSize = TextAutoSize.StepBased(
-                    minFontSize = with(density) { 20.dp.toSp() },
-                    maxFontSize = with(density) { 32.dp.toSp() },
-                    stepSize = with(density) { 1.dp.toSp() },
-                ),
-                modifier = Modifier.alignByBaseline().padding(start = 8.dp, end = 12.dp).weight(1f, fill = false),
-            )
+        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さ。
+        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TitleBlocks(modifier = Modifier.padding(start = 4.dp, end = 12.dp))
             Text(
                 "L=${distance.toInt()} m",
                 fontFamily = Fieldbook.Data,
@@ -143,7 +136,6 @@ fun CollectScreen(
                 color = Fieldbook.Ink,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.alignByBaseline(),
             )
         }
 
@@ -299,10 +291,60 @@ fun CollectScreen(
 private val RecordingRed = Color(0xFFC0392B)
 
 /**
- * 題字「michitsumi」の字。Google のロゴのような幾何学的なサンセリフにするため、Poppins SemiBold（OFL）を
- * この綴りの 7 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
+ * 題字「ミチツミ」の字。アプリのアイコンのように見えるよう、太い丸ゴシック M PLUS Rounded 1c Black（OFL）を
+ * この 3 文字だけに切り出して同梱している（出どころとライセンスは app/fonts/）
  */
-private val TitleSans = FontFamily(Font(R.font.poppins_michitsumi, FontWeight.SemiBold))
+private val TitleRounded = FontFamily(Font(R.font.mplus_rounded_michitsumi, FontWeight.Black))
+
+/** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
+private class TitleBlock(val char: Char, val color: Color, val tiltDeg: Float, val liftDp: Float)
+
+/**
+ * 題字「ミチツミ」を、積み木を積んでいる途中の絵にする。
+ * 1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べる。最後の 1 つは浮かせて（影も濃く）「置く直前」に見せる
+ */
+private val TitleBlocks = listOf(
+    TitleBlock('ミ', Color(0xFFE07A2A), tiltDeg = -5f, liftDp = 0f),
+    TitleBlock('チ', Color(0xFF2A9D8F), tiltDeg = 3f, liftDp = 1f),
+    TitleBlock('ツ', Color(0xFFF2C14E), tiltDeg = -2f, liftDp = 0f),
+    TitleBlock('ミ', Color(0xFF4A4E69), tiltDeg = 8f, liftDp = -9f),
+)
+
+@Composable
+private fun TitleBlocks(modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val shape = RoundedCornerShape(7.dp)
+    Row(
+        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (block in TitleBlocks) {
+            val lifted = block.liftDp < 0f
+            Box(
+                modifier = Modifier
+                    // 浮かせた分の場所を上に取っておく（傾けた角が見出しの外にはみ出さないように少し余裕も）
+                    .padding(top = 10.dp)
+                    .size(32.dp)
+                    .graphicsLayer {
+                        rotationZ = block.tiltDeg
+                        translationY = with(density) { block.liftDp.dp.toPx() }
+                    }
+                    .shadow(if (lifted) 6.dp else 2.dp, shape, clip = false)
+                    .background(block.color, shape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    block.char.toString(),
+                    fontFamily = TitleRounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = with(density) { 21.dp.toSp() },
+                    color = Fieldbook.Paper,
+                )
+            }
+        }
+    }
+}
 
 private data class StatusLine(val text: String, val color: Color)
 
