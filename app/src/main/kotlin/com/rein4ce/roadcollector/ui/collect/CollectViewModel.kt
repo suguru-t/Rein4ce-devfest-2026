@@ -50,7 +50,6 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
          */
         data class Created(
             val part: Part,
-            val stats: TrackToPart.Stats,
             val note: String? = null,
             val naming: Naming = Naming.ASKING,
         ) : Outcome()
@@ -192,10 +191,10 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         )
         // 設定（歯車）で AI の名前付けをオフにしていたら、聞かない（形・距離・日時もサーバに送らない）
         if (!settings.aiNaming.value) {
-            outcome = Outcome.Created(r.part, r.stats, note = note, naming = Naming.OFF)
+            outcome = Outcome.Created(r.part, note = note, naming = Naming.OFF)
             return
         }
-        outcome = Outcome.Created(r.part, r.stats, note = note)
+        outcome = Outcome.Created(r.part, note = note)
         // ダイアログを閉じても、名前は考え続けて保存する
         viewModelScope.launch {
             val suggested = ApiClient.namePart(r.part)

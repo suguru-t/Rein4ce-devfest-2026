@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -96,27 +97,38 @@ object Fieldbook {
     fun orderMark(order: Int): String = "①②③④⑤⑥⑦⑧⑨".getOrNull(order - 1)?.toString() ?: "($order)"
 }
 
-/** 方眼紙の地。細い線は 8dp ごと、太い線は 40dp ごと */
-fun Modifier.fieldbookGrid(): Modifier = drawBehind {
-    drawRect(Fieldbook.Paper)
+/**
+ * 方眼紙の地。細い線は 8dp ごと、太い線は 40dp ごと。
+ * 見出しの字の下だけ線を消す場所（ui/common/PaperBand）が動くと描き直すので（メーターの数字が回る間は毎コマ）、
+ * 線は大きさが変わったときだけ作り（drawWithCache）、描き直しでは作っておいた線を描くだけにする（軽く済む）。
+ * 色はダークモードで変わるので、描くときに読む
+ */
+fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
     val step = 8.dp.toPx()
-    val line = 1.dp.toPx()
+    val minor = Path()
+    val major = Path()
     var i = 0
     var x = 0f
     while (x <= size.width) {
-        drawLine(if (i % 5 == 0) Fieldbook.GridMajor else Fieldbook.GridMinor, Offset(x, 0f), Offset(x, size.height), line)
+        (if (i % 5 == 0) major else minor).apply { moveTo(x, 0f); lineTo(x, size.height) }
         x += step
         i++
     }
     i = 0
     var y = 0f
     while (y <= size.height) {
-        drawLine(if (i % 5 == 0) Fieldbook.GridMajor else Fieldbook.GridMinor, Offset(0f, y), Offset(size.width, y), line)
+        (if (i % 5 == 0) major else minor).apply { moveTo(0f, y); lineTo(size.width, y) }
         y += step
         i++
     }
-    // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
-    drawGridClearings()
+    val line = Stroke(width = 1.dp.toPx())
+    onDrawBehind {
+        drawRect(Fieldbook.Paper)
+        drawPath(minor, Fieldbook.GridMinor, style = line)
+        drawPath(major, Fieldbook.GridMajor, style = line)
+        // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
+        drawGridClearings()
+    }
 }
 
 /** 選んだパーツの破線の枠（測量の図面で範囲を囲む線のイメージ）。[corner] でカードの角丸に合わせる */

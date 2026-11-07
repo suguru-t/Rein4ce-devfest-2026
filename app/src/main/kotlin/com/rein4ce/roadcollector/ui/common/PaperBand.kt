@@ -32,6 +32,10 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  *
  * 見出し全体に 1 つ付けると字のない所まで線が消えて不自然なので、行ごとに付ける。
  * 横いっぱいに広がる部品には付けない（wrapContentWidth などで字の幅にしてから付ける）。描くだけなので、配置は変わらない
+ *
+ * **メイン画面（AppNav の方眼の上）の字にだけ使える。** 場所を画面の左上からの位置（`boundsInRoot`）で方眼に知らせるので、
+ * ダイアログ（拡大表示・設定など）の中の字に付けると、別の窓の位置が使われて、メイン画面の方眼のずれた所が塗られる。
+ * ダイアログは紙の色の地なので、そもそも要らない
  */
 fun Modifier.paperBand(bleedX: Dp = 14.dp, bleedY: Dp = 8.dp): Modifier = composed {
     val key = remember { Any() }

@@ -146,7 +146,7 @@ fun AppNav() {
         // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
         // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
         // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
-        val settings = RoadCollectorApp.from(LocalContext.current).settings
+        val settings = RoadCollectorApp.from(context).settings
         val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
         var howToClosed by rememberSaveable { mutableStateOf(false) }
         if (!howToSeen && !howToClosed) {
