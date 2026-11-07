@@ -120,7 +120,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                             running[i] = scope.launch {
                                 if (isLast) {
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
-                                    val camera = cameraPoint(view)
+                                    val camera = cameraPoint(view, offscreenPx = OFFSCREEN_DP * density.density)
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density - block.liftDp
                                     motion.dropIn(fromDx, fromDy) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
@@ -172,16 +172,17 @@ private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
 }
 
 /**
- * 落ち始めの点：画面の上のカメラの穴のまん中（画面の左上から [px]）。穴のない端末では、画面のいちばん上のまん中
+ * 落ち始めの点：画面の上のカメラの穴のまん中（画面の左上から [px]）。ブロックは穴とほぼ同じ大きさなので、穴から出てくるように見える。
+ * 穴のない端末では、画面のまん中の、上の端より [offscreenPx] だけ上（ブロックが画面の外に隠れている所）
  */
-private fun cameraPoint(view: View): Offset {
+private fun cameraPoint(view: View, offscreenPx: Float): Offset {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         val hole = view.rootWindowInsets?.displayCutout?.boundingRects
             ?.filter { it.top <= 0 && !it.isEmpty }
             ?.minByOrNull { kotlin.math.abs(it.exactCenterX() - view.rootView.width / 2f) }
         if (hole != null) return Offset(hole.exactCenterX(), hole.exactCenterY())
     }
-    return Offset(view.rootView.width / 2f, 0f)
+    return Offset(view.rootView.width / 2f, -offscreenPx)
 }
 
 /**
@@ -208,6 +209,12 @@ private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () 
     dy.animateTo(-8f, tween(BOUNCE_MS, easing = EaseOutQuad))
     dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
 }
+
+/**
+ * 穴のない端末で、落ち始めにブロックのまん中を画面の上の端からどれだけ上に置くか [dp]。
+ * 32dp のブロックを 60° 傾けても、角が画面に出ない長さ（対角線の半分 ≈ 22.6dp より少し長く）
+ */
+private const val OFFSCREEN_DP = 24f
 
 /** 跳ねるときの、上がる（下がる）時間 [ms] */
 private const val HOP_UP_MS = 120
