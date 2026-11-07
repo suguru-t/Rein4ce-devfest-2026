@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -147,6 +148,15 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
     // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。積んで送信した直後に来ても、押さずに新しいタワーが出る
     LaunchedEffect(Unit) { vm.refresh() }
 
+    // 一覧の位置。取り直して新しいタワーが①（いちばん高い）に入ったとき、上のほうを見ていたなら①から見せる。
+    // 一覧を残したまま取り直すので同じ LazyColumn が使われ続け、項目に key を付けていると Compose は
+    // 「見えていた項目」を先頭に残す。何もしないと前の①が先頭のままで、新しい①は画面の上に隠れる（#49 のレビュー）。
+    // 下のほうまでスクロールして見ていたなら、その位置は動かさない
+    val listState = rememberLazyListState()
+    LaunchedEffect(towers.firstOrNull()?.id) {
+        if (listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+    }
+
     // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
     Column(
         modifier = Modifier
@@ -204,6 +214,7 @@ fun GalleryScreen(vm: GalleryViewModel = viewModel()) {
             } else {
                 val tallest = towers.maxOf { it.height }.coerceAtLeast(0.01f)
                 LazyColumn(
+                    state = listState,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
                 ) {
