@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -47,6 +48,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -54,6 +56,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
@@ -61,6 +64,7 @@ import com.rein4ce.roadcollector.ui.game.StackScreen
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
+import com.rein4ce.roadcollector.ui.settings.HowToDialog
 import com.rein4ce.roadcollector.ui.weather.BackdropScreen
 import com.rein4ce.roadcollector.ui.weather.WeatherLayer
 import kotlin.math.roundToInt
@@ -128,6 +132,12 @@ fun AppNav() {
                 composable(Dest.Gallery.route) { GalleryScreen() }
             }
         }
+
+        // 初めて開いたときだけ、使い方を出す（閉じたら次からは出さない。設定の「使い方」ではいつでも見られる）。
+        // 起動画面の下で先に出しておくので、門をくぐると使い方が出ている
+        val settings = RoadCollectorApp.from(LocalContext.current).settings
+        val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
+        if (!howToSeen) HowToDialog(onClose = { settings.setHowToSeen(true) })
     }
 }
 

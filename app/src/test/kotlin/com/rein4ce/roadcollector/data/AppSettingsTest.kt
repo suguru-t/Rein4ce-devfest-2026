@@ -80,6 +80,14 @@ class AppSettingsTest {
     }
 
     @Test
+    fun `the how-to is shown until it is closed once`() {
+        val store = MapStore()
+        assertFalse(AppSettings(store).howToSeen.value)
+        AppSettings(store).setHowToSeen(true)
+        assertTrue(AppSettings(store).howToSeen.value)
+    }
+
+    @Test
     fun `broken saved values fall back to the defaults`() {
         val store = MapStore().apply {
             map["weather_motion"] = "TURBO"
