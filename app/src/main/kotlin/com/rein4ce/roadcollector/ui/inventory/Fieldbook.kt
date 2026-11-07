@@ -135,8 +135,9 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 @Composable
 fun FieldbookPart(part: Part, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
-    // 図の中の字（縮尺・北）は図の一部なので、文字の大きさの設定では大きくしない。図の大きさは決まっているので、
-    // 大きくすると四隅の見当や道にぶつかる。距離は図の下の注記にも字で出ている
+    // 図の中の字（縮尺・北）は図の一部なので、図と同じ大きさのままにする（文字の大きさの設定では大きくしない）。
+    // 図の大きさは決まっているので、字だけ大きくすると四隅の見当や道にぶつかる。
+    // この図はコレクションのほか、採集画面の「パーツができました」でも使っている
     val density = LocalDensity.current
     val label = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Ink)
     val northSize = with(density) { 8.dp.toSp() }

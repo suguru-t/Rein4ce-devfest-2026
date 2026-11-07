@@ -1,4 +1,4 @@
-package com.rein4ce.roadcollector.ui.inventory
+package com.rein4ce.roadcollector.ui.common
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
