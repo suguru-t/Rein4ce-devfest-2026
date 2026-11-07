@@ -156,6 +156,29 @@ gcloud run services update road-collector --region asia-northeast1 --min-instanc
 
 当日の朝に、手順 C の確認をもう一度やる。
 
+### 変なタワーが投稿されたとき（消し方）
+
+`POST /towers` は誰でも叩けるので、デモ当日にいたずらや壊れたタワーが「みんな」に並ぶことがある（壊れたデータは #58 の検査で 400 になるが、中身がまともな「変なタワー」は通る）。消すのは Firestore の文書を 1 つ消すだけ。サーバの再起動やデプロイは要らない。
+
+```bash
+# 1. 消したいタワーの id を知る（「みんな」のカードをタップすると開く共有 URL の末尾、または一覧）
+curl -s $U/towers
+
+# 2. Firestore の文書を消す（REST。gcloud に Firestore の文書を消すコマンドは無い）
+ID='消したいタワーの id'
+curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "https://firestore.googleapis.com/v1/projects/hackathon-2026-513703/databases/(default)/documents/towers/$ID"
+#   200 なら消えた。消す前に GET（-X DELETE を外す）で中身を見て、id を間違えていないか確かめる
+
+# 3. 一覧から消えたこと
+curl -s $U/towers | grep -c "$ID"     # 0
+```
+
+- コンソールからでもよい：Firestore → データ → `towers` → 文書の id → 「文書を削除」
+- 消したあとも、アプリの「みんな」は開き直す（取り直す）まで前の一覧を出す。共有ページと PNG は 404 になる
+- 本番の `towers` を消すのはこの手順だけ。試し打ちのデータは、手元のサーバ（メモリ版）か `towers_localtest` で作り、本番には入れない
+
 ## F. 設定を変えるだけのとき（コードの変更なし）
 
 環境変数は、イメージを作り直さずに変えられる。変えると新しい版が自動で立ち上がる。
