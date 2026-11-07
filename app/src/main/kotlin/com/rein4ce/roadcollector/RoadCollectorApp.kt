@@ -10,6 +10,7 @@ import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
 import com.rein4ce.roadcollector.ui.gallery.TowerGallery
+import com.rein4ce.roadcollector.ui.theme.JapaneseText
 
 /**
  * アプリ全体で共有するもの（リポジトリなど）の置き場。
@@ -40,6 +41,8 @@ class RoadCollectorApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 端末の言語によらず、字を日本語として描く（漢字が中国語の形にならないように。#46）
+        JapaneseText.apply()
         settings = AppSettings(this)
         // タワーを送るときの作者名は、設定のニックネーム（空なら名無し）
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }

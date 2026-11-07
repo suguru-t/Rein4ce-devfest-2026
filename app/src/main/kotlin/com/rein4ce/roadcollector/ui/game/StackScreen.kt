@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
-import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
@@ -57,13 +57,12 @@ fun StackScreen(
 ) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val inventory by repository.parts.collectAsStateWithLifecycle()
-    val parts: List<Part> = GameSession.selected.ifEmpty { inventory.take(GameSession.MAX_PARTS) }
+    val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    val startRequest = GameSession.startRequest
 
-    // 選択が変わったとき、または未開始のときだけ開始（タブを行き来してもゲームは続く）
-    LaunchedEffect(parts) {
-        if (parts.isNotEmpty() && (vm.phase == StackViewModel.Phase.Idle || vm.sessionParts != parts)) {
-            vm.start(parts)
-        }
+    LaunchedEffect(inventory, isLoaded, startRequest) {
+        // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
+        vm.updateInventory(repository.parts.value, repository.isLoaded.value, startRequest)
     }
 
     // ゲームループ
@@ -77,17 +76,41 @@ fun StackScreen(
         }
     }
 
-    if (parts.isEmpty()) {
+    if (vm.phase == StackViewModel.Phase.Idle) {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("コレクションにパーツがありません")
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = onGoInventory) { Text("コレクションへ") }
+            // 読み込み後は、VM が「始める」か「startMessage を出す」のどちらかになる。
+            // パーツがあって案内もないのは、上の LaunchedEffect が動く前の一瞬だけ
+            if (!isLoaded || (inventory.isNotEmpty() && vm.startMessage == null)) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(8.dp))
+                Text("パーツを読み込み中…")
+            } else {
+                Text(vm.startMessage ?: "コレクションにパーツがありません")
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onGoInventory) { Text("コレクションへ") }
+            }
         }
         return
+    }
+
+    vm.startMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = vm::dismissStartMessage,
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.dismissStartMessage()
+                    onGoInventory()
+                }) { Text("コレクションへ") }
+            },
+            dismissButton = {
+                TextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
+            },
+        )
     }
 
     // 地と字はテーマの色（ダークモードでは、あたたかみのある黒に明るい字）
@@ -127,7 +150,7 @@ fun StackScreen(
                         Button(onClick = { vm.place() }) { Text("置く") }
                         OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
-                    TextButton(onClick = { vm.restart() }) { Text("やり直す") }
+                    TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
                 }
                 StackViewModel.Phase.Settling -> {
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
@@ -143,7 +166,7 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { vm.restart() }) { Text("もう一度") }
+                                Button(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
                                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                                 OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                                     when {

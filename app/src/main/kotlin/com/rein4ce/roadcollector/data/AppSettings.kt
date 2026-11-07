@@ -115,6 +115,16 @@ class AppSettings(private val store: Store) {
         _nickname.value = cleaned
     }
 
+    private val _howToSeen = MutableStateFlow(readBoolean(KEY_HOWTO_SEEN, false))
+
+    /** 開いたときに出す「使い方」で「次回から表示しない」を選んだか（true なら出さない。設定の「使い方」ではいつでも見られる） */
+    val howToSeen: StateFlow<Boolean> = _howToSeen
+
+    fun setHowToSeen(seen: Boolean) {
+        store.put(KEY_HOWTO_SEEN, seen.toString())
+        _howToSeen.value = seen
+    }
+
     /** 保存した値が読めない（前の版の値など）ときは [fallback] */
     private inline fun <reified E : Enum<E>> readEnum(key: String, fallback: E): E =
         store.get(key)?.let { saved -> enumValues<E>().firstOrNull { it.name == saved } } ?: fallback
@@ -130,6 +140,7 @@ class AppSettings(private val store: Store) {
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_AI_NAMING = "ai_naming"
         private const val KEY_NICKNAME = "nickname"
+        private const val KEY_HOWTO_SEEN = "howto_seen"
 
         /** 前後の空白・改行を落とし、上限の文字数で切る（絵文字を途中で切らないよう、コードポイント単位） */
         fun cleanNickname(name: String): String {
