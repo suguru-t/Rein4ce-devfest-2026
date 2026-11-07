@@ -14,7 +14,6 @@ import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.geo.TrackFilter
-import com.rein4ce.roadcollector.core.geo.TrackSpeed
 import com.rein4ce.roadcollector.core.geo.TrackToPart
 import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
@@ -26,6 +25,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /**
  * 採集画面の状態。
@@ -40,7 +41,8 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 停止後の結果（ダイアログ表示用） */
     sealed class Outcome {
-        data class Created(val part: Part, val stats: TrackToPart.Stats) : Outcome()
+        /** @param note 自動で止めたときの説明（「速すぎたので記録を止めました…」）。ふつうは null */
+        data class Created(val part: Part, val stats: TrackToPart.Stats, val note: String? = null) : Outcome()
         data class Rejected(val reason: String) : Outcome()
     }
 
@@ -55,6 +57,14 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
     private var demoJob: Job? = null
 
+    init {
+        // 速すぎて TrackRecorder が自動で止めたら、速くなる前までの点列でパーツ化を試す。
+        // 画面を閉じている間に止まった場合も、次に開いたときにここで拾う（tooFast は StateFlow なので値が残っている）
+        viewModelScope.launch {
+            TrackRecorder.tooFast.collect { stop -> if (stop != null) onStoppedForSpeed(stop) }
+        }
+    }
+
     /**
      * 距離 [m]（表示用）。パーツの distanceM と同じく TrackFilter を通してから測るので、
      * 見出しの「L=」と結果ダイアログの「L=」が同じ値になる。
@@ -64,16 +74,10 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         return Projection.pathLength(Projection.toMeters(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps)))
     }
 
-    /**
-     * 最近 30 秒の速さ [m/s]（記録中の表示用）。まだ 30 秒に足りなければ null。
-     * パーツ化の判定（TrackToPart）と同じく、TrackFilter を通した点で測る
-     */
-    fun recentSpeedMps(pts: List<TrackPoint>): Double? {
-        val p = ConversionParams.DEFAULT
-        return TrackSpeed.recentMps(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps), p.walkSpeedWindowMs)
-    }
+    /** 最近 30 秒の速さ [m/s]（記録中の表示用）。まだ 30 秒に足りなければ null。自動停止の判定と同じ測り方 */
+    fun recentSpeedMps(pts: List<TrackPoint>): Double? = TrackRecorder.recentSpeedMps(pts)
 
-    /** 歩きとみなす速さの上限 [m/s]。これを超える区間がある散歩はパーツにならない */
+    /** 歩き・ジョギングとみなす速さの上限 [m/s]。記録中にこれを超えると自動で止まる */
     val walkMaxSpeedMps: Double = ConversionParams.DEFAULT.walkMaxSpeedMps
 
     fun startRecording() {
@@ -119,6 +123,8 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 DemoWalkPlayer.play(points)
+                // 速すぎて途中で自動停止したなら、tooFast の購読側（onStoppedForSpeed）が処理する
+                if (!TrackRecorder.isRecording.value) return@launch
                 val pts = TrackRecorder.stop()
                 convert(pts)
             } finally {
@@ -140,9 +146,37 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                 outcome = Outcome.Rejected("使える位置情報が足りません（${r.pointCount} 点）")
             is TrackToPart.Result.TooFast ->
                 outcome = Outcome.Rejected(
-                    "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps)}）。" +
-                        "車・自転車・走りはパーツになりません。歩き（${kmh(r.limitMps)} まで）で採集してください",
+                    "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps, RoundingMode.CEILING)}）。" +
+                        "車・自転車はパーツになりません。歩きかジョギング（${kmh(r.limitMps, RoundingMode.FLOOR)} まで）で採集してください",
                 )
+        }
+    }
+
+    /**
+     * 速すぎて記録が自動で止まったとき。サービスとデモ再生を止め、速くなる前までの点列でパーツ化を試す。
+     * パーツにできる長さなら作り、ダイアログに「止めた」ことを添える。短ければその旨を出す
+     */
+    private fun onStoppedForSpeed(stop: TrackRecorder.TooFast) {
+        TrackRecorder.consumeTooFast()
+        LocationRecordingService.stop(getApplication())
+        demoJob?.cancel()
+        playingLabel = null
+        val note = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}。" +
+            "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます）"
+        when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
+            is TrackToPart.Result.Success -> {
+                repository.add(r.part, r.place)
+                outcome = Outcome.Created(r.part, r.stats, note = "$note。そこまでをパーツにしました")
+            }
+            is TrackToPart.Result.TooShort ->
+                outcome = Outcome.Rejected("$note。そこまでの %.0f m は短すぎてパーツになりません（最低 %.0f m）".format(r.distanceM, r.minDistanceM))
+            is TrackToPart.Result.TooFewPoints ->
+                outcome = Outcome.Rejected(
+                    if (r.pointCount < 2) "$note。速くなる前の記録が無いので、パーツはできません"
+                    else "$note。そこまでの位置情報が足りません（${r.pointCount} 点）",
+                )
+            is TrackToPart.Result.TooFast ->
+                outcome = Outcome.Rejected("$note。そこまでにも速い区間があり、パーツになりません")
         }
     }
 
@@ -151,7 +185,13 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        /** 速さの表示（「時速 8 km」）。画面もダイアログも同じ書き方にする */
-        fun kmh(mps: Double): String = "時速 %.0f km".format(mps * 3.6)
+        /**
+         * 速さの表示（「時速 8.1 km」。小数 1 桁）。画面もダイアログも同じ書き方にする。
+         * 弾いたときの文では、弾かれた速さは切り上げ（CEILING）、上限は切り捨て（FLOOR）で出す。
+         * 上限（2.2 m/s = 時速 7.92 km）のすぐ上（7.93 km）で弾かれたとき、どちらも四捨五入だと「最高 時速 7.9 km」と
+         * 「時速 7.9 km まで」になって矛盾して見えるため。小数点は言語の設定によらず「.」（BigDecimal）
+         */
+        fun kmh(mps: Double, rounding: RoundingMode = RoundingMode.HALF_UP): String =
+            "時速 " + BigDecimal(mps * 3.6).setScale(1, rounding).toPlainString() + " km"
     }
 }

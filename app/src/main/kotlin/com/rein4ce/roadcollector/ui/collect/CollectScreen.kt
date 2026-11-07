@@ -88,9 +88,9 @@ fun CollectScreen(
     val points by vm.points.collectAsStateWithLifecycle()
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val distance = remember(points) { vm.distanceM(points) }
-    // 最近 30 秒の速さ。歩きより速いと、記録中の状態行で知らせる（止めてもパーツにならないので、早めに気づけるように）
+    // 最近 30 秒の速さ。上限に近づいたら（8 割から）状態行で知らせる。上限を超えると TrackRecorder が記録を自動で止める
     val recentSpeed = remember(points) { vm.recentSpeedMps(points) }
-    val tooFast = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps
+    val nearLimit = isRecording && recentSpeed != null && recentSpeed > vm.walkMaxSpeedMps * 0.8
 
     // GPX / JSON ファイルを選ぶ（MIME は端末ごとにまちまちなので絞らない）
     val fileLauncher = rememberLauncherForActivityResult(
@@ -146,7 +146,7 @@ fun CollectScreen(
         val playing = vm.playingLabel
         val status = when {
             playing != null -> StatusLine("${playing}を再生中", Fieldbook.Survey)
-            tooFast -> StatusLine("速すぎます（${CollectViewModel.kmh(recentSpeed!!)}）・歩きだけパーツになります", RecordingRed)
+            nearLimit -> StatusLine("速めです（${CollectViewModel.kmh(recentSpeed!!)}）・${CollectViewModel.kmh(vm.walkMaxSpeedMps)} を超えると記録を止めます", RecordingRed)
             isRecording -> StatusLine("記録中（画面を閉じても続きます）", RecordingRed)
             else -> null
         }
@@ -242,6 +242,10 @@ fun CollectScreen(
                     FieldbookPart(o.part, modifier = Modifier.size(180.dp))
                     Spacer(Modifier.height(4.dp))
                     Text(o.part.displayName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
+                    o.note?.let { note ->
+                        // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
+                        Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
+                    }
                     Text(
                         "L=${o.part.distanceM} m ・ 頂点 ${o.part.points.size} ・ ε ${"%.0f".format(o.stats.epsilonM)} m",
                         fontFamily = Fieldbook.Data,
