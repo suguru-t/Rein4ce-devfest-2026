@@ -117,7 +117,8 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun convert(pts: List<TrackPoint>) {
         when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT)) {
             is TrackToPart.Result.Success -> {
-                repository.add(r.part)
+                // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う。B）
+                repository.add(r.part, r.place)
                 outcome = Outcome.Created(r.part, r.stats)
             }
             is TrackToPart.Result.TooShort ->

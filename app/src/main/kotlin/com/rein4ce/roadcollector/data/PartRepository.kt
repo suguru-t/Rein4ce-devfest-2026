@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import java.io.File
 
@@ -43,6 +45,13 @@ class PartRepository(
     /** 手持ちの並び順（パーツの id の列）の保存先。パーツのデータ形式は変えたくないので別のファイルにする */
     private val orderFile = File(file.parentFile, "${file.nameWithoutExtension}_order.json")
     private val orderSerializer = ListSerializer(String.serializer())
+
+    /**
+     * パーツを歩いた場所（id → 形の中心と長辺の長さ）の保存先。拡大表示の背景の地図に使う。
+     * **Part とは別のファイルで、スマホの中だけに持つ**（Part はタワーと一緒にサーバへ送られるので、入れると歩いた場所が分かってしまう）
+     */
+    private val placesFile = File(file.parentFile, "${file.nameWithoutExtension}_places.json")
+    private val placesSerializer = MapSerializer(String.serializer(), PartPlace.serializer())
     private val writeLock = Mutex()
 
     private val _parts = MutableStateFlow<List<Part>>(emptyList())
@@ -55,6 +64,14 @@ class PartRepository(
      * ここに無いパーツ（並べ替えたあとに採集したもの、戻した見本）の置き場所は、手持ち画面が決める（InventoryOrder.kt）
      */
     val order: StateFlow<List<String>> = _order
+
+    private val _places = MutableStateFlow<Map<String, PartPlace>>(emptyMap())
+
+    /**
+     * 採集したパーツを歩いた場所（id → 場所）。場所を残す前に採集したパーツは入っていない。
+     * 見本の場所はここには無く、[placeOf] が SampleParts から返す
+     */
+    val places: StateFlow<Map<String, PartPlace>> = _places
 
     private val _isLoaded = MutableStateFlow(false)
 
@@ -102,13 +119,34 @@ class PartRepository(
         }.onFailure { logError("${orderFile.name} could not be read, ignoring", it) }.getOrDefault(emptyList())
         val ids = _parts.value.mapTo(HashSet()) { it.id }
         _order.update { early -> (early.ifEmpty { orderFromFile }).filter { it in ids }.distinct() }
+
+        // 歩いた場所。読み込み前に足されたパーツの場所（起動直後の採集）も残す
+        val placesFromFile: Map<String, PartPlace> = runCatching {
+            if (placesFile.exists()) AppJson.decodeFromString(placesSerializer, placesFile.readText()) else emptyMap()
+        }.onFailure { logError("${placesFile.name} could not be read, ignoring", it) }.getOrDefault(emptyMap())
+        var placesAddedBeforeLoad = false
+        _places.update { early ->
+            placesAddedBeforeLoad = early.isNotEmpty()
+            (placesFromFile + early).filterKeys { it in ids }
+        }
+        if (placesAddedBeforeLoad) persistPlaces()
     }
 
-    /** 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない */
-    fun add(part: Part) {
+    /**
+     * 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない。
+     * @param place 歩いた場所（TrackToPart の結果）。parts.json とは別のファイルに保存する
+     */
+    fun add(part: Part, place: PartPlace? = null) {
         _parts.update { it + part }
         persist()
+        if (place != null) {
+            _places.update { it + (part.id to place) }
+            persistPlaces()
+        }
     }
+
+    /** そのパーツを歩いた場所。見本は千住キャンパス付近の場所、場所を残す前に採集したパーツは null */
+    fun placeOf(id: String): PartPlace? = _places.value[id] ?: SampleParts.places[id]
 
     fun remove(id: String) {
         _parts.update { list -> list.filterNot { it.id == id } }
@@ -116,6 +154,10 @@ class PartRepository(
         if (id in _order.value) {
             _order.update { it - id }
             persistOrder()
+        }
+        if (id in _places.value) {
+            _places.update { it - id }
+            persistPlaces()
         }
     }
 
@@ -174,6 +216,8 @@ class PartRepository(
     private fun persist() = save(file) { AppJson.encodeToString(serializer, _parts.value) }
 
     private fun persistOrder() = save(orderFile) { AppJson.encodeToString(orderSerializer, _order.value) }
+
+    private fun persistPlaces() = save(placesFile) { AppJson.encodeToString(placesSerializer, _places.value) }
 
     /**
      * ファイルに保存する（parts.json も、並び順のファイルも同じ書き方）。
