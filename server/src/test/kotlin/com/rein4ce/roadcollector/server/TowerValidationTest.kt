@@ -55,6 +55,15 @@ class TowerValidationTest {
     }
 
     @Test
+    fun `持ち主の印は 64 桁の 16 進だけ通す（無しも通す）`() {
+        assertNull(ok.copy(ownerId = "0123456789abcdef".repeat(4)).validationError())
+        assertNull(ok.copy(ownerId = null).validationError())
+        bad(ok.copy(ownerId = "ABCDEF0123456789".repeat(4)), "ownerId")
+        bad(ok.copy(ownerId = "abc"), "ownerId")
+        bad(ok.copy(ownerId = ""), "ownerId")
+    }
+
+    @Test
     fun `空・多すぎは断る`() {
         bad(ok.copy(parts = emptyList()), "parts is empty")
         bad(ok.copy(placements = emptyList()), "placements is empty")

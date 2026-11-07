@@ -18,8 +18,9 @@ import org.dyn4j.world.World
  * 使い方：
  *   val w = StackWorld()
  *   w.place(part, x = 0.0, y = 2.0, angle = 0.0)
- *   毎フレーム w.step(dt)
- *   w.isSettled() が true になったら w.removeFallen() → w.height()
+ *   毎フレーム w.step(dt) → w.removeFallen()（落ちたパーツは、落ちた時点で取り除く。落ち続けるパーツは止まらないので、
+ *   残しておくと isSettled() が true にならない）
+ *   w.isSettled() が true になったら w.height()
  */
 class StackWorld(
     val platformWidth: Double = PLATFORM_WIDTH,
