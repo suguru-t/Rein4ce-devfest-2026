@@ -16,54 +16,51 @@ import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
- * 方眼紙の上に字を書くところの下地。紙の色を敷いて、方眼の線と背景の天気を字の下だけ隠す。
- * 上・下・右の端ではだんだん透明にして、まわりの方眼に溶け込ませる（新しい枠は増やさない）。
+ * 方眼紙の上に書いた字の下地。字の部品（1 行）のうしろにだけ紙の色を敷いて、方眼の線と背景の天気を隠す。
+ * 部品の外側に [bleedX]・[bleedY] だけ広げ、その分でだんだん透明にして、まわりの方眼に溶け込ませる。
  *
- * 部品の外側まで広げて描く（左右は [sideBleed]。上は [topFade]、下は [fade] だけ、外に向かって薄くなる）。
- * 字より上は方眼紙が見えるように、上の端のすぐ外から濃くする。
- * 右は部品の幅の [solidUntil] の割合まで紙の色で、そこから右の端（＋[sideBleed]）にかけて透明になる。
- * 右上に出る晴れの太陽などを隠しすぎないため。薄まり方は、直線ではなくなめらかな曲線（境目が線に見えないように）。
- * 描くだけなので、配置は変わらない
+ * 見出し全体に 1 枚敷くと、字のない所（数字の右のすき間など）まで方眼が消えて不自然なので、行ごとに付ける。
+ * 字の幅だけにするため、横いっぱいに広がる部品には付けない（wrapContentWidth などで字の幅にしてから付ける）。
+ * 薄まり方は、直線ではなくなめらかな曲線（境目が線に見えないように）。描くだけなので、配置は変わらない
  *
  * @param opacity 紙の色の濃さ。1 で方眼が見えなくなる。少しだけ方眼を透かして、紙の上に書いた感じを残す
  */
 fun Modifier.paperBand(
-    sideBleed: Dp = 16.dp,
-    topFade: Dp = 24.dp,
-    fade: Dp = 52.dp,
-    solidUntil: Float = 0.5f,
+    bleedX: Dp = 14.dp,
+    bleedY: Dp = 8.dp,
     opacity: Float = 0.9f,
 ): Modifier = drawBehind {
     val paper = Fieldbook.Paper.copy(alpha = opacity)
     val clear = Fieldbook.Paper.copy(alpha = 0f)
-    val left = -sideBleed.toPx()
-    val right = size.width + sideBleed.toPx()
-    val top = -topFade.toPx()
-    val bottom = size.height + fade.toPx()
-    val area = Rect(left, top, right, bottom)
+    val bx = bleedX.toPx()
+    val by = bleedY.toPx()
+    val left = -bx
+    val top = -by
+    val width = size.width + bx * 2
+    val height = size.height + by * 2
     // 縦の薄まり（紙の色）と横の薄まり（型抜き）を重ねるため、この範囲だけ別の層に描いてから戻す
     drawIntoCanvas { canvas ->
-        canvas.saveLayer(area, Paint())
+        canvas.saveLayer(Rect(left, top, left + width, top + height), Paint())
         drawRect(
             brush = Brush.verticalGradient(
-                *(
-                    easedStops(0f, (0f - top) / (bottom - top), clear, paper) +
-                        easedStops((size.height - top) / (bottom - top), 1f, paper, clear)
-                    ),
+                *(easedStops(0f, by / height, clear, paper) + easedStops(1f - by / height, 1f, paper, clear)),
                 startY = top,
-                endY = bottom,
+                endY = top + height,
             ),
             topLeft = Offset(left, top),
-            size = Size(right - left, bottom - top),
+            size = Size(width, height),
         )
         drawRect(
             brush = Brush.horizontalGradient(
-                *easedStops((size.width * solidUntil - left) / (right - left), 1f, Color.Black, Color.Transparent),
+                *(
+                    easedStops(0f, bx / width, Color.Transparent, Color.Black) +
+                        easedStops(1f - bx / width, 1f, Color.Black, Color.Transparent)
+                    ),
                 startX = left,
-                endX = right,
+                endX = left + width,
             ),
             topLeft = Offset(left, top),
-            size = Size(right - left, bottom - top),
+            size = Size(width, height),
             blendMode = BlendMode.DstIn,
         )
         canvas.restore()

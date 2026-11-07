@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -184,67 +185,64 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出しのまとまり（メーター・一言・おまかせの行）。方眼の線や背景の天気に字がかぶって読みにくいので、
-        // 下に紙の色を敷き、下と右の端でだんだん透明にしてまわりの方眼に溶け込ませる（ui/common/PaperBand）
-        Column(modifier = Modifier.paperBand()) {
-            // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
-            // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
-            Row(verticalAlignment = Alignment.Top) {
-                CollectionMeter(
-                    totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
-                    walks = parts.size - sampleCount,
-                    samples = sampleCount,
-                    isLoaded = isLoaded,
-                    editing = editing,
-                    reduceMotion = reduceMotion,
-                    modifier = Modifier.weight(1f),
+        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
+        // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
+        Row(verticalAlignment = Alignment.Top) {
+            CollectionMeter(
+                totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
+                walks = parts.size - sampleCount,
+                samples = sampleCount,
+                isLoaded = isLoaded,
+                editing = editing,
+                reduceMotion = reduceMotion,
+                modifier = Modifier.weight(1f),
+            )
+            if (!editing && isLoaded && parts.isNotEmpty()) {
+                SelectButton(
+                    selecting = selecting,
+                    onClick = { if (selecting) cancelSelecting() else selecting = true },
+                    modifier = Modifier.padding(start = 8.dp),
                 )
-                if (!editing && isLoaded && parts.isNotEmpty()) {
-                    SelectButton(
-                        selecting = selecting,
-                        onClick = { if (selecting) cancelSelecting() else selecting = true },
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
+            }
+        }
+        Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                when {
+                    editing -> notes("長押しのまま動かして並べ替え", "× で削除")
+                    selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                    else -> notes("タップで大きく見る", "長押しで並べ替え")
+                },
+                style = noteStyle,
+                fontSize = 12.sp,
+                color = Fieldbook.Muted,
+                // 字の幅だけ紙の色を敷く（ui/common/PaperBand。見出しの字が方眼の線にかぶって読みにくいため）
+                modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).paperBand(),
+            )
+            // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
+            // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
+            if (!editing && !selecting && isLoaded && missingSamples > 0) {
+                TextButton(onClick = { repository.restoreMissingSamples() }) {
+                    Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when {
-                        editing -> notes("長押しのまま動かして並べ替え", "× で削除")
-                        selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
-                        else -> notes("タップで大きく見る", "長押しで並べ替え")
-                    },
-                    style = noteStyle,
-                    fontSize = 12.sp,
-                    color = Fieldbook.Muted,
-                    modifier = Modifier.weight(1f),
-                )
-                // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
-                // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
-                if (!editing && !selecting && isLoaded && missingSamples > 0) {
-                    TextButton(onClick = { repository.restoreMissingSamples() }) {
-                        Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
-                    }
-                }
-            }
+        }
 
-            // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
-            // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
-            if (selecting && !editing && isLoaded) {
-                RandomPickRow(
-                    // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
-                    enabled = parts.isNotEmpty(),
-                    count = pickCount,
-                    onCountChange = { pickCount = it },
-                    note = pickNote,
-                    onPick = {
-                        val picked = pickRandom(parts.map { it.id }, pickCount)
-                        selectedIds.clear()
-                        selectedIds.addAll(picked)
-                        pickNote = randomPickNote(picked.size, pickCount)
-                    },
-                )
-            }
+        // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
+        // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
+        if (selecting && !editing && isLoaded) {
+            RandomPickRow(
+                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                enabled = parts.isNotEmpty(),
+                count = pickCount,
+                onCountChange = { pickCount = it },
+                note = pickNote,
+                onPick = {
+                    val picked = pickRandom(parts.map { it.id }, pickCount)
+                    selectedIds.clear()
+                    selectedIds.addAll(picked)
+                    pickNote = randomPickNote(picked.size, pickCount)
+                },
+            )
         }
 
         val gridState = rememberLazyGridState()
@@ -436,12 +434,15 @@ private fun CollectionMeter(
             },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // 見出しの字は、行ごとに字の幅だけ紙の色を敷く（方眼の線にかぶって読みにくいため。ui/common/PaperBand）。
+            // 見出し全体に敷くと、数字の右のすき間など字のない所まで方眼が消えて不自然になる
             Text(
                 "コレクション",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
                 color = Fieldbook.Muted,
+                modifier = Modifier.paperBand(),
             )
             Spacer(Modifier.weight(1f))
             if (editing) {
@@ -451,7 +452,7 @@ private fun CollectionMeter(
         // 1 km 未満は m、1 km からは km で出す（totalDistance）。
         // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
         val shown = totalDistance(shownM.toInt())
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
             Text(
                 if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
                 fontFamily = Fieldbook.Data,
@@ -474,6 +475,7 @@ private fun CollectionMeter(
             style = noteStyle,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
+            modifier = Modifier.paperBand(),
         )
     }
 }
