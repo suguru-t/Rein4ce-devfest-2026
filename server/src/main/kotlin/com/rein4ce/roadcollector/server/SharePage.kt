@@ -13,7 +13,10 @@ object SharePage {
 
     fun render(tower: Tower, baseUrl: String): String {
         val title = "高さ ${String.format(Locale.US, "%.2f", tower.height)} m のタワー"
-        val desc = "${tower.parts.size} 個の散歩パーツで積みました — ミチツミ"
+        // 作者名（アプリの設定のニックネーム）があれば、説明に入れる。LINE / X のプレビューにも出る
+        val author = tower.author?.trim().orEmpty()
+        val who = if (author.isEmpty()) "" else "$author さんが "
+        val desc = "$who${tower.parts.size} 個の散歩パーツで積みました — ミチツミ"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)

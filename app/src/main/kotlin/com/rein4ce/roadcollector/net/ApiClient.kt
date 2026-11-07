@@ -57,12 +57,18 @@ object ApiClient {
      */
     var authorName: () -> String? = { null }
 
-    /** タワーを送る。作者名がまだ入っていなければ、設定のニックネームを入れて送る */
+    /**
+     * 送信できたタワーの id を受け取る係（自分のタワーの印。data/MyTowers）。
+     * アプリの起動時に RoadCollectorApp がつなぐ
+     */
+    var onPosted: (TowerCreated) -> Unit = {}
+
+    /** タワーを送る。作者名がまだ入っていなければ、設定のニックネームを入れて送る。送れたら [onPosted] に知らせる */
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
             setBody(withAuthor(tower, authorName()))
-        }.body()
+        }.body<TowerCreated>().also(onPosted)
 
     /**
      * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。

@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
@@ -94,6 +95,8 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     val uriHandler = LocalUriHandler.current
     val state = gallery.state
     val towers = (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
+    // このスマホから送信したタワーの id（data/MyTowers）。カードに「あなた」の札を出す
+    val mine by RoadCollectorApp.from(LocalContext.current).myTowers.ids.collectAsStateWithLifecycle()
 
     // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。積んで送信した直後に来ても、押さずに新しいタワーが出る。
     // 起動時の先読み（TowerGallery.prefetch）がまだ走っていれば止めずに待ち、その結果を先に出す
@@ -207,6 +210,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
                             // 番号はいまの並びの上から（2 ページ目は 6 から）。1 番には並びに合わせた札（最長・最新・最多）
                             rank = current * PAGE_SIZE + i + 1,
                             sort = sort,
+                            mine = t.id in mine,
                             ratio = t.height / tallest,
                             onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
                         )
@@ -334,9 +338,9 @@ private fun Modifier.marker(): Modifier = drawBehind {
     )
 }
 
-/** 測量の青で塗った小さな札（「最長」）。白い字。見出しとカードで同じ形 */
+/** 色で塗った小さな札（測量の青の「最長」、道の色の「あなた」）。白い字。見出しとカードで同じ形 */
 @Composable
-private fun Tag(text: String, fontSize: TextUnit, modifier: Modifier = Modifier) {
+private fun Tag(text: String, fontSize: TextUnit, modifier: Modifier = Modifier, color: Color = Fieldbook.Survey) {
     Text(
         text,
         color = Color.White,
@@ -344,7 +348,7 @@ private fun Tag(text: String, fontSize: TextUnit, modifier: Modifier = Modifier)
         fontWeight = FontWeight.Bold,
         maxLines = 1,
         modifier = modifier
-            .background(Fieldbook.Survey, RoundedCornerShape(4.dp))
+            .background(color, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
@@ -453,7 +457,7 @@ private fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) {
  * [sketch] はまだ取れていなければ null で、絵の場所に破線の枠だけ出す（取れたら差し替わる）
  */
 @Composable
-private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, sort: TowerSort, ratio: Float, onClick: () -> Unit) {
+private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, sort: TowerSort, mine: Boolean, ratio: Float, onClick: () -> Unit) {
     val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
@@ -464,7 +468,8 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, sort: Towe
             .border(1.dp, Fieldbook.CardEdge, CardShape)
             .clickable(onClickLabel = "共有ページを開く", onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "${sort.label}で $rank 番目。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
+                contentDescription = (if (mine) "あなたのタワー。" else "") +
+                    "${sort.label}で $rank 番目。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
             }
             .padding(start = 10.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
     ) {
@@ -488,6 +493,8 @@ private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, sort: Towe
                 Text("m", fontFamily = Fieldbook.Data, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
                 // 1 番のタワーには、並びに合わせた札（高い順は見出しと同じ「最長」、新しい順は「最新」、パーツ数は「最多」）
                 if (rank == 1) Tag(sort.topLabel, fontSize = 10.sp, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
+                // このスマホから送信したタワーには、道の色（オレンジ）の「あなた」の札
+                if (mine) Tag("あなた", fontSize = 10.sp, color = Fieldbook.Road, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
             }
             // 高さの目盛り：いちばん高いタワーを 100% にした横棒（測量の断面図のイメージ）
             Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Fieldbook.GridMajor, RoundedCornerShape(2.dp))) {

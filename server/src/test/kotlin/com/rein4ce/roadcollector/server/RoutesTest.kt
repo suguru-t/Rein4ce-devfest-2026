@@ -108,6 +108,20 @@ class RoutesTest {
     }
 
     @Test
+    fun `共有ページに作者名が出る（無ければ出ない）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+
+        val named = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower().copy(author = "C <3")).bodyAsText())
+        val namedHtml = client.get("/towers/${named.id}").bodyAsText()
+        // 説明（og:description とページの本文）に名前。HTML の特殊文字はエスケープされる
+        assertContains(namedHtml, "C &lt;3 さんが 2 個の散歩パーツで積みました")
+
+        val anon = AppJson.decodeFromString(TowerCreated.serializer(), client.postTower(sampleTower()).bodyAsText())
+        val anonHtml = client.get("/towers/${anon.id}").bodyAsText()
+        assertContains(anonHtml, "content=\"2 個の散歩パーツで積みました")
+    }
+
+    @Test
     fun `Cloud Run 経由（X-Forwarded-Proto が https）なら共有 URL も https になる`() = testApplication {
         application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 

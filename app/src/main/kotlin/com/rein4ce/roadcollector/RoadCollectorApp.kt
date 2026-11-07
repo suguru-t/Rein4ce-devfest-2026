@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
+import com.rein4ce.roadcollector.data.MyTowers
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.WeatherService
@@ -32,11 +33,18 @@ class RoadCollectorApp : Application() {
     lateinit var gallery: TowerGallery
         private set
 
+    /** このスマホから送信したタワーの id（「みんな」で「あなた」の札を出す） */
+    lateinit var myTowers: MyTowers
+        private set
+
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
         // タワーを送るときの作者名は、設定のニックネーム（空なら名無し）
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
+        // 送信できたタワーは、自分のものとして端末に覚えておく
+        myTowers = MyTowers(this)
+        ApiClient.onPosted = { myTowers.add(it.id) }
         partRepository = PartRepository(this)
         weatherService = WeatherService(this, partRepository)
         gallery = TowerGallery()
