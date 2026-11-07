@@ -93,6 +93,7 @@ import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
@@ -183,63 +184,67 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
-        // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
-        Row(verticalAlignment = Alignment.Top) {
-            CollectionMeter(
-                totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
-                walks = parts.size - sampleCount,
-                samples = sampleCount,
-                isLoaded = isLoaded,
-                editing = editing,
-                reduceMotion = reduceMotion,
-                modifier = Modifier.weight(1f),
-            )
-            if (!editing && isLoaded && parts.isNotEmpty()) {
-                SelectButton(
-                    selecting = selecting,
-                    onClick = { if (selecting) cancelSelecting() else selecting = true },
-                    modifier = Modifier.padding(start = 8.dp),
+        // 見出しのまとまり（メーター・一言・おまかせの行）。方眼の線や背景の天気に字がかぶって読みにくいので、
+        // 下に紙の色を敷き、下と右の端でだんだん透明にしてまわりの方眼に溶け込ませる（ui/common/PaperBand）
+        Column(modifier = Modifier.paperBand()) {
+            // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
+            // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
+            Row(verticalAlignment = Alignment.Top) {
+                CollectionMeter(
+                    totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
+                    walks = parts.size - sampleCount,
+                    samples = sampleCount,
+                    isLoaded = isLoaded,
+                    editing = editing,
+                    reduceMotion = reduceMotion,
+                    modifier = Modifier.weight(1f),
                 )
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when {
-                    editing -> notes("長押しのまま動かして並べ替え", "× で削除")
-                    selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
-                    else -> notes("タップで大きく見る", "長押しで並べ替え")
-                },
-                style = noteStyle,
-                fontSize = 12.sp,
-                color = Fieldbook.Muted,
-                modifier = Modifier.weight(1f),
-            )
-            // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
-            // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
-            if (!editing && !selecting && isLoaded && missingSamples > 0) {
-                TextButton(onClick = { repository.restoreMissingSamples() }) {
-                    Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
+                if (!editing && isLoaded && parts.isNotEmpty()) {
+                    SelectButton(
+                        selecting = selecting,
+                        onClick = { if (selecting) cancelSelecting() else selecting = true },
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
             }
-        }
+            Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    when {
+                        editing -> notes("長押しのまま動かして並べ替え", "× で削除")
+                        selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                        else -> notes("タップで大きく見る", "長押しで並べ替え")
+                    },
+                    style = noteStyle,
+                    fontSize = 12.sp,
+                    color = Fieldbook.Muted,
+                    modifier = Modifier.weight(1f),
+                )
+                // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
+                // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
+                if (!editing && !selecting && isLoaded && missingSamples > 0) {
+                    TextButton(onClick = { repository.restoreMissingSamples() }) {
+                        Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
+                    }
+                }
+            }
 
-        // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
-        // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
-        if (selecting && !editing && isLoaded) {
-            RandomPickRow(
-                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
-                enabled = parts.isNotEmpty(),
-                count = pickCount,
-                onCountChange = { pickCount = it },
-                note = pickNote,
-                onPick = {
-                    val picked = pickRandom(parts.map { it.id }, pickCount)
-                    selectedIds.clear()
-                    selectedIds.addAll(picked)
-                    pickNote = randomPickNote(picked.size, pickCount)
-                },
-            )
+            // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
+            // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
+            if (selecting && !editing && isLoaded) {
+                RandomPickRow(
+                    // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                    enabled = parts.isNotEmpty(),
+                    count = pickCount,
+                    onCountChange = { pickCount = it },
+                    note = pickNote,
+                    onPick = {
+                        val picked = pickRandom(parts.map { it.id }, pickCount)
+                        selectedIds.clear()
+                        selectedIds.addAll(picked)
+                        pickNote = randomPickNote(picked.size, pickCount)
+                    },
+                )
+            }
         }
 
         val gridState = rememberLazyGridState()
