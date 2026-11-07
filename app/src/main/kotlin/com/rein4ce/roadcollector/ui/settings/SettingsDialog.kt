@@ -55,7 +55,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * - 背景の天気の動き：なめらか・ふつう・止める・出さない
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
- * - アプリについて
+ * - その他：アプリについて
  *
  * 説明の文は「です・ます」で書く
  */
@@ -94,7 +94,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 Section("みんなのタワー") {
                     LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
                 }
-                Section(null) {
+                Section("その他") {
                     LinkRow(Page.ABOUT.title, null) { page = Page.ABOUT }
                 }
             }
