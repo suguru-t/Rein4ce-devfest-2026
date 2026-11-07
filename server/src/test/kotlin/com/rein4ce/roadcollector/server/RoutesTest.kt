@@ -117,11 +117,34 @@ class RoutesTest {
     }
 
     @Test
-    fun `パーツや配置が空のタワーは 400 で断る`() = testApplication {
+    fun `壊れたタワーは 400 で断り、保存しない`() = testApplication {
         application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
 
         val empty = sampleTower().copy(parts = emptyList(), placements = emptyList())
-        assertEquals(HttpStatusCode.BadRequest, client.postTower(empty).status)
+        val res = client.postTower(empty)
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals("parts is empty", res.bodyAsText())
+
+        // 知らない partId（細かい検査は TowerValidationTest。ここでは理由が本文に出ることだけ）
+        val unknown = sampleTower().let { it.copy(placements = listOf(it.placements[0].copy(partId = "nothere"))) }
+        assertEquals("placement 0: unknown partId nothere", client.postTower(unknown).bodyAsText())
+
+        assertEquals("[]", client.get("/towers").bodyAsText())
+    }
+
+    @Test
+    fun `読めない JSON は 400（NaN や型違いも）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+
+        suspend fun post(body: String): HttpResponse = client.post("/towers") {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        assertEquals(HttpStatusCode.BadRequest, post("""{"parts":""").status)
+        assertEquals(HttpStatusCode.BadRequest, post("""{"parts":[],"placements":[],"height":"high","createdAt":0}""").status)
+        // JSON に NaN は書けない（kotlinx.serialization の既定で読めない）ので、読めない JSON として 400
+        val nan = AppJson.encodeToString(Tower.serializer(), sampleTower()).replace(""""height":0.8""", """"height":NaN""")
+        assertEquals(HttpStatusCode.BadRequest, post(nan).status)
         assertEquals("[]", client.get("/towers").bodyAsText())
     }
 

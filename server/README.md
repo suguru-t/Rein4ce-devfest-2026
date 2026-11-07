@@ -127,6 +127,20 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 
 名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
 
+## 受け付けるタワー（POST /towers の検査）
+
+`POST /towers` は認証なしで誰でも叩けるので、壊れたタワーは保存前に `400` で断る（`TowerValidation.kt`。本文に理由が英語で入る）。壊れたタワーが 1 基入ると、「みんな」の絵や共有ページの PNG がそのタワーで落ちるため。上限はゲームのルール（5 本）より余裕を見てあり、アプリが正しく作ったタワーは弾かない。
+
+| 断るもの | 上限・条件 |
+|---|---|
+| パーツ・配置が空、または多すぎ | 1〜10 本（`MAX_TOWER_PARTS`） |
+| パーツの id が空・重複 | |
+| パーツの頂点が 0 個・多すぎ | 1〜50 個（`MAX_PART_POINTS`。命名 API と同じ） |
+| 座標・高さ・太さが NaN・無限・巨大 | 絶対値 100 以下（`MAX_COORDINATE`）。太さは 0 より大きい。高さは 0 以上 |
+| 配置の partId がパーツに無い | |
+| 作者名・パーツの名前が長すぎ | 作者 20 文字、名前 30 文字（絵文字も 1 文字） |
+| JSON として読めない（型違い、`NaN` の字など） | `400 body must be a Tower` |
+
 ## 次にやること（C 担当）
 
 - ~~`SharePage` の `og:image` を PNG にする~~ → `GET /towers/{id}/image.png`（1200×630）をその場で描いて返す形で対応済み。Cloud Storage は使わない。文字は描かない（コンテナに日本語フォントがないため）。確認は GET で行う（HEAD には応えないので `curl -I` は 404 になる）：`curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "$BASE_URL/towers/$ID/image.png"` が `200 image/png` ならよい
