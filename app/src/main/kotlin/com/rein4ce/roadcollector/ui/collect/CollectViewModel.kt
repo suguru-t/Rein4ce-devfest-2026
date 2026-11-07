@@ -14,6 +14,7 @@ import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.geo.TrackFilter
+import com.rein4ce.roadcollector.core.geo.TrackSpeed
 import com.rein4ce.roadcollector.core.geo.TrackToPart
 import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
@@ -62,6 +63,18 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         val p = ConversionParams.DEFAULT
         return Projection.pathLength(Projection.toMeters(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps)))
     }
+
+    /**
+     * 最近 30 秒の速さ [m/s]（記録中の表示用）。まだ 30 秒に足りなければ null。
+     * パーツ化の判定（TrackToPart）と同じく、TrackFilter を通した点で測る
+     */
+    fun recentSpeedMps(pts: List<TrackPoint>): Double? {
+        val p = ConversionParams.DEFAULT
+        return TrackSpeed.recentMps(TrackFilter.filter(pts, p.maxAccuracyM, p.minStepM, p.maxSpeedMps), p.walkSpeedWindowMs)
+    }
+
+    /** 歩きとみなす速さの上限 [m/s]。これを超える区間がある散歩はパーツにならない */
+    val walkMaxSpeedMps: Double = ConversionParams.DEFAULT.walkMaxSpeedMps
 
     fun startRecording() {
         val ctx = getApplication<Application>()
@@ -125,10 +138,20 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                 outcome = Outcome.Rejected("短すぎます（%.0f m、最低 %.0f m）".format(r.distanceM, r.minDistanceM))
             is TrackToPart.Result.TooFewPoints ->
                 outcome = Outcome.Rejected("使える位置情報が足りません（${r.pointCount} 点）")
+            is TrackToPart.Result.TooFast ->
+                outcome = Outcome.Rejected(
+                    "歩くより速い移動がありました（30 秒の間で最高 ${kmh(r.fastestMps)}）。" +
+                        "車・自転車・走りはパーツになりません。歩き（${kmh(r.limitMps)} まで）で採集してください",
+                )
         }
     }
 
     fun dismissOutcome() {
         outcome = null
+    }
+
+    companion object {
+        /** 速さの表示（「時速 8 km」）。画面もダイアログも同じ書き方にする */
+        fun kmh(mps: Double): String = "時速 %.0f km".format(mps * 3.6)
     }
 }

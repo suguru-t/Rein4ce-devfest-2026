@@ -143,8 +143,13 @@ fun StackScreen(
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onClick = { vm.restart() }) { Text("もう一度") }
-                                OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading) {
-                                    if (vm.uploading) CircularProgressIndicator(modifier = Modifier.height(16.dp)) else Text("サーバに送信")
+                                // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
+                                OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
+                                    when {
+                                        vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
+                                        vm.uploaded -> Text("送信済み")
+                                        else -> Text("サーバに送信")
+                                    }
                                 }
                                 TextButton(onClick = onGoGallery) { Text("みんな") }
                             }

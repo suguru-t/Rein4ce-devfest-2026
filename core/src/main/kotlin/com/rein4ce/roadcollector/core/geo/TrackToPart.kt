@@ -15,6 +15,7 @@ import kotlin.math.max
  * 1. フィルタ（精度・最小移動・最大速度）
  * 2. メートル座標へ投影
  * 3. 距離チェック
+ * 3'. 速さチェック（歩きより速い区間があれば、車・自転車・走りとみなしてパーツにしない）
  * 4. Douglas-Peucker で簡略化（頂点上限あり）
  * 5. 輪の判定
  * 6. 正規化（中心を原点、長辺 1.0）
@@ -28,6 +29,8 @@ object TrackToPart {
          */
         data class Success(val part: Part, val stats: Stats, val place: PartPlace) : Result()
         data class TooShort(val distanceM: Double, val minDistanceM: Double) : Result()
+        /** 歩きより速い区間があった（車・自転車・走り）。[fastestMps] は 30 秒平均の最高速度、[limitMps] は歩きの上限 */
+        data class TooFast(val fastestMps: Double, val limitMps: Double) : Result()
         data class TooFewPoints(val pointCount: Int) : Result()
     }
 
@@ -39,6 +42,8 @@ object TrackToPart {
         val longSideM: Double,
         /** 簡略化に実際に使った ε [m]（GPS の精度に合わせて大きくなることがある） */
         val epsilonM: Double,
+        /** 30 秒の窓で測った最高速度 [m/s]（TrackSpeed）。時刻の分からない点があれば null */
+        val fastestMps: Double? = null,
     )
 
     fun convert(
@@ -48,11 +53,15 @@ object TrackToPart {
         walkedAt: Long = points.lastOrNull()?.timeMs ?: 0L,
     ): Result {
         val filtered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM, params.maxSpeedMps)
-        if (filtered.size < 2) return Result.TooFewPoints(filtered.size)
+        if (filtered.size < 2) return tooFewOrTooFast(points, filtered.size, params)
 
         val xy = Projection.toMeters(filtered)
         val distance = Projection.pathLength(xy)
         if (distance < params.minDistanceM) return Result.TooShort(distance, params.minDistanceM)
+
+        // 歩きだけをパーツにする。速さは GPS の揺れでばらつくので、30 秒の窓の直線距離 ÷ 時間の最高で見る
+        val fastest = TrackSpeed.fastestWindowMps(filtered, params.walkSpeedWindowMs)
+        if (fastest != null && fastest > params.walkMaxSpeedMps) return Result.TooFast(fastest, params.walkMaxSpeedMps)
 
         val epsilon = effectiveEpsilon(filtered, params)
         val simplified = Simplify.rdpWithLimit(xy, epsilon, params.maxVertices)
@@ -95,11 +104,24 @@ object TrackToPart {
             distanceM = distance,
             longSideM = longSide,
             epsilonM = epsilon,
+            fastestMps = fastest,
         )
         // 歩いた場所：形の中心（バウンディングボックスの中心）を緯度・経度に戻す。長辺の長さはパーツの 1.0 にあたる
         val (centerLat, centerLng) = Projection.toLatLng(filtered.first(), XY(bbox.centerX, bbox.centerY))
         val place = PartPlace(lat = centerLat, lng = centerLng, sizeM = longSide)
         return Result.Success(part, stats, place)
+    }
+
+    /**
+     * 使える点が 2 つ未満だったときの理由。
+     * 車や電車でずっと速い（飛びの上限 [ConversionParams.maxSpeedMps] を超え続ける）と、速度フィルタが点をほぼ全部落として
+     * 「位置情報が足りない」に見えてしまう。そのときは飛びの判定を外した点列で速さを測り、歩きより速ければ「速すぎ」と返す
+     */
+    private fun tooFewOrTooFast(points: List<TrackPoint>, count: Int, params: ConversionParams): Result {
+        val unfiltered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM, maxSpeedMps = Double.MAX_VALUE)
+        val fastest = if (unfiltered.size >= 2) TrackSpeed.fastestWindowMps(unfiltered, params.walkSpeedWindowMs) else null
+        if (fastest != null && fastest > params.walkMaxSpeedMps) return Result.TooFast(fastest, params.walkMaxSpeedMps)
+        return Result.TooFewPoints(count)
     }
 
     /**

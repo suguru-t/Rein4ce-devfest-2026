@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -84,6 +85,8 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.animation.core.animateFloatAsState
@@ -189,10 +192,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when {
-                    editing -> "長押しのまま動かして並べ替え ・ × で削除"
-                    selecting -> "タップで積むパーツを選ぶ（${GameSession.MAX_PARTS} 本まで）"
-                    else -> "タップで大きく見る ・ 長押しで並べ替え"
+                    editing -> notes("長押しのまま動かして並べ替え", "× で削除")
+                    selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                    else -> notes("タップで大きく見る", "長押しで並べ替え")
                 },
+                style = noteStyle,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
                 modifier = Modifier.weight(1f),
@@ -417,7 +421,8 @@ private fun CollectionMeter(
             )
         }
         Text(
-            if (isLoaded) "これまでに集めた道 $walks 本 ・ 見本 $samples" else "読み込み中…",
+            if (isLoaded) notes("これまでに集めた道 $walks 本", "見本 $samples") else "読み込み中…",
+            style = noteStyle,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
         )
@@ -502,7 +507,8 @@ private fun ZoomDialog(part: Part, place: PartPlace?, onRename: () -> Unit, onDi
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "L=${part.distanceM} m ・ 頂点 ${part.points.size} ・ " + if (isSample) "見本" else formatDate(part.walkedAt),
+                    notes("L=${part.distanceM} m", "頂点 ${part.points.size}", if (isSample) "見本" else formatDate(part.walkedAt)),
+                    style = noteStyle,
                     fontFamily = Fieldbook.Data,
                     fontSize = 12.sp,
                     color = Fieldbook.Muted,
@@ -536,6 +542,7 @@ private fun DeleteDialog(part: Part, onConfirm: () -> Unit, onDismiss: () -> Uni
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "採集したパーツは、削除すると元に戻せません。",
+                    style = noteStyle,
                     fontSize = 13.sp,
                     color = Fieldbook.Muted,
                 )
@@ -674,12 +681,20 @@ private fun PartCard(
             autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
             modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
         )
+        // 文字の大きさが 1 倍なら 1 行。入らない分は「…」にする（どのカードも同じ高さになる）。
+        // 文字を大きくしている人には 1 行に入らないので、2 行に折り返す（1 行で切ると採集日が見えなくなる）。
+        // どのカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる。それでも入らない分は「…」にする。
+        // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
+        val largeText = LocalDensity.current.fontScale > 1f
         Text(
-            "L=${part.distanceM} m・頂点 ${part.points.size}・$date",
+            notes("L=${part.distanceM} m", "頂点 ${part.points.size}", date, separator = "・"),
+            style = noteStyle,
             fontFamily = Fieldbook.Data,
             fontSize = 10.5.sp,
             color = Fieldbook.Muted,
-            maxLines = 1,
+            minLines = if (largeText) 2 else 1,
+            maxLines = if (largeText) 2 else 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
     }
@@ -729,7 +744,7 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
             .toggleable(value = selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
             .semantics {
                 contentDescription = "「$name」を積むのに選ぶ"
-                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "5 本選んだので選べない"
+                stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "${GameSession.MAX_PARTS} 本選んだので選べない"
             },
     ) {
         Box(
@@ -744,7 +759,10 @@ private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: ()
                 ),
         ) {
             if (order != null) {
-                Text("$order", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
+                // 丸の大きさは決まっている（26dp）ので、数字は文字の大きさの設定で大きくしない（大きくすると丸からはみ出す）。
+                // 行の高さも同じ大きさにする（行の高さだけ大きくなると、数字が下にずれて切れる）
+                val numberSize = with(LocalDensity.current) { 14.dp.toSp() }
+                Text("$order", color = Color.White, fontSize = numberSize, lineHeight = numberSize, fontWeight = FontWeight.Bold, fontFamily = Fieldbook.Data)
             }
         }
     }
