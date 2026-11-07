@@ -121,10 +121,10 @@ class MainActivity : ComponentActivity() {
         const val GATE_DY_DP = -35.8f
 
         /** 起動画面のアイコンの動きを待つのは、長くてもこれだけ [ms]（起動が遅くなりすぎないように） */
-        const val MAX_WAIT_MS = 500L
+        const val MAX_WAIT_MS = 650L
 
         /** 「ミ」が収まってから、門をくぐり始めるまでの間 [ms] */
-        const val PAUSE_MS = 150L
+        const val PAUSE_MS = 300L
 
         /** 穴が画面いっぱいより大きくなるまで、アイコンを大きくする倍率 */
         const val GATE_ZOOM = 40f
