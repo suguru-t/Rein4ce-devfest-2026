@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.svg.TowerSvg
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.accept
@@ -12,10 +13,14 @@ import io.ktor.server.request.host
 import io.ktor.server.request.port
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
+import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * API 一覧（技術選定まとめ 4 章）
@@ -25,7 +30,8 @@ import io.ktor.server.routing.post
  *   GET  /towers               一覧（新しい順）
  *   POST /towers               保存 → { id, url }
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON
- *   GET  /towers/{id}/image.svg  タワーの絵（SVG）
+ *   GET  /towers/{id}/image.svg  タワーの絵（SVG）。共有ページの中に描く
+ *   GET  /towers/{id}/image.png  タワーの絵（PNG、1200×630）。共有ページの og:image（LINE / X のプレビュー）
  *
  *   TODO(C): POST /parts/name  Vertex AI（Gemini）でパーツ命名
  *   TODO(C): 対戦方式が決まったら /challenges
@@ -77,6 +83,20 @@ fun Route.towerRoutes(store: TowerStore) {
             return@get
         }
         call.respondText(TowerSvg.render(tower), ContentType.Image.SVG)
+    }
+
+    // 共有ページの og:image 用。LINE / X は SVG を読まないので PNG。タワーは保存後に変わらないのでキャッシュさせる。
+    // GET だけで HEAD には応えない（AutoHeadResponse は入れていない）ので、確認は `curl -I` ではなく GET で行う
+    get("/towers/{id}/image.png") {
+        val id = call.parameters["id"].orEmpty()
+        val tower = store.get(id)
+        if (tower == null) {
+            call.respond(HttpStatusCode.NotFound, "tower not found")
+            return@get
+        }
+        val png = withContext(Dispatchers.Default) { TowerPng.render(tower) }
+        call.response.header(HttpHeaders.CacheControl, "public, max-age=86400")
+        call.respondBytes(png, ContentType.Image.PNG)
     }
 }
 

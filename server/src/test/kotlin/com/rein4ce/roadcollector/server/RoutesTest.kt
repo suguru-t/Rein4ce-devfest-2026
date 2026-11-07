@@ -91,13 +91,20 @@ class RoutesTest {
         assertTrue(page.contentType()?.match(ContentType.Text.Html) == true)
         val html = page.bodyAsText()
         assertContains(html, "og:title")
-        assertContains(html, "/towers/${created.id}/image.svg")
+        // og:image は PNG（LINE / X は SVG を読まない）。ページの中の絵はインライン SVG
+        assertContains(html, """<meta property="og:image" content="http://localhost/towers/${created.id}/image.png">""")
+        assertContains(html, "<svg")
 
         // 画像
         val svg = client.get("/towers/${created.id}/image.svg")
         assertEquals(HttpStatusCode.OK, svg.status)
         assertTrue(svg.contentType()?.match(ContentType.Image.SVG) == true)
         assertContains(svg.bodyAsText(), "<svg")
+
+        val png = client.get("/towers/${created.id}/image.png")
+        assertEquals(HttpStatusCode.OK, png.status)
+        assertTrue(png.contentType()?.match(ContentType.Image.PNG) == true)
+        assertContains(png.headers[HttpHeaders.CacheControl].orEmpty(), "max-age")
     }
 
     @Test
@@ -124,5 +131,6 @@ class RoutesTest {
 
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.svg").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.png").status)
     }
 }

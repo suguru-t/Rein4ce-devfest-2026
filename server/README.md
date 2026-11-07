@@ -100,8 +100,8 @@ Cloud Run のサービスアカウントには `roles/datastore.user` を付与�
 
 ## 次にやること（C 担当）
 
+- ~~`SharePage` の `og:image` を PNG にする~~ → `GET /towers/{id}/image.png`（1200×630）をその場で描いて返す形で対応済み。Cloud Storage は使わない。文字は描かない（コンテナに日本語フォントがないため）。確認は GET で行う（HEAD には応えないので `curl -I` は 404 になる）：`curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' "$BASE_URL/towers/$ID/image.png"` が `200 image/png` ならよい
 - Firestore 版を Cloud Run にデプロイして、本番で「送信 → 一覧 → 共有ページ」を確認する
-- `SharePage` の `og:image` を PNG にする（SVG → PNG 変換して Cloud Storage に置く、または画像化エンドポイント）
 - `POST /parts/name`：Vertex AI（Gemini）でパーツに名前と一言を付ける
 - 対戦方式が決まったら `/challenges`
 - `PUBLIC_BASE_URL` 環境変数：共有 URL のホスト名を固定したいときに設定
