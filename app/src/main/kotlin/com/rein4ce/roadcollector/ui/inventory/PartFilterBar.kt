@@ -4,20 +4,26 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +41,11 @@ import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.PartFilter
 import com.rein4ce.roadcollector.data.PartSort
+import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.noteStyle
+import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
  * 並びと絞り込みの行：［並び：いつもの順 ▾］［天気：すべて ▾］［☆ お気に入り］。
@@ -48,15 +59,16 @@ import com.rein4ce.roadcollector.data.PartSort
  * 小さい画面や大きい文字では、札が次の行に折り返す
  *
  * @param skies 持っているパーツの天気（選べる天気）
+ * @param enabled 押せるか（コレクションの並べ替え中は、行の場所は残したまま押せなくする）
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set<Sky>, modifier: Modifier = Modifier) {
+fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set<Sky>, modifier: Modifier = Modifier, enabled: Boolean = true) {
     FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         // 並び
         Box {
             var open by remember { mutableStateOf(false) }
-            FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true) { open = true }
+            FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true, enabled = enabled) { open = true }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
                 for (sort in PartSort.entries) {
                     MenuRow(label = sort.label, selected = sort == filter.sort, enabled = true) {
@@ -69,7 +81,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         // 天気
         Box {
             var open by remember { mutableStateOf(false) }
-            FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true) { open = true }
+            FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true, enabled = enabled) { open = true }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
                 MenuRow(label = "すべて", selected = filter.sky == null, enabled = true) {
                     onChange(filter.copy(sky = null))
@@ -83,31 +95,51 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
                 }
             }
         }
-        // お気に入り
+        // お気に入り（入る・切れるの札なので、読み上げではスイッチとして、入っているかどうかも伝える）
         FilterTag(
             if (filter.favoritesOnly) "★ お気に入り" else "☆ お気に入り",
             active = filter.favoritesOnly,
             menu = false,
+            enabled = enabled,
+            switch = true,
         ) { onChange(filter.copy(favoritesOnly = !filter.favoritesOnly)) }
     }
 }
 
 /**
  * 並びと絞り込みの札。コレクションの右上の「選択」と同じ、測量の青の細い縁の丸い札。
- * 見た目は小さいが、押せる範囲は高さ 48dp（指で押しやすいように）
+ * 見た目は小さいが、押せる範囲は高さ 48dp（指で押しやすいように）。
+ * 押したときは、ほかのボタンと同じ押し心地（ui/common/PressFeel）で、丸い札の形だけが縮む（押せる範囲の四角に波紋は出さない）
  *
  * @param active いつもの順・絞り込みなし以外を選んでいるか（青く塗る）
  * @param menu 押すと選ぶ一覧が開く（右に ▾）
+ * @param switch 入る・切れるの札か（読み上げではスイッチとして伝える）
  */
 @Composable
-private fun FilterTag(text: String, active: Boolean, menu: Boolean, onClick: () -> Unit) {
+private fun FilterTag(text: String, active: Boolean, menu: Boolean, enabled: Boolean, switch: Boolean = false, onClick: () -> Unit) {
     val shape = RoundedCornerShape(50)
+    val source = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { stateDescription = if (active) "絞り込み中" else "" },
+            .pressFeel(source)
+            .then(
+                if (switch) {
+                    Modifier.toggleable(
+                        value = active,
+                        interactionSource = source,
+                        indication = null,
+                        enabled = enabled,
+                        role = Role.Switch,
+                        onValueChange = { onClick() },
+                    )
+                } else {
+                    Modifier.clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+                },
+            )
+            // 絞り込んでいる札だけ「絞り込み中」と伝える（スイッチは入っているかどうかを自分で伝える）
+            .semantics { if (active && !switch) stateDescription = "絞り込み中" },
     ) {
         Text(
             if (menu) "$text ▾" else text,
@@ -145,4 +177,40 @@ private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky
         },
         trailingIcon = { if (selected) Text("✓", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) },
     )
+}
+
+/**
+ * 並びや絞り込みを変えたら、一覧をいちばん上から見せる。変えたときだけで、画面に入った最初の 1 回は動かさない
+ * （ほかのタブから戻ったときに、見ていた位置が残るように。#75 のレビュー）。コレクションと選ぶ窓で使う
+ */
+@Composable
+internal fun ScrollToTopOnChange(filter: PartFilter, state: LazyGridState) {
+    val last = remember { arrayOfNulls<PartFilter>(1) }
+    LaunchedEffect(filter) {
+        val before = last[0]
+        last[0] = filter
+        if (before != null && before != filter) state.scrollToItem(0)
+    }
+}
+
+/**
+ * 選んだパーツのうち、絞り込みで隠れているものがあるときの一言と「外す」。コレクションの選択中と、選ぶ窓で使う。
+ * 見えないパーツが数に入ったまま、外せず・ほかも選べなくなるのを防ぐ（#75 のレビュー）
+ *
+ * @param hidden 隠れている選んだパーツの数（0 なら何も出さない）
+ * @param onGrid 方眼の上に出すか（字の下だけ方眼の線を消す。選ぶ窓は別の窓なので使わない）
+ */
+@Composable
+internal fun HiddenSelectionNote(hidden: Int, onRemove: () -> Unit, onGrid: Boolean, modifier: Modifier = Modifier) {
+    if (hidden <= 0) return
+    Row(modifier = modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            notes("選んだうち $hidden 本は、絞り込みで隠れています"),
+            style = noteStyle,
+            fontSize = 12.sp,
+            color = Fieldbook.Muted,
+            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).then(if (onGrid) Modifier.paperBand() else Modifier),
+        )
+        PressTextButton(onClick = onRemove) { Text("外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
+    }
 }

@@ -166,7 +166,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
     private val _partFilter = MutableStateFlow(
         PartFilter(
             sort = readEnum(KEY_PART_SORT, PartSort.CUSTOM),
-            sky = store.get(KEY_PART_SKY)?.let { saved -> Sky.entries.firstOrNull { it.name == saved } },
+            sky = readEnumOrNull<Sky>(KEY_PART_SKY),
             favoritesOnly = readBoolean(KEY_PART_FAVORITES_ONLY, false),
         ),
     )
@@ -192,8 +192,11 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
     }
 
     /** 保存した値が読めない（前の版の値など）ときは [fallback] */
-    private inline fun <reified E : Enum<E>> readEnum(key: String, fallback: E): E =
-        store.get(key)?.let { saved -> enumValues<E>().firstOrNull { it.name == saved } } ?: fallback
+    private inline fun <reified E : Enum<E>> readEnum(key: String, fallback: E): E = readEnumOrNull<E>(key) ?: fallback
+
+    /** 保存した列挙の値。保存していない・知らない名前なら null（「すべて」のように、無いことに意味がある値に使う） */
+    private inline fun <reified E : Enum<E>> readEnumOrNull(key: String): E? =
+        store.get(key)?.let { saved -> enumValues<E>().firstOrNull { it.name == saved } }
 
     private fun readBoolean(key: String, fallback: Boolean): Boolean = store.get(key)?.toBooleanStrictOrNull() ?: fallback
 

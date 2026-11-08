@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -37,7 +36,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -57,7 +55,7 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
-import com.rein4ce.roadcollector.data.applyPartFilter
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -84,13 +82,13 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
     val shown = rememberArrangedParts(repository)
     // 並びと絞り込みは、コレクションと共通（設定に保存）。お気に入りは、コレクションと同じ ☆ で入れたり外したりできる
     val settings = RoadCollectorApp.from(LocalContext.current).settings
-    val filter by settings.partFilter.collectAsStateWithLifecycle()
-    val favorites by repository.favorites.collectAsStateWithLifecycle()
+    // 並びと絞り込みとお気に入りは、コレクションと共通（InventoryOrder.kt の rememberPartFiltering）
+    val filtering = rememberPartFiltering(repository, settings)
+    val filter = filtering.filter
+    val favorites = filtering.favorites
     val parts by repository.parts.collectAsStateWithLifecycle()
-    val visible = remember(shown, filter, weathers, favorites) {
-        applyPartFilter(shown, filter, { repository.weatherOf(it.id, weathers)?.sky }, favorites)
-    }
-    val skies = remember(parts, weathers) { parts.mapNotNullTo(HashSet()) { repository.weatherOf(it.id, weathers)?.sky } }
+    val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    val visible = remember(shown, filtering) { filtering.apply(shown) }
     val selected = remember { mutableStateListOf<String>().apply { addAll(initial.distinct().take(GameSession.MAX_PARTS)) } }
     // 選んだあとに消されたパーツは数えない
     val have = shown.mapTo(HashSet()) { it.id }
@@ -124,14 +122,14 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
             PartFilterBar(
                 filter = filter,
                 onChange = settings::setPartFilter,
-                skies = skies,
+                skies = filtering.skies,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             // カードを並べる所だけ、端から端まで方眼紙にする（コレクションと同じく、方眼の上に紙片を置いた見た目）。
             // 見出しとボタンは、字に線がかからないよう無地の紙のまま。この窓はメイン画面とは別の窓なので、見出しの下の線を消す仕組みは使わない
             // 並びや絞り込みを変えたら、いちばん上から見せる（コレクションと同じ）
             val gridState = rememberLazyGridState()
-            LaunchedEffect(filter) { gridState.scrollToItem(0) }
+            ScrollToTopOnChange(filter, gridState)
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 state = gridState,
@@ -142,15 +140,18 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 // 窓に入りきらず、下の「選んだ n 本で積む」が切れて押せなくなる。#74 の A のレビュー）
                 modifier = Modifier.fillMaxWidth().weight(1f, fill = false).fieldbookGrid(clearings = false),
             ) {
-                if (visible.isEmpty()) {
-                    // 絞り込んだら何も残らなかった
+                // 絞り込んだら何も残らなかったとき（コレクションが空のときや読み込み中は出さない）。コレクションと同じく外せるように
+                if (isLoaded && parts.isNotEmpty() && visible.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            "当てはまるパーツがありません",
-                            fontSize = 14.sp,
-                            color = Fieldbook.Muted,
-                            modifier = Modifier.padding(vertical = 32.dp).wrapContentWidth(Alignment.CenterHorizontally),
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        ) {
+                            Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted)
+                            PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
+                                Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
                 items(visible, key = { it.id }) { part ->
@@ -169,6 +170,13 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                     )
                 }
             }
+            // 選んだうち、絞り込みで隠れているもの（開いたときに選んである、いま積んでいるパーツも含む）を知らせて、外せるようにする
+            HiddenSelectionNote(
+                hidden = valid.count { id -> visible.none { it.id == id } },
+                onRemove = { selected.removeAll { id -> visible.none { it.id == id } } },
+                onGrid = false,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
             Spacer(Modifier.height(12.dp))
             PressButton(
                 // 窓を閉じる動きが終わってから始める（Material3 の下から出る窓の作法。すぐ消すと、閉じる動き無しに消える）
@@ -259,7 +267,8 @@ private fun PickerCard(
                 name = part.displayName,
                 enabled = true,
                 onToggle = onToggleFavorite,
-                modifier = Modifier.width(26.dp).fillMaxHeight(),
+                // 押せる幅は 32dp（カードを選ぶ所のすぐ隣なので、狭すぎると押し間違えやすい）
+                modifier = Modifier.width(32.dp).fillMaxHeight(),
                 starSize = 16.dp,
                 // 星は下の行（足跡と長さ）の高さに置く
                 alignment = Alignment.BottomCenter,

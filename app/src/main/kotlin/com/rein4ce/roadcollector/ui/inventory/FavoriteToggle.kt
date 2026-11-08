@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.selection.toggleable
@@ -22,7 +23,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,6 +59,11 @@ internal fun FavoriteToggle(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarPress")
+    // 押した瞬間に、ほかのボタン（ui/common/PressFeel）と同じ軽い振動を返す（#75 のレビュー）
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(interaction) {
+        interaction.interactions.collect { if (it is PressInteraction.Press) haptics.performHapticFeedback(HapticFeedbackType.VirtualKey) }
+    }
     val pop = remember { Animatable(1f) }
     // 光の進み具合（0 → 1）。1 は何も描かない
     val burst = remember { Animatable(1f) }
@@ -64,7 +72,12 @@ internal fun FavoriteToggle(
     LaunchedEffect(favorite) {
         val turnedOn = favorite && !last[0]
         last[0] = favorite
-        if (!turnedOn) return@LaunchedEffect
+        if (!turnedOn) {
+            // 入れた直後にすぐ外すと、弾みと光が途中で止まったまま残るので、元に戻す（#75 のレビュー）
+            pop.snapTo(1f)
+            burst.snapTo(1f)
+            return@LaunchedEffect
+        }
         launch {
             burst.snapTo(0f)
             burst.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))

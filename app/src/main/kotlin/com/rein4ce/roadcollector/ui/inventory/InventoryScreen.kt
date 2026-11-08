@@ -7,8 +7,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -19,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
@@ -65,7 +62,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +69,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
@@ -97,7 +94,6 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
-import com.rein4ce.roadcollector.data.applyPartFilter
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
@@ -108,11 +104,9 @@ import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
-import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
@@ -141,13 +135,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     var arranged by remember { mutableStateOf(shown) }
     // 並びと絞り込み（設定に保存。「パーツを選ぶ」の窓と共通）とお気に入り。画面に出すのは、いつもの順（arranged）を絞り込んで並べ替えたもの
     val settings = RoadCollectorApp.from(context).settings
-    val filter by settings.partFilter.collectAsStateWithLifecycle()
-    val favorites by repository.favorites.collectAsStateWithLifecycle()
-    val visible = remember(arranged, filter, weathers, favorites) {
-        applyPartFilter(arranged, filter, { repository.weatherOf(it.id, weathers)?.sky }, favorites)
-    }
-    // 持っているパーツの天気（天気の絞り込みで選べるもの）
-    val skies = remember(parts, weathers) { parts.mapNotNullTo(HashSet()) { repository.weatherOf(it.id, weathers)?.sky } }
+    val filtering = rememberPartFiltering(repository, settings)
+    val filter = filtering.filter
+    val favorites = filtering.favorites
+    val visible = remember(arranged, filtering) { filtering.apply(arranged) }
     // ドラッグしているパーツの id と、ドラッグを始めたときの位置
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragStartIndex by remember { mutableStateOf(-1) }
@@ -247,9 +238,18 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
-        // 並びと絞り込みの行。並べ替え中は出さない（並べ替えは、いつもの順で絞り込んでいないときだけなので）
-        if (!editing && isLoaded && parts.isNotEmpty()) {
-            PartFilterBar(filter = filter, onChange = settings::setPartFilter, skies = skies)
+        // 並びと絞り込みの行。並べ替え中は見えなくして押せなくする（並べ替えは、いつもの順で絞り込んでいないときだけなので）。
+        // 行の場所は残す：消すと一覧が上に詰まり、長押しでつかんだカードが指の下からずれるため（#75 のレビュー）
+        if (isLoaded && parts.isNotEmpty()) {
+            PartFilterBar(
+                filter = filter,
+                onChange = settings::setPartFilter,
+                skies = filtering.skies,
+                enabled = !editing,
+                modifier = Modifier
+                    .graphicsLayer { alpha = if (editing) 0f else 1f }
+                    .then(if (editing) Modifier.clearAndSetSemantics {} else Modifier),
+            )
         }
 
         // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
@@ -273,8 +273,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 
         val gridState = rememberLazyGridState()
         // 並びや絞り込みを変えたら、いちばん上から見せる（リストは、それまで上に見えていたカードを上に残そうとするので、
-        // 長い順にしても、いちばん長いパーツが上の見えない所に行ってしまう）
-        LaunchedEffect(filter) { gridState.scrollToItem(0) }
+        // 長い順にしても、いちばん長いパーツが上の見えない所に行ってしまう）。
+        // 変えたときだけ：画面に入った最初の 1 回は動かさない（ほかのタブから戻ったときに、見ていた位置が残るように。#75 のレビュー）
+        ScrollToTopOnChange(filter, gridState)
         val haptics = LocalHapticFeedback.current
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
             // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）
@@ -288,7 +289,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 verticalArrangement = Arrangement.Center,
             ) {
                 Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted, modifier = Modifier.paperBand())
-                TextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
+                PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
                     Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
             }
@@ -365,6 +366,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
+        // 選んだパーツのうち、絞り込みで隠れているものがあれば知らせて、外せるようにする
+        // （見えないパーツが数に入ったまま、外せず・ほかも選べなくなるのを防ぐ。#75 のレビュー）
+        if (selecting && !editing) {
+            HiddenSelectionNote(
+                hidden = validSelected.count { id -> visible.none { it.id == id } },
+                onRemove = { selectedIds.removeAll { id -> visible.none { it.id == id } } },
+                onGrid = true,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         PressButton(
             onClick = {
@@ -821,14 +831,14 @@ private fun PartCard(
             enabled = !editing,
             onToggle = onToggleFavorite,
             // 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）
-            modifier = Modifier.align(Alignment.CenterEnd).size(width = FavoriteToggleWidth, height = 44.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).size(width = FavoriteToggleWidth, height = 48.dp),
         )
         }
     }
 }
 
 /** カードの右下のお気に入りの幅（名前と注記は、この分だけ右を空ける） */
-private val FavoriteToggleWidth = 34.dp
+private val FavoriteToggleWidth = 44.dp
 
 /** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
 private const val MAP_LOGO_STRIP_DP = 28f
