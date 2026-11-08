@@ -58,9 +58,8 @@ class MainActivity : ComponentActivity() {
         if (!showIntro) TitleIntroState.done = true
         enableEdgeToEdge()
         val settings = RoadCollectorApp.from(this).settings
-        // BGM：音量ボタンで BGM の音量（メディアの音量）を変えられるようにする（曲の音と音のあいだに押しても）。
-        // 設定は、画面ができる前に渡しておく（オフにしている人に、開いた瞬間だけ鳴らないように）
-        volumeControlStream = AudioManager.STREAM_MUSIC
+        // BGM：設定は、画面ができる前に渡しておく（オフにしている人に、開いた瞬間だけ鳴らないように）
+        volumeControlStream = volumeStreamFor(settings.bgmOn.value)
         val bgm = RoadCollectorApp.from(this).bgm
         bgm.setSettings(settings.bgmOn.value, settings.bgmVolume.value)
         setContent {
@@ -85,7 +84,10 @@ class MainActivity : ComponentActivity() {
             // BGM のオン・オフと音量が変わったら、すぐに効かせる（設定の画面で動かしながら聞ける）
             val bgmOn by settings.bgmOn.collectAsStateWithLifecycle()
             val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
-            LaunchedEffect(bgmOn, bgmVolume) { bgm.setSettings(bgmOn, bgmVolume) }
+            LaunchedEffect(bgmOn, bgmVolume) {
+                bgm.setSettings(bgmOn, bgmVolume)
+                volumeControlStream = volumeStreamFor(bgmOn)
+            }
             // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
             val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
             val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
@@ -106,6 +108,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /**
+     * 音量ボタンで動かす音量。BGM がオンなら、メディアの音量（曲の音と音のあいだに押しても、BGM の大きさが変わる）。
+     * オフなら端末にまかせる（ほかのアプリと同じく、着信音などの音量が動く。#86 の C のレビュー）
+     */
+    private fun volumeStreamFor(bgmOn: Boolean) =
+        if (bgmOn) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
 
     // BGM は、アプリが前に出ている間だけ流す（ほかのアプリを見ているとき・記録中に画面を消したときは止める）
     override fun onStart() {

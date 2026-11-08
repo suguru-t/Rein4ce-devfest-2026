@@ -7,16 +7,12 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.util.Log
 import com.rein4ce.roadcollector.R
-import com.rein4ce.roadcollector.data.AppSettings
 
 /**
  * アプリの BGM（res/raw/bgm。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
  *
- * 流すのは、アプリが前に出ていて（[setForeground]）、設定の BGM がオンのときだけ
- * （記録中にポケットに入れているとき・ほかのアプリを見ているときは止める）。
- * - 音量は、端末のメディアの音量に、設定の音量（1〜10）の割合を掛ける。耳の感じ方に合わせ、割合は 2 乗で小さくする
- * - ほかのアプリが音楽を流しているときは、始めない（その人の音楽を止めない）
- * - 電話や、ほかのアプリが音を出し始めたとき（音の出番を取られたとき）は止める。一時的に取られただけなら、戻ったら続きから流す
+ * 流すか止めるかの決まりは [BgmControl]（アプリが前に出ていて、設定でオンのときだけ。ほかのアプリの音楽を止めない、など）。
+ * ここは、その決まりを MediaPlayer と音の出番（オーディオフォーカス）につなぐ。
  *
  * アプリ全体で 1 つ（RoadCollectorApp）。MainActivity の開始・停止と、設定の変わり目から呼ぶ
  */
@@ -29,85 +25,53 @@ class BgmPlayer(context: Context) {
         .build()
 
     private var player: MediaPlayer? = null
-    private var foreground = false
-    private var enabled = true
-    private var gain = gainOf(AppSettings.DEFAULT_BGM_VOLUME)
 
-    /** 音の出番を持っているか */
-    private var hasFocus = false
-
-    /** 一時的に音の出番を取られて止めているか（戻ってきたら続きから流す） */
-    private var pausedForOthers = false
-
-    private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+    private val focusRequest: AudioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(attributes)
+        // 「小さくすれば鳴らしてよい」と言われたとき（カーナビの案内など）も、ほかと同じく止める。
+        // これが無いと、端末が勝手に小さくするだけで知らせが来ないことがある（#86 の D のレビュー）
+        .setWillPauseWhenDucked(true)
         .setOnAudioFocusChangeListener { change ->
             when (change) {
-                AudioManager.AUDIOFOCUS_GAIN -> {
-                    hasFocus = true
-                    if (pausedForOthers) {
-                        pausedForOthers = false
-                        update()
-                    }
-                }
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    pausedForOthers = true
-                    player?.pause()
-                }
-                AudioManager.AUDIOFOCUS_LOSS -> {
-                    // ほかのアプリが音楽を流し始めた：止めて、次にアプリを開くまで流さない
-                    pausedForOthers = false
-                    player?.pause()
-                    releaseFocus()
-                }
+                AudioManager.AUDIOFOCUS_GAIN -> control.onFocusGained()
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> control.onFocusLostForAWhile()
+                AudioManager.AUDIOFOCUS_LOSS -> control.onFocusLost()
             }
         }
         .build()
 
+    private val control: BgmControl = BgmControl(object : BgmControl.Output {
+        override val isPlaying: Boolean get() = player?.isPlaying == true
+        override val othersPlayingMusic: Boolean get() = audio.isMusicActive
+
+        override fun requestFocus(): Boolean = audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+
+        override fun abandonFocus() {
+            audio.abandonAudioFocusRequest(focusRequest)
+        }
+
+        override fun play(gain: Float): Boolean {
+            val p = player ?: create() ?: return false
+            p.setVolume(gain, gain)
+            p.start()
+            return true
+        }
+
+        override fun pause() {
+            player?.pause()
+        }
+
+        override fun setGain(gain: Float) {
+            player?.setVolume(gain, gain)
+        }
+    })
+
     /** アプリが前に出たか（MainActivity の onStart・onStop） */
-    fun setForeground(on: Boolean) {
-        if (foreground == on) return
-        foreground = on
-        if (!on) pausedForOthers = false
-        update()
-    }
+    fun setForeground(on: Boolean) = control.setForeground(on)
 
     /** 設定の BGM のオン・オフと音量（1〜10） */
-    fun setSettings(on: Boolean, volume: Int) {
-        enabled = on
-        gain = gainOf(volume)
-        player?.setVolume(gain, gain)
-        update()
-    }
-
-    private fun update() {
-        if (foreground && enabled) start() else stop()
-    }
-
-    private fun start() {
-        val p = player ?: create() ?: return
-        if (p.isPlaying || pausedForOthers) return
-        if (!hasFocus) {
-            // ほかのアプリが音楽を流しているときは、その音楽を止めないよう、こちらは流さない
-            if (audio.isMusicActive) return
-            if (audio.requestAudioFocus(focusRequest) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return
-            hasFocus = true
-        }
-        p.setVolume(gain, gain)
-        p.start()
-    }
-
-    private fun stop() {
-        player?.takeIf { it.isPlaying }?.pause()
-        releaseFocus()
-    }
-
-    private fun releaseFocus() {
-        if (hasFocus) {
-            audio.abandonAudioFocusRequest(focusRequest)
-            hasFocus = false
-        }
-    }
+    fun setSettings(on: Boolean, volume: Int) = control.setSettings(on, volume)
 
     private fun create(): MediaPlayer? = runCatching {
         MediaPlayer.create(context, R.raw.bgm, attributes, audio.generateAudioSessionId())?.apply {
@@ -117,11 +81,5 @@ class BgmPlayer(context: Context) {
 
     private companion object {
         const val TAG = "BgmPlayer"
-
-        /** 設定の音量（1〜10）を、鳴らす大きさ（0〜1）に。耳の感じ方に合わせて 2 乗にする（5 で 1/4） */
-        fun gainOf(volume: Int): Float {
-            val v = volume.coerceIn(1, AppSettings.MAX_BGM_VOLUME) / AppSettings.MAX_BGM_VOLUME.toFloat()
-            return v * v
-        }
     }
 }
