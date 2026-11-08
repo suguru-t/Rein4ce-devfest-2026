@@ -7,6 +7,7 @@ import org.dyn4j.geometry.Circle
 import org.dyn4j.geometry.Geometry
 import org.dyn4j.geometry.MassType
 import org.dyn4j.geometry.Polygon
+import org.dyn4j.geometry.Vector2
 import org.dyn4j.world.World
 
 /**
@@ -31,6 +32,12 @@ class StackWorld(
 
     private val platform: Body
     private val placed = LinkedHashMap<Body, Part>()
+
+    /**
+     * 置いたパーツの見た目の形（丸い。パーツのローカル座標）。当たり判定（角ばった fixture）とは別に、置いたときに一度だけ作る。
+     * 描くときは、これをボディの位置・向きに動かすだけにする（毎フレーム作り直さない）
+     */
+    private val visuals = HashMap<Body, List<PartGeometry.Polygon>>()
 
     /** 置かれているパーツ（落下で消えたものは含まない） */
     val placedParts: List<Part> get() = placed.values.toList()
@@ -63,6 +70,7 @@ class StackWorld(
         body.translate(x, y)
         world.addBody(body)
         placed[body] = part
+        visuals[body] = PartGeometry.shapes(part, scale)
         return body
     }
 
@@ -82,6 +90,7 @@ class StackWorld(
     fun removeFallen(): List<Part> {
         val fallen = placed.keys.filter { it.worldCenter.y < fallThresholdY }
         val parts = fallen.map { placed.remove(it)!! }
+        fallen.forEach { visuals.remove(it) }
         fallen.forEach { world.removeBody(it) }
         return parts
     }
@@ -110,6 +119,7 @@ class StackWorld(
     fun clear() {
         placed.keys.forEach { world.removeBody(it) }
         placed.clear()
+        visuals.clear()
     }
 
     // ---- 描画用 ----
@@ -122,12 +132,32 @@ class StackWorld(
         data class Disc(override val part: Part?, val cx: Double, val cy: Double, val r: Double) : RenderShape()
     }
 
-    /** 台＋全パーツの fixture をワールド座標の図形に変換する（毎フレーム描画用）。 */
+    /**
+     * 台と全パーツを、ワールド座標の図形にする（毎フレーム描画用）。
+     * 台は fixture の形、パーツは見た目の形（丸い。[PartGeometry.shapes]）。当たり判定の角ばった形は描かない
+     */
     fun renderShapes(): List<RenderShape> {
         val out = ArrayList<RenderShape>()
         appendShapes(platform, null, out)
-        for ((b, p) in placed) appendShapes(b, p, out)
+        for ((b, p) in placed) appendVisual(b, p, out)
         return out
+    }
+
+    private fun appendVisual(body: Body, part: Part, out: MutableList<RenderShape>) {
+        val t = body.transform
+        val v = Vector2()
+        for (poly in visuals[body].orEmpty()) {
+            val n = poly.points.size
+            val xs = DoubleArray(n)
+            val ys = DoubleArray(n)
+            for (i in 0 until n) {
+                v.set(poly.points[i].x, poly.points[i].y)
+                t.transform(v)
+                xs[i] = v.x
+                ys[i] = v.y
+            }
+            out += RenderShape.Poly(part, xs, ys)
+        }
     }
 
     private fun appendShapes(body: Body, part: Part?, out: MutableList<RenderShape>) {

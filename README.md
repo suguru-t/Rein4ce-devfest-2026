@@ -101,7 +101,7 @@ app/    com.rein4ce.roadcollector
   ui/gallery/    みんなのタワー                                                             … C
   net/           ApiClient（Ktor client）                                                  … C
   data/          PartRepository（JSON ファイル保存。Room に替えるならここ）, GameSession, WeatherService（天気を取ってくる。B）, AppSettings（設定。B）
-  ui/common/     PartDrawing（パーツの描画。物理と同じ PartGeometry を使う）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, PaperBand（方眼の上の字の下地）, WalkNote（パーツの注記：足跡・長さ・日付・天気）
+  ui/common/     PartDrawing（パーツの描画。PartGeometry の見た目の丸い形を使う。当たり判定は角ばった形）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, PaperBand（方眼の上の字の下地）, WalkNote（パーツの注記：足跡・長さ・日付・天気）
   ui/settings/   設定（SettingsDialog）、ニックネーム、アプリについて                                  … B
 
 server/ com.rein4ce.roadcollector.server                                                  … C
@@ -143,7 +143,7 @@ data class Part(
 
 ## 検証状況（正直に。2026-11-06 時点）
 
-- `core`（変換・物理・パーツの形・サンプル・SVG・軌跡ファイル読み込み・天気と月）：ユニットテスト 61 本が通る
+- `core`（変換・物理・パーツの形（見た目と当たり判定）・サンプル・SVG・軌跡ファイル読み込み・天気と月）：ユニットテスト 66 本が通る
 - `app`：手持ちの保存・並び順・名前の文字数・地図の縮尺・合計距離の出し方・注記のつなぎ方・天気の保存と取得・みんなのタワーの絵・速すぎたときの自動停止・AI の名前の保存と送る中身・おまかせの選び方・設定の保存・タワーの作者名と持ち主の印・みんなのタワーの先読み・使い方を出すかの保存・積む画面の始め方とやり直し（#40）・みんなの並び替え（#64）・送信したタワーの記録・見本の出し入れ・デモの天気のユニットテスト 122 本が通る。エミュレータ（Android 17）で「デモ散歩 → コレクション → 積む → サーバに送信 → みんな」が一通り動くことを確認済み。途中で落ちず、本番サーバに保存され、共有ページも開ける。Maps API キーを入れたときの地図表示も、エミュレータで確認済み（Issue #1）。**実機での GPS 記録はまだ確認していない**
 - `server`：API・保存・命名・共有画像・受け付けるタワーの検査・持ち主の印・共有ページの作者名のテスト 51 本が通る。Cloud Run にデプロイ済みで、`GET /`、`/health`、`/towers` が応答する。Firestore 版の保存先・共有画像の PNG・命名 API も、2026-11-07 に本番（Cloud Run）に出した（revision `road-collector-00005-tzk`）
 - 上の 3 つのビルドとテストは、push のたびに GitHub Actions でも確認する（「自動チェック」の節）

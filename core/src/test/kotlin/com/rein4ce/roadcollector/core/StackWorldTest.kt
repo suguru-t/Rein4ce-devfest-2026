@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.core
 
 import com.rein4ce.roadcollector.core.physics.PartBodyFactory
+import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.svg.TowerSvg
@@ -77,6 +78,20 @@ class StackWorldTest {
         val svg = TowerSvg.render(tower)
         assertTrue(svg.startsWith("<svg"))
         assertTrue(svg.endsWith("</svg>"))
+    }
+
+    @Test
+    fun `placed parts are drawn round while their bodies stay angular`() {
+        val world = StackWorld()
+        val l = SampleParts.all.first { it.points.size >= 3 }
+        val body = world.place(l, x = 0.0, y = 2.0, angle = 0.3)
+        // 当たり判定は角ばった形（fixture）、描くのは丸い見た目の形
+        assertEquals(PartGeometry.collisionShapes(l).size, body.fixtureCount)
+        val shapes = world.renderShapes()
+        assertEquals(1 + PartGeometry.shapes(l).size, shapes.size) // 台＋見た目の多角形
+        // 見た目の多角形は、置いた位置のまわりにある（ボディの位置・向きに動かしてある）
+        val drawn = shapes.drop(1).filterIsInstance<StackWorld.RenderShape.Poly>()
+        assertTrue(drawn.all { poly -> poly.ys.all { it > 1.0 && it < 3.0 } })
     }
 
     @Test
