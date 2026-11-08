@@ -25,7 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,7 +60,7 @@ internal fun FavoriteToggle(
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarPress")
     // 押した瞬間に、ほかのボタン（ui/common/PressFeel）と同じ軽い振動を返す（#75 のレビュー）
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     LaunchedEffect(interaction) {
         interaction.interactions.collect { if (it is PressInteraction.Press) haptics.performHapticFeedback(HapticFeedbackType.VirtualKey) }
     }

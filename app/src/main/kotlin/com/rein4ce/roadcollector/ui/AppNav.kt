@@ -1,59 +1,20 @@
 package com.rein4ce.roadcollector.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavDestination
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -62,16 +23,14 @@ import androidx.navigation.compose.rememberNavController
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
+import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
-import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import com.rein4ce.roadcollector.ui.settings.HowToDialog
 import com.rein4ce.roadcollector.ui.weather.BackdropScreen
 import com.rein4ce.roadcollector.ui.weather.WeatherLayer
-import kotlin.math.roundToInt
-import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
  * 4 画面のタブ。担当分けに合わせて 1 画面 = 1 パッケージ。
@@ -81,16 +40,16 @@ import com.rein4ce.roadcollector.ui.common.pressFeel
  *   stack     … D：積み上げゲーム（ui/game）
  *   gallery   … C：サーバ連携（ui/gallery, net/）
  *
- * @property icon        選択中に出す「塗り」のアイコン
- * @property iconOutline それ以外のときに出す「線画」のアイコン
+ * @property iconOutline 選ばれていないときに出す「線画」のアイコン（選ばれているときは、TabIcon が塗りの形を描いて動かす）
  */
-sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
-    // 足跡・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
+sealed class Dest(val route: String, val label: String, val iconOutline: ImageVector) {
+    // 足跡・ノート・積み木・トロフィーは自作のベクター（AppIcons）。選ばれた瞬間の動きは ui/TabIcons.kt
     // 画面の名前は「記録」（「記録開始」のボタンや設定の「記録」とそろえる。前は「採集」。route とコードの名前はそのまま）
-    data object Collect : Dest("collect", "記録", AppIcons.Footprints, AppIcons.FootprintsOutline)
-    data object Inventory : Dest("inventory", "コレクション", AppIcons.Bag, AppIcons.BagOutline)
-    data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
-    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
+    data object Collect : Dest("collect", "記録", AppIcons.FootprintsOutline)
+    data object Inventory : Dest("inventory", "コレクション", AppIcons.NotebookOutline)
+    data object Stack : Dest("stack", "積む", AppIcons.BlocksOutline)
+    // 「みんな」は、高さを競うランキングなのでトロフィー（前は共有の印）
+    data object Gallery : Dest("gallery", "みんな", AppIcons.TrophyOutline)
 
     companion object {
         // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
@@ -121,146 +80,45 @@ fun AppNav() {
 
     // 地はアプリ全体で方眼紙。その上に、見ている画面に合わせた天気（雨・雪など）を降らせる（B：ui/weather）。
     // 画面の部品はさらにその上。タブバーは透明なので、浮いたピルの下に方眼と雨が透けて見える
-    Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
-        val backdrop = when (currentDestination?.route) {
-            Dest.Collect.route -> BackdropScreen.COLLECT
-            Dest.Inventory.route -> BackdropScreen.COLLECTION
-            Dest.Gallery.route -> BackdropScreen.GALLERY
-            else -> BackdropScreen.OTHER
-        }
-        WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
-        Scaffold(
-            containerColor = Color.Transparent,
-            bottomBar = { TabBar(currentDestination, onGo = ::go) },
-        ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = Dest.Collect.route,
-                modifier = Modifier.padding(innerPadding),
-            ) {
-                composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
-                composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
-                composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
-                composable(Dest.Gallery.route) { GalleryScreen() }
+    // 中の LocalHapticFeedback を設定の「振動」に従うものにする（Compose の部品が自分で鳴らす振動にも効くように）
+    ProvideAppHaptics {
+        Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
+            val backdrop = when (currentDestination?.route) {
+                Dest.Collect.route -> BackdropScreen.COLLECT
+                Dest.Inventory.route -> BackdropScreen.COLLECTION
+                Dest.Gallery.route -> BackdropScreen.GALLERY
+                else -> BackdropScreen.OTHER
             }
-        }
-
-        // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
-        // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
-        // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
-        val settings = RoadCollectorApp.from(context).settings
-        val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
-        var howToClosed by rememberSaveable { mutableStateOf(false) }
-        // 開いたときのタイトル（TitleIntro）が終わってから出す（タイトルの上に使い方の窓が重ならないように）
-        if (!howToSeen && !howToClosed && TitleIntroState.done) {
-            HowToDialog(onClose = { dontShowAgain ->
-                if (dontShowAgain) settings.setHowToSeen(true)
-                howToClosed = true
-            })
-        }
-    }
-}
-
-/**
- * 下のタブバー。地は透明で、4 つのアイコンを 1 つの丸いピル（錠剤型）で囲んで浮かせる。
- * Instagram のタブのように文字なし・アイコンだけで、選択中は「塗り」、それ以外は「線画」（大きさと色は同じ墨色）。
- * 選択中の後ろには薄い丸、タップしたタブはひと呼吸だけ縮んで戻る。
- * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡す。
- */
-@Composable
-private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 10.dp),
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .shadow(elevation = 6.dp, shape = PillShape, ambientColor = Fieldbook.Ink, spotColor = Fieldbook.Ink)
-                // 紙色を少し透かして、下の方眼が見えるように
-                .background(Fieldbook.Paper.copy(alpha = 0.88f), PillShape)
-                .border(1.dp, Fieldbook.GridMajor, PillShape)
-                .clip(PillShape),
-        ) {
-            // 選択中のタブの後ろの薄い楕円（横長。ピルの形と相似）。1 つだけ置いて、タブを切り替えると横にすべって動く
-            val tabWidth = maxWidth / Dest.all.size
-            val selectedIndex = Dest.all.indexOfFirst { dest -> current?.hierarchy?.any { it.route == dest.route } == true }
-            if (selectedIndex >= 0) {
-                val position by animateFloatAsState(
-                    targetValue = selectedIndex.toFloat(),
-                    animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
-                    label = "tabIndicator",
-                )
-                Box(
-                    modifier = Modifier
-                        .offset {
-                            val x = tabWidth.toPx() * position + (tabWidth - IndicatorWidth).toPx() / 2
-                            IntOffset(x.roundToInt(), ((56.dp - IndicatorHeight) / 2).roundToPx())
-                        }
-                        .size(width = IndicatorWidth, height = IndicatorHeight)
-                        .background(Fieldbook.Ink.copy(alpha = 0.08f), CircleShape),
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Dest.all.forEach { dest ->
-                    val isSelected = current?.hierarchy?.any { it.route == dest.route } == true
-                    // 押したタブは少し大きいまま（1.18 倍）。選ばれた瞬間はひと呼吸縮んでから、バネで弾んで大きくなる
-                    val scale = remember { Animatable(if (isSelected) SelectedScale else 1f) }
-                    LaunchedEffect(isSelected) {
-                        if (isSelected) {
-                            scale.snapTo(0.85f)
-                            scale.animateTo(SelectedScale, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
-                        } else {
-                            scale.animateTo(1f, spring(stiffness = Spring.StiffnessMedium))
-                        }
-                    }
-                    // 押した瞬間は、ほかのボタンと同じく縮んで振動を返す（ui/common/PressFeel）。選ばれたあとの弾みは上の scale
-                    val source = remember { MutableInteractionSource() }
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .pressFeel(source)
-                            .semantics {
-                                role = Role.Tab
-                                selected = isSelected
-                                contentDescription = dest.label
-                            }
-                            // 波紋は出さない（Instagram と同じく、アイコンの弾みだけ）
-                            .clickable(interactionSource = source, indication = null) { onGo(dest) },
-                    ) {
-                        Icon(
-                            imageVector = if (isSelected) dest.icon else dest.iconOutline,
-                            contentDescription = null,
-                            tint = Fieldbook.Ink,
-                            modifier = Modifier
-                                .size(26.dp)
-                                .graphicsLayer {
-                                    scaleX = scale.value
-                                    scaleY = scale.value
-                                },
-                        )
-                    }
+            WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
+            Scaffold(
+                containerColor = Color.Transparent,
+                bottomBar = { TabBar(currentDestination, onGo = ::go) },
+            ) { innerPadding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = Dest.Collect.route,
+                    modifier = Modifier.padding(innerPadding),
+                ) {
+                    composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
+                    composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
+                    composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
+                    composable(Dest.Gallery.route) { GalleryScreen() }
                 }
             }
+
+            // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
+            // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
+            // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
+            val settings = RoadCollectorApp.from(context).settings
+            val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
+            var howToClosed by rememberSaveable { mutableStateOf(false) }
+            // 開いたときのタイトル（TitleIntro）が終わってから出す（タイトルの上に使い方の窓が重ならないように）
+            if (!howToSeen && !howToClosed && TitleIntroState.done) {
+                HowToDialog(onClose = { dontShowAgain ->
+                    if (dontShowAgain) settings.setHowToSeen(true)
+                    howToClosed = true
+                })
+            }
         }
     }
 }
-
-/** ピルの形（高さ 56dp の半分の角丸） */
-private val PillShape = RoundedCornerShape(28.dp)
-
-/** 選択中のタブの後ろの楕円の大きさ */
-private val IndicatorWidth = 60.dp
-private val IndicatorHeight = 40.dp
-
-/** 押したタブのアイコンの大きさ（元の何倍か） */
-private const val SelectedScale = 1.18f
