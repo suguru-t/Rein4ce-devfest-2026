@@ -7,6 +7,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -16,6 +17,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
@@ -813,15 +816,26 @@ private fun PartCard(
 
 /**
  * カードの右下のお気に入り。入っていないときは灰色の ☆、押すと黄色の ★（もう一度押すと外れる）。
- * 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）。読み上げではチェックボックスとして伝える
+ * 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）。読み上げではチェックボックスとして伝える。
+ * 押したときは、押せる範囲の四角（灰色の波紋）ではなく、星だけが少し縮んで応える
  */
 @Composable
 private fun FavoriteToggle(favorite: Boolean, name: String, enabled: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val starScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarScale")
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(width = FavoriteToggleWidth, height = 44.dp)
-            .toggleable(value = favorite, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .toggleable(
+                value = favorite,
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() },
+            )
             .semantics {
                 contentDescription = "「$name」をお気に入りに入れる"
                 stateDescription = if (favorite) "お気に入り" else "お気に入りではない"
@@ -834,6 +848,10 @@ private fun FavoriteToggle(favorite: Boolean, name: String, enabled: Boolean, on
             color = if (favorite) FavoriteStar else Fieldbook.Muted,
             fontSize = starSize,
             lineHeight = starSize,
+            modifier = Modifier.graphicsLayer {
+                scaleX = starScale
+                scaleY = starScale
+            },
         )
     }
 }
