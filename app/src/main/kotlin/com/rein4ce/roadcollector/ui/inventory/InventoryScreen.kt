@@ -65,7 +65,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -101,6 +100,7 @@ import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
@@ -276,7 +276,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         // 長い順にしても、いちばん長いパーツが上の見えない所に行ってしまう）。
         // 変えたときだけ：画面に入った最初の 1 回は動かさない（ほかのタブから戻ったときに、見ていた位置が残るように。#75 のレビュー）
         ScrollToTopOnChange(filter, gridState)
-        val haptics = LocalHapticFeedback.current
+        val haptics = rememberHaptics()
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
             // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）
             arranged = arranged.moved(from.index, to.index)
