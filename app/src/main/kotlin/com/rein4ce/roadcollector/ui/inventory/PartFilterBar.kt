@@ -33,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -159,9 +162,15 @@ private fun FilterTag(text: String, active: Boolean, menu: Boolean, enabled: Boo
 /** 一覧の 1 行。選んでいるものに印（✓）、天気なら小さなアイコン（パーツの図と同じ絵）を左に付ける */
 @Composable
 private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky? = null, onClick: () -> Unit) {
+    val isSelected = selected
     DropdownMenuItem(
         enabled = enabled,
         onClick = onClick,
+        // 選んでいるものは、色と太字だけでなく、読み上げでも分かるように（1 つだけ選ぶので、ラジオボタンと同じ扱い。#84 のレビュー）
+        modifier = Modifier.semantics {
+            role = Role.RadioButton
+            this.selected = isSelected
+        },
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (sky != null) {
@@ -181,7 +190,10 @@ private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky
                 )
             }
         },
-        trailingIcon = { if (selected) Text("✓", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) },
+        // ✓ は目で見る印。読み上げは上の「選択済み」で足りるので、読ませない
+        trailingIcon = {
+            if (selected) Text("✓", color = Fieldbook.Survey, fontWeight = FontWeight.Bold, modifier = Modifier.clearAndSetSemantics {})
+        },
     )
 }
 

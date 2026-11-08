@@ -62,6 +62,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -448,13 +449,23 @@ private fun DemoMenuButton(
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
-        // 見本は 1 本ずつ小さな図を添えて、形の名前（棒・L字…）だけで選ぶ（並び・天気のメニューと同じ、1 行 1 語の形）
+        // 見本は 1 本ずつ小さな図を添えて、形の名前（棒・L字…）で選ぶ。名前の下に、パーツにしたときの長さを小さく添える
+        // （棒と L字は 2 本ずつあり、図は同じ大きさにそろえて描くので、長さで見分ける。下の「ファイル」の行と同じ 2 段。#84 のレビュー）
         FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "見本の散歩") {
             SampleTracks.all.forEach { track ->
                 val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
                     leadingIcon = { if (part != null) PartThumb(part, size = 30.dp) },
-                    text = { Text(track.expectedKind.label, fontSize = 15.sp, color = Fieldbook.Ink) },
+                    text = {
+                        // 読み上げでは、見本の名前も言う（「棒、まっすぐ北へ、420 メートル」）
+                        val spoken = listOfNotNull(track.expectedKind.label, track.name, part?.let { "${it.distanceM} メートル" })
+                        Column(modifier = Modifier.clearAndSetSemantics { contentDescription = spoken.joinToString("、") }) {
+                            Text(track.expectedKind.label, fontSize = 15.sp, color = Fieldbook.Ink)
+                            if (part != null) {
+                                Text("${part.distanceM} m", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                            }
+                        }
+                    },
                     colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
                     contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                     onClick = { open = false; onPick(track) },

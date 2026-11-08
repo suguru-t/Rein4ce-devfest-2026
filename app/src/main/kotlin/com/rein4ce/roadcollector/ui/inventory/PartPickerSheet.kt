@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.Column
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.only
@@ -270,7 +270,9 @@ private fun PickerCard(
                     name = part.displayName,
                     enabled = true,
                     onToggle = onToggleFavorite,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    // 行（10sp の注記、16dp ほど）より押せる範囲を上下に広げる。外すとカードを選んでしまうので（#84 のレビュー）。
+                    // 上の丸と重なる所は、あとに置いた ☆ が勝つ
+                    modifier = Modifier.weight(1f).fillMaxWidth().requiredHeight(28.dp),
                     starSize = 16.dp,
                 )
             }
