@@ -223,19 +223,23 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
         // 歩いたときの天気のアイコン。右上の北と対になるよう、左上の見当の内側に（道のあとに描いて、道に隠れないように）
         if (sky != null) drawWeatherIcon(sky, center = Offset(ox + 20f * u, oy + 20f * u), size = 18f * u)
 
-        // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
+        // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値。
+        // 道は図の下から約 17 目盛りより上にしか届かない（長辺 1 の形を図の 98/150 に描き、太さの半分と縁取りを足した分）。
+        // 縮尺の字が道にかからないよう、左下の見当より右・下の端の近くに置き、字のまん中を目盛りの線の高さにそろえる
+        // （字の大きさは図によらず決まっているので、上に寄せて置くと、小さい図ほど道にかかっていた）
         val len = normalizedLength(part)
         if (part.distanceM > 0 && len > 0f) {
             val metersPerPx = part.distanceM / (len * scalePx)
             val barM = niceLength(28f * u * metersPerPx)
             val barPx = barM / metersPerPx
-            val x0 = ox + 12f * u
-            val y0 = oy + s - 12f * u
+            val x0 = ox + 19f * u
+            val y0 = oy + s - 9f * u
             drawLine(Fieldbook.Ink, Offset(x0, y0), Offset(x0 + barPx, y0), 2f * u)
-            drawLine(Fieldbook.Ink, Offset(x0, y0 - 4f * u), Offset(x0, y0 + 4f * u), markStroke)
-            drawLine(Fieldbook.Ink, Offset(x0 + barPx, y0 - 4f * u), Offset(x0 + barPx, y0 + 4f * u), markStroke)
+            drawLine(Fieldbook.Ink, Offset(x0, y0 - 3.5f * u), Offset(x0, y0 + 3.5f * u), markStroke)
+            drawLine(Fieldbook.Ink, Offset(x0 + barPx, y0 - 3.5f * u), Offset(x0 + barPx, y0 + 3.5f * u), markStroke)
             val text = if (barM >= 1000) "${barM / 1000} km" else "$barM m"
-            drawText(measurer, text, topLeft = Offset(x0 + barPx + 3f * u, y0 - 7f * u), style = label)
+            val layout = measurer.measure(text, label)
+            drawText(layout, topLeft = Offset(x0 + barPx + 3f * u, y0 - layout.size.height / 2f))
         }
     }
 }

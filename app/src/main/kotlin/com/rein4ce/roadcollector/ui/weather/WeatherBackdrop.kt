@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.Sky
@@ -39,6 +41,7 @@ import androidx.compose.ui.graphics.Path
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -431,10 +434,15 @@ private class Particles(
         }
     }
 
-    /** 揺れながらゆっくり落ちる雪。明るい紙の上でも見えるよう、白い粒に濃い水色のふちと、うすい影を付ける */
+    /**
+     * 揺れながらゆっくり落ちる雪。ふちのぼけた白い粒に、うすい青灰色のにじみを付ける（明るい紙の上でも見えるように）。
+     * 前は白い丸に濃い水色のふちを描いていたが、明るい紙の上では輪っか（泡や水玉）に見えたので、ふちの線はやめた。
+     * 粒の絵は最初に 1 枚だけ作り（[flakeImage]）、毎コマはその絵を大きさを変えて置くだけにする
+     */
     private fun DrawScope.snow(t: Float) {
         val w = size.width
         val h = size.height
+        val image = flakeImage()
         for (i in 0 until count) {
             val d = depth[i]
             val r = lerp(2.0f, 4.4f, d).dp.toPx()
@@ -444,10 +452,59 @@ private class Particles(
             val sway = sin(t * lerp(0.5f, 1.0f, d) + phase[i] * 6.28f) * lerp(6f, 16f, d).dp.toPx()
             val x = wrap(x0[i] * w + sway, w)
             val alpha = lerp(0.55f, 1f, d)
-            drawCircle(SnowShadow.copy(alpha = alpha * 0.18f), radius = r * 1.15f, center = Offset(x + r * 0.25f, y + r * 0.35f))
-            drawCircle(Color.White.copy(alpha = alpha), radius = r, center = Offset(x, y))
-            drawCircle(SnowEdge.copy(alpha = alpha * 0.9f), radius = r, center = Offset(x, y), style = Stroke(width = 1.1.dp.toPx()))
+            // 絵は、白い芯（半径 r）のまわりににじみがあるので、芯の FLAKE_SPREAD 倍の大きさで置く
+            val half = r * FLAKE_SPREAD
+            drawImage(
+                image,
+                dstOffset = IntOffset((x - half).roundToInt(), (y - half).roundToInt()),
+                dstSize = IntSize((half * 2).roundToInt(), (half * 2).roundToInt()),
+                alpha = alpha,
+            )
         }
+    }
+
+    /** 雪の粒の絵（[flakeImage]）。ライトとダークでにじみの濃さを変えるので、切り替わったら作り直す */
+    private var flakeImage: ImageBitmap? = null
+    private var flakeImageDark = false
+
+    private fun DrawScope.flakeImage(): ImageBitmap {
+        val dark = Fieldbook.dark
+        flakeImage?.takeIf { flakeImageDark == dark }?.let { return it }
+        val side = FLAKE_IMAGE_PX
+        val image = ImageBitmap(side, side)
+        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(image), Size(side.toFloat(), side.toFloat())) {
+            val c = center
+            val outer = side / 2f
+            // まわりのうすい青灰色のにじみ（明るい紙の上で、白い粒の形が見えるように。暗い地では白がよく見えるので弱く）
+            val shade = if (dark) 0.12f else 0.42f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to SnowShade.copy(alpha = shade),
+                    0.55f to SnowShade.copy(alpha = shade * 0.6f),
+                    1f to SnowShade.copy(alpha = 0f),
+                    center = c,
+                    radius = outer,
+                ),
+                radius = outer,
+                center = c,
+            )
+            // 白い芯。ふちはぼかす（くっきりした丸だと、貼った丸や泡に見える）
+            val core = outer / FLAKE_SPREAD
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to Color.White,
+                    0.6f to Color.White,
+                    1f to Color.White.copy(alpha = 0f),
+                    center = c,
+                    radius = core * 1.15f,
+                ),
+                radius = core * 1.15f,
+                center = c,
+            )
+        }
+        flakeImage = image
+        flakeImageDark = dark
+        return image
     }
 
     /**
@@ -687,8 +744,12 @@ private class Particles(
         private val RainInk: Color get() = if (Fieldbook.dark) Color(0xFF8FB4E0) else Color(0xFF4F6F96)
 
         /** 雪の粒のふちと影 */
-        private val SnowEdge = Color(0xFF5F86A8)
-        private val SnowShadow = Color(0xFF2F4A62)
+        /** 雪の粒のまわりのにじみの色（青灰色） */
+        private val SnowShade = Color(0xFF5F86A8)
+
+        /** 雪の粒の絵：白い芯の何倍の大きさまでにじみを描くか、絵の一辺 [px] */
+        private const val FLAKE_SPREAD = 1.9f
+        private const val FLAKE_IMAGE_PX = 64
 
         /** 雲の下側の影、雲の白、くもりの空の色、雲 1 つをつくる丸の数 */
         private val CloudShade: Color get() = if (Fieldbook.dark) Color(0xFF0B0F12) else Color(0xFF55606B)
