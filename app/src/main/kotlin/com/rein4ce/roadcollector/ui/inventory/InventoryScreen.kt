@@ -336,14 +336,16 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 }
             },
             enabled = editing || !selecting || validSelected.isNotEmpty(),
-            shape = RoundedCornerShape(6.dp),
+            // 両端が丸い形（Material の標準）。積む画面の「パーツを選ぶ」の窓の「選んだ n 本で積む」と同じ形
+            shape = ButtonDefaults.shape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Fieldbook.Survey,
                 contentColor = Color.White,
                 disabledContainerColor = Fieldbook.GridMajor,
                 disabledContentColor = Fieldbook.Muted,
             ),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            // 高さも「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(
                 when {
