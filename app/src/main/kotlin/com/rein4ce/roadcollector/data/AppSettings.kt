@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.data
 
 import android.content.Context
+import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -162,6 +163,24 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _demoSky.value = sky
     }
 
+    private val _partFilter = MutableStateFlow(
+        PartFilter(
+            sort = readEnum(KEY_PART_SORT, PartSort.CUSTOM),
+            sky = store.get(KEY_PART_SKY)?.let { saved -> Sky.entries.firstOrNull { it.name == saved } },
+            favoritesOnly = readBoolean(KEY_PART_FAVORITES_ONLY, false),
+        ),
+    )
+
+    /** コレクションと「パーツを選ぶ」の窓の並びと絞り込み（共通）。初めは、いつもの順で絞り込みなし */
+    val partFilter: StateFlow<PartFilter> = _partFilter
+
+    fun setPartFilter(filter: PartFilter) {
+        store.put(KEY_PART_SORT, filter.sort.name)
+        store.put(KEY_PART_SKY, filter.sky?.name.orEmpty())
+        store.put(KEY_PART_FAVORITES_ONLY, filter.favoritesOnly.toString())
+        _partFilter.value = filter
+    }
+
     private val _howToSeen = MutableStateFlow(readBoolean(KEY_HOWTO_SEEN, false))
 
     /** 開いたときに出す「使い方」で「次回から表示しない」を選んだか（true なら出さない。設定の「使い方」ではいつでも見られる） */
@@ -189,6 +208,9 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"
+        private const val KEY_PART_SORT = "part_sort"
+        private const val KEY_PART_SKY = "part_sky"
+        private const val KEY_PART_FAVORITES_ONLY = "part_favorites_only"
 
         /** 前後の空白・改行を落とし、上限の文字数で切る（絵文字を途中で切らないよう、コードポイント単位） */
         fun cleanNickname(name: String): String {

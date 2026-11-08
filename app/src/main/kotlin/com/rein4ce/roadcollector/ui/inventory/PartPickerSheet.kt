@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -24,6 +27,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -43,6 +47,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.data.applyPartFilter
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import java.util.Locale
@@ -68,6 +73,14 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
     val savedOrder by repository.order.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    // 並びと絞り込みは、コレクションと共通（設定に保存）。お気に入りには ★ を付ける
+    val settings = RoadCollectorApp.from(LocalContext.current).settings
+    val filter by settings.partFilter.collectAsStateWithLifecycle()
+    val favorites by repository.favorites.collectAsStateWithLifecycle()
+    val visible = remember(shown, filter, weathers, favorites) {
+        applyPartFilter(shown, filter, { repository.weatherOf(it.id, weathers)?.sky }, favorites)
+    }
+    val skies = remember(parts, weathers) { parts.mapNotNullTo(HashSet()) { repository.weatherOf(it.id, weathers)?.sky } }
     val selected = remember { mutableStateListOf<String>().apply { addAll(initial.distinct().take(GameSession.MAX_PARTS)) } }
     // 選んだあとに消されたパーツは数えない
     val have = shown.mapTo(HashSet()) { it.id }
@@ -91,22 +104,44 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 style = noteStyle,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
+            )
+            PartFilterBar(
+                filter = filter,
+                onChange = settings::setPartFilter,
+                skies = skies,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
             // カードを並べる所だけ、端から端まで方眼紙にする（コレクションと同じく、方眼の上に紙片を置いた見た目）。
             // 見出しとボタンは、字に線がかからないよう無地の紙のまま。この窓はメイン画面とは別の窓なので、見出しの下の線を消す仕組みは使わない
+            // 並びや絞り込みを変えたら、いちばん上から見せる（コレクションと同じ）
+            val gridState = rememberLazyGridState()
+            LaunchedEffect(filter) { gridState.scrollToItem(0) }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
+                state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).fieldbookGrid(clearings = false),
             ) {
-                items(shown, key = { it.id }) { part ->
+                if (visible.isEmpty()) {
+                    // 絞り込んだら何も残らなかった
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            "当てはまるパーツがありません",
+                            fontSize = 14.sp,
+                            color = Fieldbook.Muted,
+                            modifier = Modifier.padding(vertical = 32.dp).wrapContentWidth(Alignment.CenterHorizontally),
+                        )
+                    }
+                }
+                items(visible, key = { it.id }) { part ->
                     val index = valid.indexOf(part.id)
                     PickerCard(
                         part = part,
                         sky = repository.weatherOf(part.id, weathers)?.sky,
+                        favorite = part.id in favorites,
                         order = if (index >= 0) index + 1 else null,
                         canSelect = index >= 0 || valid.size < GameSession.MAX_PARTS,
                         onToggle = {
@@ -135,7 +170,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
  * 選んだカードは、コレクションと同じ青い破線で囲み、図の右下の丸に積む順の数字を入れる
  */
 @Composable
-private fun PickerCard(part: Part, sky: Sky?, order: Int?, canSelect: Boolean, onToggle: () -> Unit) {
+private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, canSelect: Boolean, onToggle: () -> Unit) {
     val shape = RoundedCornerShape(4.dp)
     val size = PartSize.of(part.distanceM)
     Column(
@@ -164,23 +199,36 @@ private fun PickerCard(part: Part, sky: Sky?, order: Int?, canSelect: Boolean, o
                 modifier = Modifier.align(Alignment.BottomEnd),
             )
         }
-        Text(
-            part.displayName,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = Fieldbook.Ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        Text(
-            notes("${part.distanceM} m", "%.1f 倍".format(Locale.US, size), separator = "・"),
-            fontFamily = Fieldbook.Data,
-            fontSize = 10.sp,
-            color = Fieldbook.Muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
+        // 名前と、歩いた長さ・大きさ。お気に入りなら、コレクションのカードと同じ右下に黄色の ★（この窓では見るだけ）
+        Box {
+            Column(modifier = Modifier.padding(end = if (favorite) 18.dp else 0.dp)) {
+                Text(
+                    part.displayName,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Fieldbook.Ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Text(
+                    notes("${part.distanceM} m", "%.1f 倍".format(Locale.US, size), separator = "・"),
+                    fontFamily = Fieldbook.Data,
+                    fontSize = 10.sp,
+                    color = Fieldbook.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+            if (favorite) {
+                Text(
+                    "★",
+                    color = FavoriteStar,
+                    fontSize = 15.sp,
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp).semantics { contentDescription = "お気に入り" },
+                )
+            }
+        }
     }
 }

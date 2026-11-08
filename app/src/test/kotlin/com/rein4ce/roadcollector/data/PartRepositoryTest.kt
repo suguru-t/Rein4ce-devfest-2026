@@ -158,6 +158,29 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `favorites are saved, survive a restart, and go away with their part`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.setFavorite(walk.id, true)
+        repo.setFavorite(SampleParts.all[0].id, true)
+        repo.setFavorite("not-in-collection", true) // 手持ちに無いパーツは入れない
+        advanceUntilIdle()
+        assertEquals(setOf(walk.id, SampleParts.all[0].id), repo.favorites.value)
+        assertEquals(setOf(walk.id, SampleParts.all[0].id), repository(f).also { advanceUntilIdle() }.favorites.value)
+
+        // 外す・パーツを消す・見本を外すと、お気に入りからも消える
+        repo.setFavorite(walk.id, false)
+        repo.setFavorite(walk.id, true)
+        repo.remove(walk.id)
+        repo.removeSamples()
+        advanceUntilIdle()
+        assertEquals(emptySet<String>(), repo.favorites.value)
+        assertEquals(emptySet<String>(), repository(f).also { advanceUntilIdle() }.favorites.value)
+    }
+
+    @Test
     fun `rename saves the trimmed name and it survives a restart`() = runTest {
         val f = file()
         val repo = repository(f)
