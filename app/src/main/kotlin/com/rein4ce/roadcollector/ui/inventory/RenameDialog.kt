@@ -178,9 +178,9 @@ internal fun RenameDialog(
 /** AI に名前を考えてもらった結果 */
 private enum class AiResult { Named, Failed }
 
-/** 「AI に考えてもらう」ボタン。考えている間は押せず、「考え中…」と回る印を出す */
+/** 「AI に考えてもらう」ボタン。考えている間は押せず、「考え中…」と回る印を出す（ニックネームの窓でも使う） */
 @Composable
-private fun AiNameButton(asking: Boolean, again: Boolean, onClick: () -> Unit) {
+internal fun AiNameButton(asking: Boolean, again: Boolean, onClick: () -> Unit) {
     PressTextButton(onClick = onClick, enabled = !asking) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (asking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Fieldbook.Survey)

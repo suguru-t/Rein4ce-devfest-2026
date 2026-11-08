@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.data
 
 import android.content.Context
+import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -180,7 +181,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
 
     companion object {
         /** ニックネームの長さの上限。「みんな」の一覧の 1 行に収まる長さ */
-        const val MAX_NICKNAME_LENGTH = 12
+        const val MAX_NICKNAME_LENGTH = NicknameHints.MAX_NICKNAME_LENGTH
 
         private const val KEY_THEME = "theme_mode"
         private const val KEY_WEATHER_MOTION = "weather_motion"
