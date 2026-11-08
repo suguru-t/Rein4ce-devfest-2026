@@ -10,6 +10,7 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.data.DemoSky
 import com.rein4ce.roadcollector.data.WeatherMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,7 @@ object BackdropFocus {
  * - **積む**：降らせない
  *
  * 設定（採集画面の歯車）の「背景の天気の動き」で、なめらか・ふつう・止める・出さないを選べる。
+ * 設定の「デモの天気」（発表用）を選んでいると、記録とみんなの今の天気の代わりに、選んだ天気を出す（満月を選ぶと、どの画面の月も満月）。
  * 記録中（デモ再生中も）は、どの画面でも止まった絵にする。記録中は採集画面を開いたまま歩くことが多く、GPS と一緒に電池を使い続けないため。
  *
  * 方眼紙（`fieldbookGrid`）の上、画面の部品の下に敷く（AppNav）。
@@ -48,8 +50,9 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     val parts by repository.parts.collectAsStateWithLifecycle()
     val focus by BackdropFocus.partId.collectAsStateWithLifecycle()
     val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
-    // 設定（歯車）の「背景の天気の動き」
+    // 設定（歯車）の「背景の天気の動き」と、発表用の「デモの天気」
     val motion by app.settings.weatherMotion.collectAsStateWithLifecycle()
+    val demo by app.settings.demoSky.collectAsStateWithLifecycle()
 
     val showsCurrent = screen == BackdropScreen.COLLECT || screen == BackdropScreen.GALLERY
     if (showsCurrent) {
@@ -64,15 +67,17 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
 
     val shownId = if (screen == BackdropScreen.COLLECTION) focus ?: latestWalk(parts)?.id else null
     val weather = when (screen) {
-        BackdropScreen.COLLECT, BackdropScreen.GALLERY -> current
+        // 今の天気。「デモの天気」を選んでいれば、本当の天気の代わりにそれを出す
+        BackdropScreen.COLLECT, BackdropScreen.GALLERY -> demo.weather ?: current
         BackdropScreen.COLLECTION -> shownId?.let { repository.weatherOf(it, saved) }
         BackdropScreen.OTHER -> null
     }
-    // 晴れの夜に満月を出すかを決める時刻：記録とみんなは今、コレクションはそのパーツを歩いた時刻
+    // 晴れの夜に満月を出すかを決める時刻：記録とみんなは今、コレクションはそのパーツを歩いた時刻。
+    // 「デモの天気」で満月を選んでいれば、どの画面も満月の時刻にする
     val walkedAt = shownId?.let { id -> parts.firstOrNull { it.id == id }?.walkedAt }?.takeIf { it > 0L }
     WeatherBackdrop(
         weather = if (motion == WeatherMotion.OFF) null else weather,
-        moonTimeMs = walkedAt ?: System.currentTimeMillis(),
+        moonTimeMs = if (demo.fullMoon) DemoSky.FULL_MOON_TIME_MS else walkedAt ?: System.currentTimeMillis(),
         modifier = modifier,
         still = recording || motion == WeatherMotion.STILL,
         smooth = motion == WeatherMotion.SMOOTH,

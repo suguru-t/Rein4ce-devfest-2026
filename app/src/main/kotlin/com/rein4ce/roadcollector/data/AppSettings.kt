@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.data
 
 import android.content.Context
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -41,11 +42,45 @@ enum class WeatherMotion(val label: String, val note: String) {
 }
 
 /**
+ * 設定の「デモ」の欄（発表で使う）を出すか。**発表が終わって要らなくなったら、ここを false にするだけでよい。**
+ * false にすると、設定に欄が出なくなり、保存してあるデモの天気も読まない（いつも本当の天気）。
+ * 見本のパーツはそのまま残る（コレクションの「見本を戻す」でも戻せる）
+ */
+const val DEMO_SETTINGS = true
+
+/**
+ * 発表（デモ）で見せる天気。本当の天気の代わりに、記録とみんなの背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
+ * 審査のときに、その日の天気に関係なく、雨・雪・夜の月などを見せるため。ふだんは本当の天気（[REAL]）。保存は名前
+ *
+ * @property weather 見せる天気。本当の天気なら null
+ * @property fullMoon 晴れの夜の月を満月にする（本当の満ち欠けに関係なく）
+ */
+enum class DemoSky(val label: String, val weather: WalkWeather?, val fullMoon: Boolean = false) {
+    REAL("本当の天気", null),
+    CLEAR("晴れ", WalkWeather(code = 0)),
+    CLEAR_NIGHT("晴れの夜（三日月）", WalkWeather(code = 0, isDay = false)),
+    FULL_MOON("晴れの夜（満月）", WalkWeather(code = 0, isDay = false), fullMoon = true),
+    CLOUDY("くもり", WalkWeather(code = 3)),
+    FOG("霧", WalkWeather(code = 45)),
+    DRIZZLE("霧雨", WalkWeather(code = 53, precipitationMm = 0.5)),
+    RAIN("雨", WalkWeather(code = 63, precipitationMm = 3.0)),
+    THUNDER("雷雨", WalkWeather(code = 95, precipitationMm = 5.0)),
+    SNOW("雪", WalkWeather(code = 73, precipitationMm = 1.0)),
+    ;
+
+    companion object {
+        /** 満月の夜の時刻（2024-04-23 23:49 UTC の満月）。[fullMoon] のとき、月の満ち欠けをこの時刻で決める */
+        const val FULL_MOON_TIME_MS = 1_713_916_140_000L
+    }
+}
+
+/**
  * アプリの設定。スマホの中だけに保存する。採集画面の右上の歯車から変える。
  *
  * @param store 保存先。アプリでは SharedPreferences、テストではただの Map
+ * @param demoEnabled 設定の「デモ」の欄を使うか（[DEMO_SETTINGS]）。false なら、デモの天気はいつも本当の天気
  */
-class AppSettings(private val store: Store) {
+class AppSettings(private val store: Store, private val demoEnabled: Boolean = DEMO_SETTINGS) {
 
     /** 文字列を 1 つずつ保存する場所 */
     interface Store {
@@ -115,6 +150,18 @@ class AppSettings(private val store: Store) {
         _nickname.value = cleaned
     }
 
+    // デモを使わない（DEMO_SETTINGS が false）なら、前に選んだ天気が保存されていても読まない（設定の欄が無く、戻せないため）
+    private val _demoSky = MutableStateFlow(if (demoEnabled) readEnum(KEY_DEMO_SKY, DemoSky.REAL) else DemoSky.REAL)
+
+    /** 発表（デモ）で見せる天気。ふだんは本当の天気 */
+    val demoSky: StateFlow<DemoSky> = _demoSky
+
+    fun setDemoSky(sky: DemoSky) {
+        if (!demoEnabled) return
+        store.put(KEY_DEMO_SKY, sky.name)
+        _demoSky.value = sky
+    }
+
     private val _howToSeen = MutableStateFlow(readBoolean(KEY_HOWTO_SEEN, false))
 
     /** 開いたときに出す「使い方」で「次回から表示しない」を選んだか（true なら出さない。設定の「使い方」ではいつでも見られる） */
@@ -141,6 +188,7 @@ class AppSettings(private val store: Store) {
         private const val KEY_AI_NAMING = "ai_naming"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
+        private const val KEY_DEMO_SKY = "demo_sky"
 
         /** 前後の空白・改行を落とし、上限の文字数で切る（絵文字を途中で切らないよう、コードポイント単位） */
         fun cleanNickname(name: String): String {

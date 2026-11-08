@@ -20,6 +20,7 @@ import com.rein4ce.roadcollector.core.io.TrackFileParser
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -122,7 +123,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         convert(pts)
     }
 
-    fun playDemo(track: SampleTracks.SampleTrack) = playPoints("デモ散歩") { track.points }
+    fun playDemo(track: SampleTracks.SampleTrack) = playPoints(DEMO_LABEL) { track.points }
 
     /** 実機で録った GPX / JSON ファイルを読んで、デモ散歩と同じように流す。 */
     fun playFile(uri: Uri) = playPoints("ファイル") {
@@ -151,17 +152,24 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                 // 速すぎて途中で自動停止したなら、tooFast の購読側（onStoppedForSpeed）が処理する
                 if (!TrackRecorder.isRecording.value) return@launch
                 val pts = TrackRecorder.stop()
-                convert(pts)
+                convert(pts, demoWeather(label))
             } finally {
                 playingLabel = null
             }
         }
     }
 
-    private fun convert(pts: List<TrackPoint>) {
+    /**
+     * デモ散歩でできるパーツの天気。設定の「デモの天気」を選んでいれば、その天気（本当の天気を聞きに行かない）。
+     * 本当の天気のまま、またはデモ散歩でない（実際に歩いた・ファイルを流した）なら null
+     */
+    private fun demoWeather(label: String?): WalkWeather? = if (label == DEMO_LABEL) settings.demoSky.value.weather else null
+
+    /** @param weather 決まっている天気（デモの天気）。null ならあとで本当の天気を聞く */
+    private fun convert(pts: List<TrackPoint>, weather: WalkWeather? = null) {
         when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT)) {
             is TrackToPart.Result.Success -> {
-                keep(r)
+                keep(r, weather = weather)
             }
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected("短すぎます（%.0f m、最低 %.0f m）".format(r.distanceM, r.minDistanceM))
@@ -180,9 +188,9 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
      * （decisions.md の 5。パーツはすぐ出し、届くまでは「名前を考え中…」）。
      * 名前の手がかりは形・距離・日時だけで、歩いた場所は送らない（8）。付かなければ「○ m の散歩」のまま（7）
      */
-    private fun keep(r: TrackToPart.Result.Success, note: String? = null) {
+    private fun keep(r: TrackToPart.Result.Success, note: String? = null, weather: WalkWeather? = null) {
         // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う）
-        repository.add(r.part, r.place)
+        repository.add(r.part, r.place, weather)
         // 変換の数字は画面に出さない（見ても分からないため）。実機で ε などを確かめるとき用に、Logcat にだけ出す（場所は出さない）
         Log.i(
             "CollectViewModel",
@@ -214,12 +222,13 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun onStoppedForSpeed(stop: TrackRecorder.TooFast) {
         TrackRecorder.consumeTooFast()
         LocationRecordingService.stop(getApplication())
+        val weather = demoWeather(playingLabel)
         demoJob?.cancel()
         playingLabel = null
         val stopped = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}）"
         val limitNote = "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます"
         when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
-            is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました")
+            is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました", weather = weather)
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected(
                     "$stopped。止める前までの %.0f m は短すぎてパーツになりません（最低 %.0f m）。$limitNote".format(r.distanceM, r.minDistanceM),
@@ -239,6 +248,9 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** デモ散歩を流しているときの呼び名（画面の「デモ散歩を再生中」など）。デモの天気を当てるかの目印にも使う */
+        const val DEMO_LABEL = "デモ散歩"
+
         /**
          * 速さの表示（「時速 8.1 km」。小数 1 桁）。画面もダイアログも同じ書き方にする。
          * 弾いたときの文では、弾かれた速さは切り上げ（CEILING）、上限は切り捨て（FLOOR）で出す。
