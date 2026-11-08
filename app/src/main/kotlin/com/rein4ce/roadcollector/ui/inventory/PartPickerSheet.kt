@@ -61,13 +61,12 @@ import com.rein4ce.roadcollector.data.applyPartFilter
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
-import com.rein4ce.roadcollector.ui.common.partSizeText
 import kotlinx.coroutines.launch
 
 /**
  * 積む画面から開く「積むパーツを選ぶ」窓（下から出る）。コレクションに戻らずに、その場で積むパーツを選び直せる。
  *
- * - コレクションと同じ並びで、小さなカード（野帳の図・名前・歩いた長さと積むときの大きさ）を 3 列に並べる。
+ * - コレクションと同じ並びで、小さなカード（野帳の図・名前・歩いた長さ）を 3 列に並べる。
  *   図には天気の色とアイコンが出るので、どれが大きいか・滑るかを見て選べる
  * - タップで選ぶ／外す（[GameSession.MAX_PARTS] 本まで）。図の右下の丸に積む順の数字が入る（コレクションの選択と同じ）
  * - 開いたときは、いま積んでいるパーツを選んだ状態にする（1 本だけ入れ替えるときに楽なように）
@@ -189,7 +188,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
 }
 
 /**
- * 選ぶ窓の小さなカード：野帳の図（天気の色とアイコン）、名前、歩いた長さと積むときの大きさ。
+ * 選ぶ窓の小さなカード：野帳の図（天気の色とアイコン）、名前、歩いた長さ。
  * 選んだカードは、コレクションと同じ青い破線で囲み、図の右下の丸に積む順の数字を入れる
  */
 @Composable
@@ -230,7 +229,8 @@ private fun PickerCard(
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp),
             )
         }
-        // 名前と、歩いた長さ・大きさ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。
+        // 名前と、歩いた長さ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。
+        // 積むときの大きさは出さない（小さいカードでは字が切れるため。長さで分かり、大きさは積む画面の上の行に出る）
         // 右に、コレクションのカードと同じお気に入りの ☆（押すと黄色の ★）。押せる範囲は、名前と注記の 2 行の右端ぶん
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             Column(modifier = Modifier.weight(1f)) {
@@ -245,7 +245,6 @@ private fun PickerCard(
                 )
                 WalkNote(
                     distanceM = part.distanceM,
-                    size = partSizeText(part.distanceM),
                     date = null,
                     weather = null,
                     fontSize = 10.sp,
