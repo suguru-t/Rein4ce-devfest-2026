@@ -1,6 +1,24 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import android.os.Build
+import android.view.View
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseInQuad
+import androidx.compose.animation.core.EaseOutQuad
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.zIndex
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -282,7 +300,15 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
 /**
  * 画面名を、題字「ミチツミ」と同じ積み木のブロックで出す：1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べる。
  * 色はアイコンの 4 色を順に、傾きは左右交互。題字より一回り小さくして、題字（アプリの名前）と画面名の格を分ける。
- * 飾りなので押しても動かず、読み上げでは字そのものを読む
+ *
+ * 押すと題字と同じように動く（遊び）：
+ * - 最後以外のブロック：その場で軽く跳ね、1 回はねて元に戻る
+ * - 最後のブロック：画面の上のカメラの穴のあたりから、回りながら斜めに落ちてきて、1 回はねて収まる
+ *
+ * 動きの形は題字（ui/collect/TitleBlocks.kt の hop・dropIn）と同じで、ブロックが小さいぶん跳ねる高さを少し低くしている。
+ * 題字のほうは B の担当で中の関数が private なので、ここに同じ形を書いている（動きを変えるときは両方そろえる）。
+ * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。飾りなので読み上げではボタンにせず、字そのものを読む。
+ * 押したときの振動は設定（振動のオン・オフ）に従う。端末で動きを減らしていれば、動きは飛ばされてすぐ元の位置に戻る
  *
  * @param blockDp ブロック 1 つの大きさ（題字は 32dp）
  */
@@ -290,18 +316,57 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
 internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp = 26.dp) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape(blockDp * 0.22f)
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    val view = LocalView.current
+    val motions = remember(text) { List(text.length) { BlockMotion() } }
+    val running = remember(text) { arrayOfNulls<Job>(text.length) }
+    // 最後のブロックをカメラの穴のあたりから落とすための、ブロックのまん中（画面の左上から [px]。傾け・動きの前）
+    val lastCenter = remember { FloatArray(2) }
     Row(
-        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = text },
+        // 落ちてくるブロックが、まわりの部品の下にもぐらないように手前に描く
+        modifier = modifier.zIndex(1f).semantics(mergeDescendants = true) { contentDescription = text },
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         text.forEachIndexed { i, ch ->
+            val motion = motions[i]
+            val isLast = i == text.lastIndex
+            val tilt = BlockTilts[i % BlockTilts.size]
             Box(
                 modifier = Modifier
                     // 傾けた角が上にはみ出す分の余裕
                     .padding(top = 3.dp)
                     .size(blockDp)
-                    .graphicsLayer { rotationZ = BlockTilts[i % BlockTilts.size] }
+                    .onGloballyPositioned {
+                        if (isLast) {
+                            val p = it.positionInRoot()
+                            lastCenter[0] = p.x + it.size.width / 2f
+                            lastCenter[1] = p.y + it.size.height / 2f
+                        }
+                    }
+                    // 押せる場所はふだんの位置のまま。動いている途中に押すと、初めから動き直す
+                    .pointerInput(i, text) {
+                        detectTapGestures {
+                            running[i]?.cancel()
+                            running[i] = scope.launch {
+                                if (isLast) {
+                                    val camera = cameraPoint(view, offscreenPx = (blockDp * 0.75f).toPx())
+                                    val fromDx = (camera.x - lastCenter[0]) / density.density
+                                    val fromDy = (camera.y - lastCenter[1]) / density.density
+                                    motion.dropIn(fromDx, fromDy) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
+                                } else {
+                                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    motion.hop(sign = if (tilt < 0f) -1f else 1f)
+                                }
+                            }
+                        }
+                    }
+                    .graphicsLayer {
+                        rotationZ = tilt + motion.turn.value
+                        translationX = motion.dx.value.dp.toPx()
+                        translationY = motion.dy.value.dp.toPx()
+                    }
                     .shadow(2.dp, shape, clip = false)
                     .background(BlockColors[i % BlockColors.size], shape),
                 contentAlignment = Alignment.Center,
@@ -318,6 +383,75 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
         }
     }
 }
+
+/** ブロック 1 つの、ふだんの位置からのずれ（横・縦 [dp]、回転 [度]）。押したときだけ動く */
+private class BlockMotion {
+    val dx = Animatable(0f)
+    val dy = Animatable(0f)
+    val turn = Animatable(0f)
+}
+
+/**
+ * その場で軽く跳ねる：傾きを少し増しながら上がって落ち、1 回小さくはねて戻る（題字の hop と同じ形。高さは 26/32）。
+ * [sign] は傾ける向き（ふだんの傾きと同じ向きに増す）
+ */
+private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
+    launch {
+        turn.animateTo(8f * sign, tween(HOP_UP_MS, easing = EaseOutQuad))
+        turn.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
+        turn.animateTo(-3f * sign, tween(BOUNCE_MS, easing = EaseOutQuad))
+        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
+    }
+    dy.animateTo(-10f, tween(HOP_UP_MS, easing = EaseOutQuad))
+    dy.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
+    dy.animateTo(-3f, tween(BOUNCE_MS, easing = EaseOutQuad))
+    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
+}
+
+/**
+ * カメラの穴のあたり（ふだんの位置から [fromDx], [fromDy] [dp] ずれた所）から回りながら斜めに落ちてきて、
+ * 止まる位置の少し右に着き、左へ弧を描いて 1 回はねて収まる（題字の dropIn と同じ形）。[onLand] は着いたとき（手ごたえの振動）。
+ * 画面名は題字より下にあって落ちる距離が長いので、落ちる時間を少しだけ長くする
+ */
+private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () -> Unit) = coroutineScope {
+    dx.snapTo(fromDx)
+    dy.snapTo(fromDy)
+    turn.snapTo(60f)
+    val fallMs = 220
+    launch {
+        dx.animateTo(10f, tween(fallMs, easing = LinearEasing))
+        dx.animateTo(0f, tween(BOUNCE_MS * 2, easing = LinearEasing))
+    }
+    launch {
+        turn.animateTo(10f, tween(fallMs, easing = LinearEasing))
+        turn.animateTo(-6f, tween(BOUNCE_MS, easing = EaseOutQuad))
+        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
+    }
+    dy.animateTo(0f, tween(fallMs, easing = EaseInQuad))
+    onLand()
+    dy.animateTo(-6f, tween(BOUNCE_MS, easing = EaseOutQuad))
+    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
+}
+
+/**
+ * 落ち始めの点：画面の上のカメラの穴のまん中（画面の左上から [px]）。
+ * 穴のない端末では、画面のまん中の、上の端より [offscreenPx] だけ上（ブロックが画面の外に隠れている所）
+ */
+private fun cameraPoint(view: View, offscreenPx: Float): Offset {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val hole = view.rootWindowInsets?.displayCutout?.boundingRects
+            ?.filter { it.top <= 0 && !it.isEmpty }
+            ?.minByOrNull { abs(it.exactCenterX() - view.rootView.width / 2f) }
+        if (hole != null) return Offset(hole.exactCenterX(), hole.exactCenterY())
+    }
+    return Offset(view.rootView.width / 2f, -offscreenPx)
+}
+
+/** 跳ねるときの、上がる（下がる）時間 [ms]。題字と同じ */
+private const val HOP_UP_MS = 120
+
+/** 1 回はねるときの、上がる（下がる）時間 [ms]。題字・起動画面の「ミ」と同じ */
+private const val BOUNCE_MS = 55
 
 /** ブロックの色：アイコンの 4 色を順に */
 private val BlockColors = listOf(Pop.Orange, Pop.Teal, Pop.Yellow, Pop.Navy)
