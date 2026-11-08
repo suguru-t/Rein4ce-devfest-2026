@@ -42,7 +42,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -567,15 +566,21 @@ internal fun totalDistance(m: Int): TotalDistance =
 private val MeterInk: Color get() = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
 
 /**
- * カードを押して開く拡大表示。設定などと同じ枠（見出しの帯にパーツの名前、枠の下に丸い「×」）に、大きな図と注記を出す。
+ * カードを押して開く拡大表示。設定などと同じ枠（見出しの帯にパーツの名前、枠の下に丸い「×」）を、一覧と同じポップな見た目にして、
+ * 大きな図と注記を出す。図は「みんな」の紙片の図と同じブロックの面に載せる。
  * 枠の中のいちばん下の「名前を付ける」から名前を付けられる
  */
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
-    FramedDialog(title = part.displayName, onDismiss = onDismiss) {
+    FramedDialog(title = part.displayName, onDismiss = onDismiss, pop = true) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .popBlock(face = Fieldbook.Card, corner = CARD_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge)
+                    .clip(RoundedCornerShape(CARD_CORNER)),
+            ) {
                 // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
                 // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
                 val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
@@ -593,7 +598,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
             // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
             WalkNote(
@@ -603,12 +608,17 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
             )
             // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
             if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
-            // 名前を付ける（付け直す）。閉じるのは、ほかの窓と同じく枠の下の「×」
-            PressTextButton(onClick = onRename, modifier = Modifier.padding(top = 8.dp)) {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = Fieldbook.Survey, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("名前を付ける", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
-            }
+            // 名前を付ける（付け直す）。「みんな」の紙片の「リンクをコピー」と同じ、白い面に青緑の縁のブロック。
+            // 閉じるのは、ほかの窓と同じく枠の下の「×」
+            PopButton(
+                label = "名前を付ける",
+                onClick = onRename,
+                face = Fieldbook.Card,
+                text = Pop.TealLine,
+                edge = Pop.TealLine,
+                fontSize = 15.sp,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
     }
 }

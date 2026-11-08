@@ -1,8 +1,12 @@
 package com.rein4ce.roadcollector.ui.inventory
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.heading
+import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.gallery.Pop
+import com.rein4ce.roadcollector.ui.gallery.PopButton
+import com.rein4ce.roadcollector.ui.gallery.popBlock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,7 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -27,9 +30,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import com.rein4ce.roadcollector.ui.common.PressButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,13 +55,13 @@ import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
-import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import kotlinx.coroutines.launch
 
 /**
  * 積む画面から開く「積むパーツを選ぶ」窓（下から出る）。コレクションに戻らずに、その場で積むパーツを選び直せる。
  *
+ * - 見た目はコレクションの一覧と同じポップな形（太い丸ゴシックの見出し、ブロックの札・カード・ボタン。ui/gallery/Pop.kt）
  * - コレクションと同じ並びで、小さなカード（野帳の図・名前・歩いた長さ）を 3 列に並べる。
  *   図には天気の色とアイコンが出るので、どれが大きいか・滑るかを見て選べる
  * - タップで選ぶ／外す（[GameSession.MAX_PARTS] 本まで）。図の右下の丸に積む順の数字が入る（コレクションの選択と同じ）
@@ -106,14 +105,16 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 "積むパーツを選ぶ",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
                 color = Fieldbook.Ink,
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp).semantics { heading() },
             )
             Text(
                 notes("タップで選ぶ", "${GameSession.MAX_PARTS} 本まで", "長く歩いた道ほど大きい"),
-                style = noteStyle,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
                 fontSize = 12.sp,
                 color = Fieldbook.Muted,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
@@ -177,18 +178,19 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             Spacer(Modifier.height(12.dp))
-            PressButton(
+            // コレクションのいちばん下のボタンと同じ、オレンジのブロック（押せないときは灰色）
+            PopButton(
+                label = if (valid.isEmpty()) "積むパーツを選んでください" else "選んだ ${valid.size} 本で積む",
                 // 窓を閉じる動きが終わってから始める（Material3 の下から出る窓の作法。すぐ消すと、閉じる動き無しに消える）
                 onClick = {
                     val picked = valid
                     scope.launch { sheetState.hide() }.invokeOnCompletion { onStart(picked) }
                 },
+                face = if (valid.isNotEmpty()) Pop.OrangeDeep else Fieldbook.GridMajor,
+                text = if (valid.isNotEmpty()) Pop.Letter else Fieldbook.Muted,
                 enabled = valid.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 48.dp),
-            ) {
-                Text(if (valid.isEmpty()) "積むパーツを選んでください" else "選んだ ${valid.size} 本で積む", fontWeight = FontWeight.Bold)
-            }
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -196,6 +198,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
 
 /**
  * 選ぶ窓の小さなカード：野帳の図（天気の色とアイコン）、名前、歩いた長さ。
+ * コレクションのカードと同じブロックの面（下に側面）で、押すと縮む。
  * 選んだカードは、コレクションと同じ青い破線で囲み、図の右下の丸に積む順の数字を入れる
  */
 @Composable
@@ -208,15 +211,20 @@ private fun PickerCard(
     canSelect: Boolean,
     onToggle: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(4.dp)
+    val source = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
-            .background(Fieldbook.Card, shape)
-            .then(
-                if (order != null) Modifier.dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
-                else Modifier.border(1.dp, Fieldbook.CardEdge, shape),
+            .pressFeel(source)
+            .popBlock(face = Fieldbook.Card, corner = PICKER_CARD_CORNER, depth = 2.dp, edge = if (order != null) null else Fieldbook.CardEdge)
+            .then(if (order != null) Modifier.dashedOutline(Fieldbook.Survey, width = 2.dp, corner = PICKER_CARD_CORNER) else Modifier)
+            // 角の丸い面に四角い波紋が出ないよう、波紋は出さず、縮む動きだけで応える
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                enabled = canSelect,
+                onClickLabel = if (order != null) "選択を外す" else "選ぶ",
+                onClick = onToggle,
             )
-            .clickable(enabled = canSelect, onClickLabel = if (order != null) "選択を外す" else "選ぶ", onClick = onToggle)
             .padding(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 6.dp),
     ) {
         FieldbookPart(
@@ -282,3 +290,6 @@ private fun PickerCard(
 
 /** 窓のカードの、名前と長さの右の列（選ぶ丸とお気に入りの ☆）の幅 */
 private val RIGHT_COLUMN = 32.dp
+
+/** 窓のカードの角の丸さ（コレクションのカードより小さいので、角も少し小さく） */
+private val PICKER_CARD_CORNER = 10.dp
