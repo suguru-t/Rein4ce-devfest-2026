@@ -12,22 +12,25 @@ class BgmControlTest {
         override var isPlaying = false
             private set
         override var othersPlayingMusic = false
-        var grantFocus = true
+        var focusResult = BgmControl.FocusResult.GRANTED
         var canLoad = true
         var hasFocus = false
             private set
         var focusRequests = 0
             private set
+        var abandons = 0
+            private set
         var gain = -1f
             private set
 
-        override fun requestFocus(): Boolean {
+        override fun requestFocus(): BgmControl.FocusResult {
             focusRequests++
-            hasFocus = grantFocus
-            return grantFocus
+            hasFocus = focusResult == BgmControl.FocusResult.GRANTED
+            return focusResult
         }
 
         override fun abandonFocus() {
+            abandons++
             hasFocus = false
         }
 
@@ -91,11 +94,11 @@ class BgmControlTest {
 
     @Test
     fun `出番をもらえない・曲を読み込めないときは流さず、出番を持ったままにしない`() {
-        out.grantFocus = false
+        out.focusResult = BgmControl.FocusResult.FAILED
         open()
         assertFalse(out.isPlaying)
 
-        out.grantFocus = true
+        out.focusResult = BgmControl.FocusResult.GRANTED
         out.canLoad = false
         bgm.setSettings(true, 6)
         assertFalse(out.isPlaying)
@@ -157,6 +160,45 @@ class BgmControlTest {
         bgm.setForeground(false)
         bgm.setForeground(true)
         assertTrue(out.isPlaying)
+    }
+
+    @Test
+    fun `電話の最中に開いたら、電話が終わって出番が来てから流す`() {
+        // #86 の C のレビュー：出番を「あとで渡す」と言われたら、頼み直さずに待つ
+        out.focusResult = BgmControl.FocusResult.DELAYED
+        open()
+        assertFalse(out.isPlaying)
+
+        // 待っている間に音量を動かしても、頼み直さない
+        bgm.setSettings(true, 7)
+        assertEquals(1, out.focusRequests)
+        assertFalse(out.isPlaying)
+
+        bgm.onFocusGained()
+        assertTrue(out.isPlaying)
+        assertEquals(1, out.focusRequests)
+    }
+
+    @Test
+    fun `出番を待っている間に裏に回ったら、頼みを取り下げ、開き直したら頼み直す`() {
+        out.focusResult = BgmControl.FocusResult.DELAYED
+        open()
+        bgm.setForeground(false)
+        assertEquals(1, out.abandons)
+
+        out.focusResult = BgmControl.FocusResult.GRANTED
+        bgm.setForeground(true)
+        assertEquals(2, out.focusRequests)
+        assertTrue(out.isPlaying)
+    }
+
+    @Test
+    fun `出番を待っている間にオフにしたら、頼みを取り下げる`() {
+        out.focusResult = BgmControl.FocusResult.DELAYED
+        open()
+        bgm.setSettings(false, 5)
+        assertEquals(1, out.abandons)
+        assertFalse(out.isPlaying)
     }
 
     @Test

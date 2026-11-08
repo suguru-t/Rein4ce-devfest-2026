@@ -31,6 +31,8 @@ class BgmPlayer(context: Context) {
         // 「小さくすれば鳴らしてよい」と言われたとき（カーナビの案内など）も、ほかと同じく止める。
         // これが無いと、端末が勝手に小さくするだけで知らせが来ないことがある（#86 の D のレビュー）
         .setWillPauseWhenDucked(true)
+        // 電話の最中に頼んだときは「あとで渡す」と答えてもらい、電話が終わったら出番をもらって流す（#86 の C のレビュー）
+        .setAcceptsDelayedFocusGain(true)
         .setOnAudioFocusChangeListener { change ->
             when (change) {
                 AudioManager.AUDIOFOCUS_GAIN -> control.onFocusGained()
@@ -45,7 +47,11 @@ class BgmPlayer(context: Context) {
         override val isPlaying: Boolean get() = player?.isPlaying == true
         override val othersPlayingMusic: Boolean get() = audio.isMusicActive
 
-        override fun requestFocus(): Boolean = audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        override fun requestFocus(): BgmControl.FocusResult = when (audio.requestAudioFocus(focusRequest)) {
+            AudioManager.AUDIOFOCUS_REQUEST_GRANTED -> BgmControl.FocusResult.GRANTED
+            AudioManager.AUDIOFOCUS_REQUEST_DELAYED -> BgmControl.FocusResult.DELAYED
+            else -> BgmControl.FocusResult.FAILED
+        }
 
         override fun abandonFocus() {
             audio.abandonAudioFocusRequest(focusRequest)

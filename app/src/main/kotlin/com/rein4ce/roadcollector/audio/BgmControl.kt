@@ -10,6 +10,7 @@ import com.rein4ce.roadcollector.data.AppSettings
  * - 音量は、端末のメディアの音量に、設定の音量（1〜10）の割合を掛ける。耳の感じ方に合わせ、割合は 2 乗で小さくする
  * - ほかのアプリが音楽を流しているときは、始めない（その人の音楽を止めない）
  * - 電話やカーナビの案内などで一時的に出番を取られたら止めて、戻ってきたら続きから流す
+ * - 電話の最中にアプリを開いたとき（出番を「あとで渡す」と言われたとき）は、電話が終わって出番が来てから流す
  * - ほかのアプリが音楽を流し始めたら（出番をずっと取られたら）止めて、次にアプリを開くか、設定でオンにし直すまで流さない
  *   （音量を動かしただけでは始めない）
  */
@@ -23,8 +24,8 @@ internal class BgmControl(private val out: Output) {
         /** ほかのアプリが音楽を流しているか */
         val othersPlayingMusic: Boolean
 
-        /** 音の出番をもらう。もらえたら true */
-        fun requestFocus(): Boolean
+        /** 音の出番をもらう */
+        fun requestFocus(): FocusResult
 
         /** 音の出番を返す */
         fun abandonFocus()
@@ -37,6 +38,18 @@ internal class BgmControl(private val out: Output) {
         fun setGain(gain: Float)
     }
 
+    /** 音の出番を頼んだ答え */
+    enum class FocusResult {
+        /** もらえた */
+        GRANTED,
+
+        /** 今は渡せないが、あとで渡す（電話の最中など。渡せるようになったら [onFocusGained] が来る） */
+        DELAYED,
+
+        /** もらえなかった */
+        FAILED,
+    }
+
     private var foreground = false
     private var enabled = true
 
@@ -45,6 +58,9 @@ internal class BgmControl(private val out: Output) {
 
     /** 音の出番を持っているか */
     private var hasFocus = false
+
+    /** 出番を「あとで渡す」と言われて待っているか（出番が来たら流す。頼み直さない） */
+    private var waitingForFocus = false
 
     /** 一時的に出番を取られて止めているか（出番を持ったまま待ち、戻ってきたら続きから流す） */
     private var pausedForOthers = false
@@ -67,13 +83,13 @@ internal class BgmControl(private val out: Output) {
         update()
     }
 
-    /** 出番が戻ってきた */
+    /** 出番が来た（一時的に取られていたのが戻ってきた・あとで渡すと言われていたのが来た） */
     fun onFocusGained() {
         hasFocus = true
-        if (pausedForOthers) {
-            pausedForOthers = false
-            update()
-        }
+        val resume = pausedForOthers || waitingForFocus
+        pausedForOthers = false
+        waitingForFocus = false
+        if (resume) update()
     }
 
     /** 一時的に出番を取られた（電話・カーナビの案内など） */
@@ -95,12 +111,19 @@ internal class BgmControl(private val out: Output) {
     }
 
     private fun start() {
-        if (out.isPlaying || pausedForOthers || yieldedToOthers) return
+        if (out.isPlaying || pausedForOthers || yieldedToOthers || waitingForFocus) return
         if (!hasFocus) {
             // ほかのアプリが音楽を流しているときは、その音楽を止めないよう、こちらは流さない
             if (out.othersPlayingMusic) return
-            if (!out.requestFocus()) return
-            hasFocus = true
+            when (out.requestFocus()) {
+                FocusResult.GRANTED -> hasFocus = true
+                // 電話の最中など：出番が来たら onFocusGained から流す（電話を切ったら流れ始める。#86 の C のレビュー）
+                FocusResult.DELAYED -> {
+                    waitingForFocus = true
+                    return
+                }
+                FocusResult.FAILED -> return
+            }
         }
         if (!out.play(gain)) releaseFocus()
     }
@@ -119,10 +142,12 @@ internal class BgmControl(private val out: Output) {
         if (out.isPlaying) out.pause()
     }
 
+    /** 出番を返す。「あとで渡す」と言われて待っている頼みも取り下げる */
     private fun releaseFocus() {
-        if (hasFocus) {
+        if (hasFocus || waitingForFocus) {
             out.abandonFocus()
             hasFocus = false
+            waitingForFocus = false
         }
     }
 
