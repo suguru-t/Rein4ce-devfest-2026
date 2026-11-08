@@ -811,70 +811,10 @@ private fun PartCard(
             // 並べ替え中は押せない（揺れているカードの上で、間違えて押さないように）
             enabled = !editing,
             onToggle = onToggleFavorite,
-            modifier = Modifier.align(Alignment.CenterEnd),
+            // 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）
+            modifier = Modifier.align(Alignment.CenterEnd).size(width = FavoriteToggleWidth, height = 44.dp),
         )
         }
-    }
-}
-
-/**
- * カードの右下のお気に入り。入っていないときは灰色の ☆、押すと黄色の ★（もう一度押すと外れる）。
- * 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）。読み上げではチェックボックスとして伝える。
- * 押したときは、押せる範囲の四角（灰色の波紋）ではなく、星だけが少し縮んで応える。
- * 入れたときだけ、星がぽんと弾み、周りに小さな光が散る（外すときは静かに ☆ に戻す）。
- * 端末の設定でアニメーションを切っている人には、どちらも動かさない（Compose が設定に従う）
- */
-@Composable
-private fun FavoriteToggle(favorite: Boolean, name: String, enabled: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarPress")
-    val pop = remember { Animatable(1f) }
-    // 光の進み具合（0 → 1）。1 は何も描かない
-    val burst = remember { Animatable(1f) }
-    // 前に見た値。はじめから入っているカードや、一覧に戻ってきたカードでは弾ませない
-    val last = remember { booleanArrayOf(favorite) }
-    LaunchedEffect(favorite) {
-        val turnedOn = favorite && !last[0]
-        last[0] = favorite
-        if (!turnedOn) return@LaunchedEffect
-        launch {
-            burst.snapTo(0f)
-            burst.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
-        }
-        pop.animateTo(1.45f, tween(durationMillis = 110, easing = FastOutSlowInEasing))
-        pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f))
-    }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(width = FavoriteToggleWidth, height = 44.dp)
-            .drawBehind { drawFavoriteBurst(center, burst.value) }
-            .toggleable(
-                value = favorite,
-                interactionSource = interaction,
-                indication = null,
-                enabled = enabled,
-                role = Role.Checkbox,
-                onValueChange = { onToggle() },
-            )
-            .semantics {
-                contentDescription = "「$name」をお気に入りに入れる"
-                stateDescription = if (favorite) "お気に入り" else "お気に入りではない"
-            },
-    ) {
-        // 星の大きさは文字の大きさの設定で変えない（押せる範囲は決まっているので、大きくするとはみ出す）
-        val starSize = with(LocalDensity.current) { 20.dp.toSp() }
-        Text(
-            if (favorite) "★" else "☆",
-            color = if (favorite) FavoriteStar else Fieldbook.Muted,
-            fontSize = starSize,
-            lineHeight = starSize,
-            modifier = Modifier.graphicsLayer {
-                scaleX = pressScale * pop.value
-                scaleY = pressScale * pop.value
-            },
-        )
     }
 }
 

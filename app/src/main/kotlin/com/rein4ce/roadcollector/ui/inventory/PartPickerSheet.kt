@@ -5,15 +5,24 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -74,7 +83,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val weathers by repository.weather.collectAsStateWithLifecycle()
     val shown = rememberArrangedParts(repository)
-    // 並びと絞り込みは、コレクションと共通（設定に保存）。お気に入りには ★ を付ける
+    // 並びと絞り込みは、コレクションと共通（設定に保存）。お気に入りは、コレクションと同じ ☆ で入れたり外したりできる
     val settings = RoadCollectorApp.from(LocalContext.current).settings
     val filter by settings.partFilter.collectAsStateWithLifecycle()
     val favorites by repository.favorites.collectAsStateWithLifecycle()
@@ -94,6 +103,9 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Fieldbook.Paper,
+        // 窓の上の端は、状態バー（時刻・カメラの穴）の下で止める。止めないと、パーツが多くて窓がいちばん上まで
+        // 伸びたときに、窓を下げる取っ手がカメラの穴と重なる
+        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
@@ -148,6 +160,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                         part = part,
                         sky = repository.weatherOf(part.id, weathers)?.sky,
                         favorite = part.id in favorites,
+                        onToggleFavorite = { repository.setFavorite(part.id, part.id !in favorites) },
                         order = if (index >= 0) index + 1 else null,
                         canSelect = index >= 0 || valid.size < GameSession.MAX_PARTS,
                         onToggle = {
@@ -180,7 +193,15 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
  * 選んだカードは、コレクションと同じ青い破線で囲み、図の右下の丸に積む順の数字を入れる
  */
 @Composable
-private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, canSelect: Boolean, onToggle: () -> Unit) {
+private fun PickerCard(
+    part: Part,
+    sky: Sky?,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    order: Int?,
+    canSelect: Boolean,
+    onToggle: () -> Unit,
+) {
     val shape = RoundedCornerShape(4.dp)
     Column(
         modifier = Modifier
@@ -210,9 +231,9 @@ private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, ca
             )
         }
         // 名前と、歩いた長さ・大きさ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。
-        // お気に入りなら、コレクションのカードと同じ右下に黄色の ★（この窓では見るだけ）
-        Box {
-            Column(modifier = Modifier.padding(end = if (favorite) 18.dp else 0.dp)) {
+        // 右に、コレクションのカードと同じお気に入りの ☆（押すと黄色の ★）。押せる範囲は、名前と注記の 2 行の右端ぶん
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     part.displayName,
                     fontSize = 11.sp,
@@ -234,14 +255,14 @@ private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, ca
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
-            if (favorite) {
-                Text(
-                    "★",
-                    color = FavoriteStar,
-                    fontSize = 15.sp,
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 2.dp).semantics { contentDescription = "お気に入り" },
-                )
-            }
+            FavoriteToggle(
+                favorite = favorite,
+                name = part.displayName,
+                enabled = true,
+                onToggle = onToggleFavorite,
+                modifier = Modifier.width(26.dp).fillMaxHeight(),
+                starSize = 16.dp,
+            )
         }
     }
 }
