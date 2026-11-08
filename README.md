@@ -28,6 +28,12 @@
    - `SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app`（本番サーバ。下の「サーバの接続先」を参照）
 3. Run。エミュレータでも実機でも可（minSdk 26）
 
+**発表・実機テストは release ビルドで**：debug ビルドは Compose が遅く、エミュレータで起動が約 4.5 秒かかる（release なら約 1.7 秒）。release もチーム共通の鍵で署名するので、地図もそのまま出て、debug ビルドの上に入れ替えられる。
+
+- Android Studio：左下の Build Variants で `app` を `release` にして Run
+- コマンド：`./gradlew :app:assembleRelease` → `app/build/outputs/apk/release/app-release.apk` を `adb install -r` で入れる
+- release ではブレークポイントで止めて調べることができない（Logcat のログは出る）。不具合を調べるときは debug に戻す
+
 ### 地図（Maps API キー）
 
 記録画面の地図は Google Maps で、`MAPS_API_KEY` が無いと軌跡だけを Canvas に描く。キーは A が管理している 1 つをチームで共有する（Slack で A から受け取って `local.properties` に書く。**リポジトリには入れない**）。
