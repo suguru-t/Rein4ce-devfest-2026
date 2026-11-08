@@ -45,7 +45,10 @@ internal data class SectionSlot(
 /**
  * 断面図：いくつかのタワーを、**同じ縮尺**で 1 本の台の上に並べて描く。
  * 左に測量の標尺（1 m ごとの目盛りと、横に伸びる薄い目盛り線）、いちばん高い記録の高さには赤鉛筆の線を 1 本引く。
- * 自分のタワーは、台と呼び名を道の色（オレンジ）にする（パーツの色は種類の色のまま）。
+ * 台は呼び名（「最長」「あなた」）を白抜きで載せた名札のブロック（下に濃い色の側面がのぞく）。
+ * 自分のタワーの名札はオレンジ、ほかの人のは紺（パーツの色は種類の色のまま）。
+ * 前は測量の断面図の地面のような斜線の枠だったが、ポップな見た目の中で浮いていたのと、呼び名を台の下に別に書いていたため、
+ * 台そのものを名札にして 1 つにまとめた。
  *
  * 絵がまだ届いていないタワーは、一覧の高さだけ分かっているので、その高さの枠を破線で立てておく。
  * 置いた点から届く範囲はスロットの幅で切る（隣のタワーの上には描かない）。
@@ -70,10 +73,10 @@ internal fun TowerSection(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     // 図の中の字は図の一部なので、文字の大きさの設定では大きくしない（大きくすると目盛りや呼び名がぶつかる）
-    val tick = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Muted)
-    val caption = TextStyle(fontSize = with(density) { 12.dp.toSp() }, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-    val small = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 8.dp.toSp() }, fontWeight = FontWeight.Bold)
-    val note = TextStyle(fontSize = with(density) { 10.dp.toSp() }, color = Fieldbook.Muted)
+    val tick = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Muted)
+    val caption = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 13.dp.toSp() }, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+    val small = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 9.dp.toSp() }, fontWeight = FontWeight.Black)
+    val note = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 10.dp.toSp() }, color = Fieldbook.Muted)
     val description = buildString {
         append("断面図。")
         slots.forEach { s ->
@@ -101,15 +104,17 @@ internal fun TowerSection(
         // 枠がとても低いとき（小さい画面・大きい文字）は、つぶれた絵を出すより何も描かない。下の 2 行が残る
         if (h < MIN_HEIGHT_DP.dp.toPx()) return@Canvas
         // 紙の色を半分透かして敷く。方眼の線は消えるが（paperBand）、雨や太陽の光は通るので、その上で絵が読めるように
-        drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(4.dp.toPx()))
+        drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(SECTION_CORNER.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()
         val slotW = (w - staffW) / max(1, slots.size)
         // 縮尺の上限（幅から）：台と張り出しがスロットの幅に収まる
         val widthBound = slotW / SLOT_WIDTH_M
-        // 下の余白：台の厚み（縮尺の上限で見ておく）と呼び名が入る高さ。枠の外には描かないので、ここに収める
+        // 下の余白：名札の台（呼び名の高さ＋上下の余白）と、その下にのぞく側面。枠の外には描かないので、ここに収める
         val captionH = measurer.measure("あ", caption).size.height
-        val bottomPad = PLATFORM_THICKNESS * widthBound + 4.dp.toPx() + captionH + 2.dp.toPx()
+        val plateH = captionH + 8.dp.toPx()
+        val plateDepth = 3.dp.toPx()
+        val bottomPad = plateH + plateDepth + 6.dp.toPx()
         val baseY = h - bottomPad
         // 縮尺：いちばん高いもの（記録線も）が上の余白に収まる、と幅の上限の、小さいほう
         val tallest = max(record, slots.maxOfOrNull { it.tower?.height ?: 0f } ?: 0f).coerceAtLeast(1f)
@@ -133,21 +138,24 @@ internal fun TowerSection(
             drawText(label, topLeft = Offset(staffW - 6.dp.toPx() - label.size.width, yy - label.size.height / 2))
         }
 
-        // タワー（台の上に立てる。演出中は台から上へ伸びる）
+        // 地面（墨の太い線。全部の台をつなぐ）。名札の台はこの上に重ねて描く
+        drawLine(Fieldbook.Ink, Offset(staffW, baseY), Offset(w, baseY), 2.dp.toPx())
+
+        // タワー（名札の台の上に立てる。演出中は台から上へ伸びる）
         slots.forEachIndexed { i, s ->
             val cx = staffW + slotW * (i + 0.5f)
             val t = s.tower
-            // 自分のは道の色。ただし字は、紙の上で読める濃い縁の色（道のオレンジは字には薄すぎる）
-            val color = if (s.mine) Fieldbook.Road else Fieldbook.Ink
-            val textColor = if (s.mine) Fieldbook.RoadCasing else Fieldbook.Ink
-            // 台：上面が baseY。塗りつぶすとパーツの棒と見分けにくいので、測量の断面図の地面のように、枠と斜線で描く。
-            // タワーが無い枠は、破線の枠だけ
-            val platform = Rect(Offset(cx - PLATFORM_WIDTH / 2 * pxPerM, baseY), Size(PLATFORM_WIDTH * pxPerM, PLATFORM_THICKNESS * pxPerM))
+            // 名札の台：上面が baseY。幅は台（PLATFORM_WIDTH）か呼び名の長いほう（スロットに収める）。
+            // 自分のはオレンジ、ほかの人のは紺のブロックに白い字。タワーが無い枠は、破線の名札に薄い字
+            val label = measurer.measure(s.caption, caption.copy(color = if (t == null) Fieldbook.Muted else Pop.Letter))
+            val plateW = max(PLATFORM_WIDTH * pxPerM, label.size.width + 18.dp.toPx()).coerceAtMost(slotW - 8.dp.toPx())
+            val plate = Rect(Offset(cx - plateW / 2, baseY), Size(plateW, plateH))
             if (t == null) {
-                drawRect(Fieldbook.Mark, platform.topLeft, platform.size, style = Stroke(width = 1.dp.toPx(), pathEffect = dash))
+                drawRoundRect(Fieldbook.Mark, plate.topLeft, plate.size, CornerRadius(PLATE_CORNER_DP.dp.toPx()), style = Stroke(width = 1.dp.toPx(), pathEffect = dash))
             } else {
-                drawGround(platform, color)
+                drawPlate(plate, face = if (s.mine) Pop.OrangeDeep else Pop.Navy, depth = plateDepth)
             }
+            drawText(label, topLeft = Offset(cx - label.size.width / 2, plate.top + (plateH - label.size.height) / 2))
             if (t != null) {
                 val sketch = sketches[t.id]
                 val revealTop = baseY - (baseY - y(t.height + PART_REACH)) * progressNow
@@ -170,23 +178,17 @@ internal fun TowerSection(
                 val n = measurer.measure(s.emptyNote, note)
                 drawText(n, topLeft = Offset(cx - n.size.width / 2, baseY - n.size.height - 6.dp.toPx()))
             }
-            // 呼び名（自分のは道の濃い縁の色）
-            val c = measurer.measure(s.caption, caption.copy(color = if (t == null) Fieldbook.Muted else textColor))
-            drawText(c, topLeft = Offset(cx - c.size.width / 2, baseY + PLATFORM_THICKNESS * pxPerM + 4.dp.toPx()))
-            // 開いているタワーの破線の枠（コレクションで選んだカードと同じ、測量の青）
+            // 開いているタワーの破線の枠（ボタンと同じ青緑）。名札の台まで囲む
             if (t != null && t.id == selected) {
                 drawRoundRect(
-                    color = Fieldbook.Survey,
+                    color = Pop.TealLine,
                     topLeft = Offset(cx - slotW / 2 + 2.dp.toPx(), topPad),
-                    size = Size(slotW - 4.dp.toPx(), baseY - topPad + PLATFORM_THICKNESS * pxPerM + 2.dp.toPx()),
-                    cornerRadius = CornerRadius(4.dp.toPx()),
+                    size = Size(slotW - 4.dp.toPx(), baseY - topPad + plateH + plateDepth + 3.dp.toPx()),
+                    cornerRadius = CornerRadius(10.dp.toPx()),
                     style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
                 )
             }
         }
-
-        // 台の面（墨の太い線。全部の台をつなぐ地面）
-        drawLine(Fieldbook.Ink, Offset(staffW, baseY), Offset(w, baseY), 2.dp.toPx())
 
         // 記録線：赤鉛筆で 1 本。右端の上に「最長 3.45」
         if (record > 0f && progressNow >= 1f) {
@@ -199,24 +201,17 @@ internal fun TowerSection(
 }
 
 /**
- * 台を、測量の断面図の地面のように描く：上辺を太く、枠を細く、中に斜線。塗りつぶしの四角だと、パーツの棒と見分けがつかないため。
- * [color] は墨（他人）か道の色（自分）
+ * 名札の台を、画面のほかのブロック（Pop.kt の popBlock）と同じ形で描く：角の丸い面の下に [depth] だけ濃い側面がのぞく。
+ * [face] は紺（ほかの人）かオレンジ（自分）。上に呼び名を白い字で載せる
  */
-private fun DrawScope.drawGround(r: Rect, color: androidx.compose.ui.graphics.Color) {
-    val thin = 1.dp.toPx()
-    clipRect(r.left, r.top, r.right, r.bottom) {
-        // 斜線（左下から右上へ）。間隔は台の厚みの 1/2 ほど
-        val gap = (r.height / 2).coerceAtLeast(3.dp.toPx())
-        var x = r.left - r.height
-        while (x < r.right) {
-            drawLine(color, Offset(x, r.bottom), Offset(x + r.height, r.top), thin)
-            x += gap
-        }
-    }
-    drawRect(color, r.topLeft, r.size, style = Stroke(width = thin))
-    // 上辺（台の面）は太く
-    drawLine(color, Offset(r.left, r.top), Offset(r.right, r.top), 2.5.dp.toPx())
+private fun DrawScope.drawPlate(r: Rect, face: androidx.compose.ui.graphics.Color, depth: Float) {
+    val corner = CornerRadius(PLATE_CORNER_DP.dp.toPx())
+    drawRoundRect(Pop.side(face), topLeft = Offset(r.left, r.top + depth), size = r.size, cornerRadius = corner)
+    drawRoundRect(face, topLeft = r.topLeft, size = r.size, cornerRadius = corner)
 }
+
+/** 名札の台の角の丸さ [dp] */
+private const val PLATE_CORNER_DP = 6f
 
 /**
  * 標尺の刻み [m]：1・2・5・10・20・50… のうち、目盛りの間が [minGapPx] 以上空く最小のもの。
