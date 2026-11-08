@@ -9,6 +9,7 @@ import android.content.res.Resources
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.animation.AccelerateInterpolator
 import android.window.SplashScreenView
@@ -18,6 +19,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +28,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.ui.AppNav
+import com.rein4ce.roadcollector.ui.TitleIntro
+import com.rein4ce.roadcollector.ui.TitleIntroState
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.theme.JapaneseText
 import com.rein4ce.roadcollector.ui.theme.RoadCollectorTheme
@@ -38,7 +42,15 @@ class MainActivity : ComponentActivity() {
         // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐって採集画面に入るように見せる
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash -> enterThroughGate(splash) }
+        } else {
+            TitleIntroState.splashGone = true
         }
+        // 開いたときのタイトル（ui/TitleIntro.kt）を出すか。アプリを新しく開いたときだけ出す。
+        // 記録中（通知から戻ったときなど）、画面の作り直し（回転・ダークの切り替え）、端末で動きを減らしているときは出さない
+        val animationsOff = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        val showIntro = savedInstanceState == null && !introShown && !TrackRecorder.isRecording.value && !animationsOff
+        introShown = true
+        if (!showIntro) TitleIntroState.done = true
         enableEdgeToEdge()
         val settings = RoadCollectorApp.from(this).settings
         setContent {
@@ -69,7 +81,11 @@ class MainActivity : ComponentActivity() {
                 onDispose { view.keepScreenOn = false }
             }
             RoadCollectorTheme(dark = dark) {
-                AppNav()
+                Box {
+                    AppNav()
+                    // 開いたときのタイトル。終わったら何も描かない
+                    if (showIntro) TitleIntro()
+                }
             }
         }
     }
@@ -90,6 +106,7 @@ class MainActivity : ComponentActivity() {
         val icon = splash.iconView
         if (icon == null) {
             splash.remove()
+            TitleIntroState.splashGone = true
             return
         }
         // 起動画面のアイコンは、部品のまん中に絵のまん中が来るように、そのままの大きさ（1dp = 1dp）で描かれる。
@@ -123,13 +140,19 @@ class MainActivity : ComponentActivity() {
             startDelay = wait
             playTogether(zoom, fade)
             addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) = splash.remove()
+                override fun onAnimationEnd(animation: Animator) {
+                    splash.remove()
+                    TitleIntroState.splashGone = true
+                }
             })
             start()
         }
     }
 
     private companion object {
+        /** このプロセスで、開いたときのタイトルをもう出したか（画面を作り直しても、もう一度は出さない） */
+        var introShown = false
+
         /**
          * 起動画面のアイコン（288×288dp の絵）のまん中から見た、門の形の穴のまん中 [dp]（絵の中では x 144・y 108）。
          * tools/make_splash_icon.py の大きさ・位置で決まるので、作り直したら合わせる

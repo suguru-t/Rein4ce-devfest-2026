@@ -1,0 +1,153 @@
+package com.rein4ce.roadcollector.ui
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.rein4ce.roadcollector.ui.collect.TitleBlocks
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * 開いたときのタイトルの進み具合。アプリ全体で 1 つ（MainActivity・記録画面の題字・使い方の窓から見る）
+ *
+ * @property splashGone 起動画面（門をくぐる動き）が消えたか。タイトルを見せる時間は、ここから数える
+ * @property anchor 記録画面の見出しの題字の場所（画面の左上から）。タイトルの題字はここへ飛んで収まる
+ * @property done タイトルが終わったか（出さないときもすぐ true）。終わるまで、記録画面の題字と使い方の窓は出さない
+ */
+internal object TitleIntroState {
+    var splashGone by mutableStateOf(false)
+    var anchor by mutableStateOf<Rect?>(null)
+    var done by mutableStateOf(false)
+}
+
+/**
+ * 開いたときのタイトル。押さなくても進む（押せばすぐ飛ばせる）。
+ *
+ * 起動画面で門をくぐったあと、方眼の紙のまん中に題字「ミチツミ」を大きく出し、その下に一言を出す。
+ * [HOLD_MS] たったら、題字が縮みながら記録画面の見出しの定位置へ飛んで収まり、紙がうすくなって記録画面になる。
+ * 記録中や画面の作り直しのとき、端末で動きを減らしているときは出さない（MainActivity が決める）
+ */
+@Composable
+internal fun TitleIntro() {
+    if (TitleIntroState.done) return
+    val fly = remember { Animatable(0f) } // 0：まん中に大きく、1：見出しの定位置
+    val tagline = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var titleBounds by remember { mutableStateOf<Rect?>(null) }
+    var skipping by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // 起動画面が消えるのを待つ（消えた知らせが来なくても、少し待ったら始める）
+        withTimeoutOrNull(SPLASH_WAIT_MS) { snapshotFlow { TitleIntroState.splashGone }.first { it } }
+        launch { tagline.animateTo(1f, tween(TAGLINE_MS)) }
+        delay(HOLD_MS)
+        if (!skipping) fly.animateTo(1f, tween(FLY_MS, easing = FastOutSlowInEasing))
+        TitleIntroState.done = true
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // 押したら、すぐに見出しへ飛ばして終わる
+            .pointerInput(Unit) {
+                detectTapGestures {
+                    if (skipping) return@detectTapGestures
+                    skipping = true
+                    scope.launch {
+                        fly.animateTo(1f, tween(SKIP_MS, easing = FastOutSlowInEasing))
+                        TitleIntroState.done = true
+                    }
+                }
+            },
+    ) {
+        // 紙（方眼）。題字が飛ぶにつれて、うすくなって記録画面が見えてくる
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 1f - fly.value }
+                .background(Fieldbook.Paper)
+                .fieldbookGrid(),
+        )
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(TAGLINE_GAP),
+        ) {
+            TitleBlocks(
+                interactive = false,
+                modifier = Modifier
+                    // 大きくする前の場所（ここから見出しの定位置までの距離を出す）
+                    .onGloballyPositioned { titleBounds = it.boundsInRoot() }
+                    .graphicsLayer {
+                        val f = fly.value
+                        val from = titleBounds
+                        val to = TitleIntroState.anchor
+                        val s = BIG + (1f - BIG) * f
+                        scaleX = s
+                        scaleY = s
+                        transformOrigin = TransformOrigin.Center
+                        if (from != null && to != null) {
+                            translationX = (to.center.x - from.center.x) * f
+                            translationY = (to.center.y - from.center.y) * f
+                        } else {
+                            // 見出しの場所が分からないとき（記録画面が出ていない）は、その場でうすくする
+                            alpha = 1f - f
+                        }
+                    },
+            )
+            Text(
+                TAGLINE,
+                color = Fieldbook.Ink,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.graphicsLayer { alpha = tagline.value * (1f - (fly.value * 2f).coerceAtMost(1f)) },
+            )
+        }
+    }
+}
+
+/** 題字の下の一言 */
+private const val TAGLINE = "歩いた道を、積み上げよう"
+
+/** まん中に出すときの題字の大きさ（見出しの何倍か）と、一言までの間（大きくした題字にかからないように） */
+private const val BIG = 2.4f
+private val TAGLINE_GAP = 52.dp
+
+/** 起動画面が消えてから、タイトルを見せておく時間 [ms]。題字が飛ぶ時間と、押して飛ばすときの時間 */
+private const val HOLD_MS = 1000L
+private const val FLY_MS = 520
+private const val SKIP_MS = 260
+private const val TAGLINE_MS = 360
+
+/** 起動画面が消えた知らせを待つ上限 [ms]（知らせが来ない端末でも、いつまでも止まらないように） */
+private const val SPLASH_WAIT_MS = 2500L
