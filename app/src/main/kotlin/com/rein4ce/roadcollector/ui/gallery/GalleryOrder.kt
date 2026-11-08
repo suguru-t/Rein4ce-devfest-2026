@@ -54,19 +54,23 @@ internal fun sortTowers(towers: List<TowerSummary>, sort: TowerSort): List<Tower
  * 自分のタワーが無ければ [mine] は null（断面図には空の台を出す）
  *
  * @property mineIsTop 自分のタワーが 1 番か（そのとき [mine] は他人で 1 番のタワー）
- * @property otherRank [mineIsTop] のときの、[mine]（他人で 1 番）の全部の中での順位（1 から）。自分のタワーが 1・2 番なら 3
+ * @property otherRank [mineIsTop] のときの、[mine]（他人で 1 番）の全部の中での順位（1 から）。自分のタワーが 1・2 番なら 3。
+ *   値が同じで他人が先に並んでいても、自分を 1 番と見なすので相手は 2（「1 番」が 2 つにならない）
  */
 internal data class Comparison(val top: TowerSummary?, val mine: TowerSummary?, val mineIsTop: Boolean, val otherRank: Int? = null)
 
 internal fun comparison(towers: List<TowerSummary>, sort: TowerSort, isMine: (TowerSummary) -> Boolean): Comparison {
     val sorted = sortTowers(towers, sort)
     val top = sorted.firstOrNull() ?: return Comparison(null, null, mineIsTop = false)
-    val myBest = sorted.firstOrNull(isMine) ?: return Comparison(top, null, mineIsTop = false)
+    val myIndex = sorted.indexOfFirst(isMine)
+    val myBest = sorted.getOrNull(myIndex) ?: return Comparison(top, null, mineIsTop = false)
     // 値が同じなら自分を 1 番と見なす（他人が先に並んでいても「あと 0 本」にはしない）
     if (sort.valueOf(myBest) < sort.valueOf(top)) return Comparison(top, myBest, mineIsTop = false)
     val otherIndex = sorted.indexOfFirst { !isMine(it) }
     val other = sorted.getOrNull(otherIndex)
-    return Comparison(myBest, other, mineIsTop = true, otherRank = other?.let { otherIndex + 1 })
+    // 相手の順位。自分を 1 番と見なしているので、並びで自分より前にいる相手（値が同じ）は 1 つ下げる
+    val otherRank = other?.let { if (otherIndex < myIndex) otherIndex + 2 else otherIndex + 1 }
+    return Comparison(myBest, other, mineIsTop = true, otherRank = otherRank)
 }
 
 /** 一度に出すタワーの数（ランキング）。それより多いときは「次へ」でめくる */

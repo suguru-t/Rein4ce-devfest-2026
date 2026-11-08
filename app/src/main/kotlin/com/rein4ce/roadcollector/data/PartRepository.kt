@@ -56,6 +56,9 @@ class PartRepository(
 
     /** パーツを歩いたときの天気（id → 天気）の保存先。道の色と背景の雨・雪に使う。場所と同じく、スマホの中だけに持つ */
     private val weatherFile = File(file.parentFile, "${file.nameWithoutExtension}_weather.json")
+
+    /** お気に入りに登録したパーツの id の保存先。パーツのデータ形式は変えたくないので別のファイルにする */
+    private val favoritesFile = File(file.parentFile, "${file.nameWithoutExtension}_favorites.json")
     private val weatherSerializer = MapSerializer(String.serializer(), WalkWeather.serializer())
     private val writeLock = Mutex()
 
@@ -85,6 +88,14 @@ class PartRepository(
      * 見本の天気はここには無く、[weatherOf] が SampleParts から返す。天気を取りに行くのは WeatherService
      */
     val weather: StateFlow<Map<String, WalkWeather>> = _weather
+
+    private val _favorites = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * お気に入りに登録したパーツの id。コレクションの大きく見る窓で ☆ を押すと入る。
+     * スマホの中だけに保存する（Part には入れない。共通のデータ形式を変えないため）。手持ちに無いパーツの id は持たない
+     */
+    val favorites: StateFlow<Set<String>> = _favorites
 
     private val _isLoaded = MutableStateFlow(false)
 
@@ -162,16 +173,43 @@ class PartRepository(
             kept
         }
         if (weatherChanged) persistWeather()
+
+        // お気に入り。場所と同じ決まりで、手持ちに無いパーツの id は捨てる
+        val favoritesFromFile: Set<String> = runCatching {
+            if (favoritesFile.exists()) AppJson.decodeFromString(orderSerializer, favoritesFile.readText()).toSet() else emptySet()
+        }.onFailure { logError("${favoritesFile.name} could not be read, ignoring", it) }.getOrDefault(emptySet())
+        var favoritesChanged = false
+        _favorites.update { early ->
+            val have = _parts.value.mapTo(HashSet()) { it.id }
+            val kept = (favoritesFromFile + early).filterTo(LinkedHashSet()) { it in have }
+            favoritesChanged = kept != favoritesFromFile
+            kept
+        }
+        if (favoritesChanged) persistFavorites()
+    }
+
+    /** お気に入りに入れる（[favorite] が true）・外す。もう手持ちに無いパーツなら何もしない */
+    fun setFavorite(id: String, favorite: Boolean) {
+        if (favorite && _parts.value.none { it.id == id }) return
+        if ((id in _favorites.value) == favorite) return
+        _favorites.update { if (favorite) it + id else it - id }
+        persistFavorites()
     }
 
     /**
      * 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない。
      * パーツを先に足してから場所を足す（[load] は、場所を残すかを手持ちにあるかで決めるため、この順番に頼っている）。
      * @param place 歩いた場所（TrackToPart の結果）。parts.json とは別のファイルに保存する
+     * @param weather 決まっている天気（デモ散歩で、設定の「デモの天気」を選んでいるとき）。場所より先に入れるので、
+     *   WeatherService は本当の天気を聞きに行かない（場所はあって天気が無いパーツだけを聞くため）。ふつうは null（あとで聞く）
      */
-    fun add(part: Part, place: PartPlace) {
+    fun add(part: Part, place: PartPlace, weather: WalkWeather? = null) {
         _parts.update { it + part }
         persist()
+        if (weather != null) {
+            _weather.update { it + (part.id to weather) }
+            persistWeather()
+        }
         _places.update { it + (part.id to place) }
         persistPlaces()
     }
@@ -211,6 +249,10 @@ class PartRepository(
             _weather.update { it - id }
             persistWeather()
         }
+        if (id in _favorites.value) {
+            _favorites.update { it - id }
+            persistFavorites()
+        }
     }
 
     /**
@@ -221,6 +263,24 @@ class PartRepository(
         val have = _parts.value.mapTo(HashSet()) { it.id }
         _order.value = ids.filter { it in have }.distinct()
         persistOrder()
+    }
+
+    /**
+     * 見本を全部外す（設定の「見本のパーツ」をオフにしたとき）。採集したパーツには触らない。
+     * 見本の場所と天気は保存していない（SampleParts から引く）ので、外すのはパーツと並び順だけ
+     */
+    fun removeSamples() {
+        val ids = SampleParts.all.mapTo(HashSet()) { it.id }
+        _parts.update { list -> list.filterNot { it.id in ids } }
+        persist()
+        if (_order.value.any { it in ids }) {
+            _order.update { order -> order.filterNot { it in ids } }
+            persistOrder()
+        }
+        if (_favorites.value.any { it in ids }) {
+            _favorites.update { favorites -> favorites.filterNotTo(LinkedHashSet()) { it in ids } }
+            persistFavorites()
+        }
     }
 
     /** 削除したサンプルだけを足し戻す。採集したパーツには触らない */
@@ -297,6 +357,8 @@ class PartRepository(
     private fun persistPlaces() = save(placesFile) { AppJson.encodeToString(placesSerializer, _places.value) }
 
     private fun persistWeather() = save(weatherFile) { AppJson.encodeToString(weatherSerializer, _weather.value) }
+
+    private fun persistFavorites() = save(favoritesFile) { AppJson.encodeToString(orderSerializer, _favorites.value.toList()) }
 
     /**
      * ファイルに保存する（parts.json も、並び順のファイルも同じ書き方）。

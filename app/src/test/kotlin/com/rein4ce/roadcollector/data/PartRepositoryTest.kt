@@ -6,6 +6,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartPlace
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.ui.inventory.inventoryOrder
 import com.rein4ce.roadcollector.ui.inventory.moved
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -121,6 +122,62 @@ class PartRepositoryTest {
         // 採集したパーツは残り、消したサンプルだけが戻る
         assertEquals((SampleParts.all + walk).map { it.id }.toSet(), repo.parts.value.map { it.id }.toSet())
         assertEquals(SampleParts.all.size + 1, read(f).size)
+    }
+
+    @Test
+    fun `hiding samples removes every sample and nothing else, and showing brings them all back`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.setOrder(listOf(SampleParts.all[2].id, walk.id))
+        repo.removeSamples()
+        advanceUntilIdle()
+
+        // 見本だけが外れ、採集したパーツと、その並び順は残る
+        assertEquals(listOf(walk.id), repo.parts.value.map { it.id })
+        assertEquals(listOf(walk.id), repo.order.value)
+        assertEquals(listOf(walk.id), read(f).map { it.id })
+
+        repo.restoreMissingSamples()
+        advanceUntilIdle()
+        assertEquals((SampleParts.all + walk).map { it.id }.toSet(), repo.parts.value.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `a part added with a weather keeps it instead of waiting for the real one`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        val snow = WalkWeather(code = 73, precipitationMm = 1.0)
+        repo.add(walk, place, snow)
+        advanceUntilIdle()
+        // 天気は場所と一緒に入る（WeatherService は、場所があって天気が無いパーツだけを聞きに行く）
+        assertEquals(snow, repo.weatherOf(walk.id))
+        assertEquals(snow, repository(f).also { advanceUntilIdle() }.weatherOf(walk.id))
+    }
+
+    @Test
+    fun `favorites are saved, survive a restart, and go away with their part`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        repo.add(walk, place)
+        repo.setFavorite(walk.id, true)
+        repo.setFavorite(SampleParts.all[0].id, true)
+        repo.setFavorite("not-in-collection", true) // 手持ちに無いパーツは入れない
+        advanceUntilIdle()
+        assertEquals(setOf(walk.id, SampleParts.all[0].id), repo.favorites.value)
+        assertEquals(setOf(walk.id, SampleParts.all[0].id), repository(f).also { advanceUntilIdle() }.favorites.value)
+
+        // 外す・パーツを消す・見本を外すと、お気に入りからも消える
+        repo.setFavorite(walk.id, false)
+        repo.setFavorite(walk.id, true)
+        repo.remove(walk.id)
+        repo.removeSamples()
+        advanceUntilIdle()
+        assertEquals(emptySet<String>(), repo.favorites.value)
+        assertEquals(emptySet<String>(), repository(f).also { advanceUntilIdle() }.favorites.value)
     }
 
     @Test

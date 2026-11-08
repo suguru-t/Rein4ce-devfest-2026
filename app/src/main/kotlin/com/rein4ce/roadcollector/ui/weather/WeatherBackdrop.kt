@@ -5,7 +5,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,18 +14,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import androidx.compose.ui.graphics.Path
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
@@ -40,6 +52,8 @@ import kotlin.random.Random
  * - 霧：紙の色のもやが横に流れて、方眼の線がところどころ薄れる。くもり：灰色がかった空を、雲がゆっくり横に流れる
  * - 晴れ：天気アプリの晴れの画面のように、上のほうにうすい空の色、白く飛んだ太陽とクリーム色のまぶしさ、
  *   細い光の筋、うすい虹色の輪と六角形のレンズのきらめき。スマホを傾けると太陽ときらめきが少し動く
+ * - 晴れの夜（[WalkWeather.isDay] が false）：太陽の代わりに、夜の空の色と月、ゆっくりまたたく星。月はふだん三日月で、満月の夜だけ満月（[Moon]）。
+ *   月も傾けると少し動く。ほかの天気の夜は、雲で月は見えないので、空の色だけ夜にする
  * - 天気が分からないとき：何も描かない
  *
  * ダークモードでは、雨粒を明るい青に、空・雲の色を夜の色にして、画面いっぱいに広がる光をおさえる（[Fieldbook.dark]）。
@@ -50,19 +64,28 @@ import kotlin.random.Random
  * （画面が 1 秒に 120 回描ける機種でも、それ以上は描かない）。背景だけを別の層にして、描き直すときに方眼紙や画面の部品は描き直さない。
  *
  * @param smooth true なら、ゆっくりな空も 1 秒に 60 回まで描き直す（設定の「なめらか」）
+ * @param moonTimeMs 晴れの夜に、満月の夜かを決める時刻（記録は今、コレクションは歩いた時刻）
  * @param still true なら動かさない（その時点の絵のまま止め、傾きのセンサーも止める）。記録中に GPS と一緒に電池を使わないため。
  *   false に戻ると、止めたところから続けて動く
  */
 @Composable
-fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier, still: Boolean = false, smooth: Boolean = false) {
+fun WeatherBackdrop(
+    weather: WalkWeather?,
+    modifier: Modifier = Modifier,
+    still: Boolean = false,
+    smooth: Boolean = false,
+    moonTimeMs: Long = System.currentTimeMillis(),
+) {
     val sky = weather?.sky ?: return
     val context = LocalContext.current
-    val reduceMotion = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reduceMotion = rememberReduceMotion()
     val animate = !reduceMotion && !still
-    val particles = remember(sky, weather.precipitationMm) { Particles(sky, weather.precipitationMm) }
-    // 晴れのときだけ、スマホの傾きで太陽ときらめきを少し動かす（天気アプリと同じ）。止めているときは動かさない
+    // 月の形は日によって変わるだけなので、時刻は日の単位で見る（毎回作り直さない）
+    val moonPhase = remember(moonTimeMs / DAY_MS) { Moon.phase(moonTimeMs) }
+    val particles = remember(sky, weather.precipitationMm, weather.isDay, moonPhase) {
+        Particles(sky, weather.precipitationMm, weather.isDay, moonPhase)
+    }
+    // 晴れのときだけ、スマホの傾きで太陽ときらめき（夜は月）を少し動かす（天気アプリと同じ）。止めているときは動かさない
     val tilt = rememberTilt(enabled = sky == Sky.CLEAR && animate)
     // 経過時間 [秒] と傾き。描くとき（draw）だけで読むので、描き直しても画面の部品は作り直さない。
     // 傾きはセンサーが変わるたびではなく、次に描き直すときに一緒に入れる（描き直しの回数を増やさない）
@@ -84,6 +107,9 @@ fun WeatherBackdrop(weather: WalkWeather?, modifier: Modifier = Modifier, still:
     }
     Canvas(modifier.graphicsLayer()) { frame.value.let { particles.draw(this, it.time, it.tilt) } }
 }
+
+/** 1 日 [ミリ秒]（月の形を決め直す単位） */
+private const val DAY_MS = 86_400_000L
 
 /** 描き直す 1 回分の、経過時間 [秒] とスマホの傾き */
 private class Frame(val time: Float, val tilt: Offset)
@@ -133,7 +159,14 @@ private class Tilt {
 }
 
 /** 雨粒・雪の粒などの、動かない値（位置の種・奥行き）。毎コマの位置は時刻から計算する */
-private class Particles(private val sky: Sky, precipitationMm: Double) {
+private class Particles(
+    private val sky: Sky,
+    precipitationMm: Double,
+    /** 昼か。夜の晴れは月と星、夜のほかの天気は空の色だけ夜にする */
+    private val isDay: Boolean = true,
+    /** 月の位相（0 新月・0.5 満月。[Moon.phase]） */
+    private val moonPhase: Double = 0.5,
+) {
     private val count: Int = when (sky) {
         Sky.RAIN -> (90 + precipitationMm * 25).toInt().coerceIn(90, 200)
         Sky.THUNDER -> 200
@@ -141,7 +174,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         Sky.SNOW -> (70 + precipitationMm * 20).toInt().coerceIn(70, 150)
         Sky.FOG -> 7
         Sky.CLOUDY -> 7
-        Sky.CLEAR -> 0
+        Sky.CLEAR -> if (isDay) 0 else STARS
     }
     private val random = Random(SEED)
     private val x0 = FloatArray(count) { random.nextFloat() }
@@ -155,6 +188,14 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
     private val path = Path()
 
     fun draw(scope: DrawScope, t: Float, tilt: Offset = Offset.Zero) = with(scope) {
+        // 夜は、晴れなら月と星。ほかの天気は雲で月が見えないので、上のほうの空の色だけ夜にしてから、雨・雪などを描く
+        if (!isDay) {
+            if (sky == Sky.CLEAR) {
+                moon(t, tilt)
+                return@with
+            }
+            nightTint(strong = false)
+        }
         when (sky) {
             Sky.RAIN, Sky.THUNDER -> {
                 if (sky == Sky.THUNDER) drawRect(Color(0x0F1B2633)) // 雷雨は紙を少し暗く
@@ -166,6 +207,177 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             Sky.FOG -> fog(t)
             Sky.CLOUDY -> clouds(t)
             Sky.CLEAR -> sun(t, tilt)
+        }
+    }
+
+    /** 夜の空の色（上ほど濃く、画面のなかほどで消える）。[strong] は晴れの夜（月と星の地）。ほかの天気は、雲の下なのでうすく */
+    private fun DrawScope.nightTint(strong: Boolean) {
+        val a = if (strong) 1f else 0.6f
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to NightSky.copy(alpha = 0.85f * a),
+                0.25f to NightSky.copy(alpha = 0.5f * a),
+                0.5f to NightSky.copy(alpha = 0f),
+            ),
+        )
+    }
+
+    /**
+     * 晴れの夜：夜の空の色、ゆっくりまたたく星、上の右寄りに月とまわりの光。
+     * 月はふだん三日月で、本当の満月の夜（前後 1 日）だけ満月にする。スマホを傾けると、太陽と同じく月が少し動く。
+     *
+     * 太陽（白く飛んだまん中と、ふちを作らないまぶしさ）に合わせて、月も写真に近い見た目にする：
+     * 海（暗い模様）とクレーターのある面、三日月の欠けた側はうっすら見える（地球の照り返し）、光と影の境はぼかす。
+     * 月の面は細かいので、最初に 1 枚の絵に描いておき、毎コマはその絵を置くだけにする
+     */
+    private fun DrawScope.moon(t: Float, tilt: Offset) {
+        val w = size.width
+        val h = size.height
+        nightTint(strong = true)
+        val sway = Offset(sin(t * 0.09f) * 6.dp.toPx(), sin(t * 0.07f) * 3.dp.toPx())
+        // 太陽の所（右上）だと、上の電池などの表示や、記録画面の「0 m」・歯車にかかる（ダークの満月だと字が読めない）。
+        // そのため、上の時計と電池のあいだの空いている所（カメラの穴より右）に置き、下の見出しの行にかからない高さにする
+        val c = Offset(w * 0.64f, 46.dp.toPx()) + Offset(tilt.x * 18.dp.toPx(), -tilt.y * 10.dp.toPx()) + sway
+        val r = 32.dp.toPx()
+        // 星：上の 4 割に散らし、上ほど多く・明るく。1 つずつ違う速さでゆっくりまたたく。
+        // 月の後ろの星は描かない（三日月の欠けた側はうすく透けるので、星が見えてしまう）
+        val hidden = r * 1.08f
+        for (i in 0 until count) {
+            val y = h * 0.42f * phase[i] * phase[i]
+            val x = w * x0[i]
+            if ((Offset(x, y) - c).getDistanceSquared() < hidden * hidden) continue
+            val twinkle = 0.55f + 0.45f * sin(t * lerp(0.4f, 1.2f, depth[i]) + i * 1.7f)
+            val fade = 1f - (y / (h * 0.42f))
+            drawCircle(StarLight.copy(alpha = (0.35f + 0.6f * depth[i]) * twinkle * fade), radius = lerp(0.8f, 1.8f, depth[i]).dp.toPx(), center = Offset(x, y))
+        }
+        val full = Moon.isFull(moonPhase)
+        // まわりの光：空に広がるうすい光と、月のすぐまわりのにじみ（満月ほど明るい）
+        val halo = 150.dp.toPx()
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to MoonHalo.copy(alpha = (if (full) 0.3f else 0.2f) * MoonGlow),
+                0.25f to MoonHalo.copy(alpha = (if (full) 0.14f else 0.09f) * MoonGlow),
+                0.6f to MoonHalo.copy(alpha = 0.04f * MoonGlow),
+                1f to MoonHalo.copy(alpha = 0f),
+                center = c,
+                radius = halo,
+            ),
+            radius = halo,
+            center = c,
+        )
+        // 三日月は、光っている側だけがにじむ（欠けた側のまわりは光らない）
+        val tiltRad = CRESCENT_TILT * Math.PI.toFloat() / 180f
+        val glowAt = if (full) c else c + Offset(cos(tiltRad), sin(tiltRad)) * (r * 0.55f)
+        val bleed = if (full) r * 1.6f else r * 1.25f
+        drawCircle(
+            brush = Brush.radialGradient(
+                0f to MoonHalo.copy(alpha = 0f),
+                (if (full) 0.55f else 0.45f) to MoonHalo.copy(alpha = (if (full) 0.45f else 0.3f) * MoonGlow),
+                (if (full) 0.68f else 0.65f) to MoonHalo.copy(alpha = (if (full) 0.2f else 0.12f) * MoonGlow),
+                1f to MoonHalo.copy(alpha = 0f),
+                center = glowAt,
+                radius = bleed,
+            ),
+            radius = bleed,
+            center = glowAt,
+        )
+        val image = moonImage(r, full)
+        drawImage(image, topLeft = Offset(c.x - image.width / 2f, c.y - image.height / 2f))
+    }
+
+    /** 月の絵（大きさか形が変わったときだけ描き直す） */
+    private val moonCache = CachedImage()
+
+    private fun DrawScope.moonImage(r: Float, full: Boolean): ImageBitmap {
+        val side = (r * 2f).toInt() + 4
+        return moonCache.get(this, key = side to full, sidePx = side) { moonFace(r, full) }
+    }
+
+    /**
+     * 月の面を、この絵のまん中に半径 [r] で描く。
+     * 面（明るい地・海・クレーター・ふちのかげり）を 1 枚に描いてから、見える所の形（満月は丸、三日月は光の当たる所＋うっすらの欠けた側）で切り抜く
+     */
+    private fun DrawScope.moonFace(r: Float, full: Boolean) {
+        val c = center
+        drawIntoCanvas { canvas ->
+            canvas.saveLayer(Rect(Offset.Zero, size), Paint())
+            // 明るい地（高地）
+            drawCircle(MoonSurface, radius = r, center = c)
+            // 海：ふちのぼけた暗い模様を重ねて、見慣れた月の模様（うさぎ）にする
+            for (m in MARIA) {
+                val at = c + Offset(m.x * r, m.y * r)
+                val spread = m.size * r
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        0f to MoonMare.copy(alpha = m.alpha),
+                        0.4f to MoonMare.copy(alpha = m.alpha * 0.85f),
+                        0.75f to MoonMare.copy(alpha = m.alpha * 0.4f),
+                        1f to MoonMare.copy(alpha = 0f),
+                        center = at,
+                        radius = spread,
+                    ),
+                    radius = spread,
+                    center = at,
+                )
+            }
+            // 細かいクレーター：うすい小さな点を散らし、面のざらつきにする（ふちを描くと泡のように見えるので描かない）。毎回同じ並び
+            val random = Random(MOON_SEED)
+            repeat(CRATER_COUNT) {
+                val angle = random.nextFloat() * 2f * Math.PI.toFloat()
+                val dist = kotlin.math.sqrt(random.nextFloat()) * 0.92f
+                val at = c + Offset(cos(angle) * dist * r, sin(angle) * dist * r)
+                val dot = lerp(0.015f, 0.045f, random.nextFloat() * random.nextFloat()) * r
+                drawCircle(MoonCrater.copy(alpha = lerp(0.06f, 0.14f, random.nextFloat())), radius = dot, center = at)
+            }
+            // 明るいクレーター（ティコ・コペルニクス）と、ティコから伸びるうすい筋
+            val tycho = c + Offset(-0.12f * r, 0.72f * r)
+            for (i in 0 until 9) {
+                val angle = (i * 40f + 12f) * Math.PI.toFloat() / 180f
+                val length = r * lerp(0.35f, 0.75f, hash(i, 77))
+                drawLine(
+                    MoonSurface.copy(alpha = 0.22f),
+                    start = tycho,
+                    end = tycho + Offset(cos(angle) * length, sin(angle) * length),
+                    strokeWidth = r * 0.03f,
+                    cap = StrokeCap.Round,
+                )
+            }
+            drawCircle(Color.White.copy(alpha = 0.9f), radius = r * 0.045f, center = tycho)
+            drawCircle(Color.White.copy(alpha = 0.6f), radius = r * 0.035f, center = c + Offset(-0.33f * r, -0.12f * r))
+            // ふちのかげり（丸い玉に見えるように、ふちだけ少し暗く）
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to MoonLimb.copy(alpha = 0f),
+                    0.75f to MoonLimb.copy(alpha = 0f),
+                    1f to MoonLimb.copy(alpha = 0.22f),
+                    center = c,
+                    radius = r,
+                ),
+                radius = r,
+                center = c,
+            )
+            // 見える所の形で切り抜く（この層の濃さを、下の面に掛ける）
+            canvas.saveLayer(Rect(Offset.Zero, size), Paint().apply { blendMode = BlendMode.DstIn })
+            if (full) {
+                drawCircle(Color.Black, radius = r, center = c)
+            } else {
+                // 欠けた側：地球の照り返しで、うっすら見える
+                drawCircle(Color.Black.copy(alpha = EARTHSHINE), radius = r, center = c)
+                // 光の当たる所：光と影の境を少しずつ広げて重ね、ぼかす。夕方の三日月のように、光る側を右下に向ける
+                rotate(degrees = CRESCENT_TILT, pivot = c) {
+                    // 広い形から順に重ね、重なった濃さが境から光の側へ同じ割合で濃くなるようにする
+                    var covered = 0f
+                    for (step in FEATHER_STEPS downTo 0) {
+                        val target = 1f - step / (FEATHER_STEPS + 1f)
+                        val alpha = 1f - (1f - target) / (1f - covered)
+                        covered = target
+                        litPart(path, c, r, CRESCENT_PHASE + step * FEATHER_PHASE)
+                        drawPath(path, Color.Black.copy(alpha = alpha))
+                    }
+                }
+            }
+            canvas.restore()
+            canvas.restore()
         }
     }
 
@@ -210,22 +422,73 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         }
     }
 
-    /** 揺れながらゆっくり落ちる雪。明るい紙の上でも見えるよう、白い粒に濃い水色のふちと、うすい影を付ける */
+    /**
+     * 揺れながらゆっくり落ちる雪。ふちのぼけた白い粒に、うすい青灰色のにじみを付ける（明るい紙の上でも見えるように）。
+     * 前は白い丸に濃い水色のふちを描いていたが、明るい紙の上では輪っか（泡や水玉）に見えたので、ふちの線はやめた。
+     * 粒の絵は最初に 1 枚だけ作り（[flakeImage]）、毎コマはその絵を大きさを変えて置くだけにする
+     */
     private fun DrawScope.snow(t: Float) {
         val w = size.width
         val h = size.height
+        val image = flakeImage()
         for (i in 0 until count) {
             val d = depth[i]
             val r = lerp(2.0f, 4.4f, d).dp.toPx()
             val speed = h * lerp(0.04f, 0.11f, d)
-            val travel = h + 2 * r
-            val y = (phase[i] * travel + t * speed) % travel - r
+            // 絵は、白い芯（半径 r）のまわりににじみがあるので、芯の FLAKE_SPREAD 倍の大きさで置く。
+            // 上下で折り返す範囲も、にじみの端まで含める（芯の大きさだと、にじみの端が縁で一瞬出たり消えたりする）
+            val half = r * FLAKE_SPREAD
+            val travel = h + 2 * half
+            val y = (phase[i] * travel + t * speed) % travel - half
             val sway = sin(t * lerp(0.5f, 1.0f, d) + phase[i] * 6.28f) * lerp(6f, 16f, d).dp.toPx()
             val x = wrap(x0[i] * w + sway, w)
             val alpha = lerp(0.55f, 1f, d)
-            drawCircle(SnowShadow.copy(alpha = alpha * 0.18f), radius = r * 1.15f, center = Offset(x + r * 0.25f, y + r * 0.35f))
-            drawCircle(Color.White.copy(alpha = alpha), radius = r, center = Offset(x, y))
-            drawCircle(SnowEdge.copy(alpha = alpha * 0.9f), radius = r, center = Offset(x, y), style = Stroke(width = 1.1.dp.toPx()))
+            // 小数の位置のまま置く（整数の px に丸めると、ゆっくりした横揺れが 1 px ずつの段になり、低い密度の端末ではカクつく）
+            val zoom = half * 2 / image.width
+            withTransform({
+                translate(x - half, y - half)
+                scale(zoom, zoom, pivot = Offset.Zero)
+            }) {
+                drawImage(image, alpha = alpha)
+            }
+        }
+    }
+
+    /** 雪の粒の絵。ライトとダークでにじみの濃さを変えるので、切り替わったら描き直す */
+    private val flakeCache = CachedImage()
+
+    private fun DrawScope.flakeImage(): ImageBitmap {
+        val dark = Fieldbook.dark
+        val side = FLAKE_IMAGE_PX
+        return flakeCache.get(this, key = dark, sidePx = side) {
+            val c = center
+            val outer = side / 2f
+            // まわりのうすい青灰色のにじみ（明るい紙の上で、白い粒の形が見えるように。暗い地では白がよく見えるので弱く）
+            val shade = if (dark) 0.12f else 0.42f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to SnowShade.copy(alpha = shade),
+                    0.55f to SnowShade.copy(alpha = shade * 0.6f),
+                    1f to SnowShade.copy(alpha = 0f),
+                    center = c,
+                    radius = outer,
+                ),
+                radius = outer,
+                center = c,
+            )
+            // 白い芯。ふちはぼかす（くっきりした丸だと、貼った丸や泡に見える）
+            val core = outer / FLAKE_SPREAD
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to Color.White,
+                    0.6f to Color.White,
+                    1f to Color.White.copy(alpha = 0f),
+                    center = c,
+                    radius = core * 1.15f,
+                ),
+                radius = core * 1.15f,
+                center = c,
+            )
         }
     }
 
@@ -399,13 +662,17 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
      * 空は少し灰色がかった色にする
      */
     private fun DrawScope.clouds(t: Float) {
+        // 夜は雲も空も暗くする（夜の空に白い雲が浮かないように）
+        val overcast = if (isDay) Overcast else NightOvercast
+        val cloudWhite = if (isDay) CloudWhite else NightCloud
+        val cloudShade = if (isDay) CloudShade else NightSky
         val w = size.width
         val h = size.height
         drawRect(
             brush = Brush.verticalGradient(
-                0f to Overcast.copy(alpha = 0.6f),
-                0.25f to Overcast.copy(alpha = 0.3f),
-                0.5f to Overcast.copy(alpha = 0f),
+                0f to overcast.copy(alpha = 0.6f),
+                0.25f to overcast.copy(alpha = 0.3f),
+                0.5f to overcast.copy(alpha = 0f),
             ),
         )
         // 奥の雲から描く
@@ -425,7 +692,7 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
                 // 下側の影
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(CloudShade.copy(alpha = alpha * 0.22f), CloudShade.copy(alpha = 0f)),
+                        listOf(cloudShade.copy(alpha = alpha * 0.22f), cloudShade.copy(alpha = 0f)),
                         center = Offset(px, py + r * 0.25f),
                         radius = r * 1.1f,
                     ),
@@ -435,9 +702,9 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
                 // 雲の白（ふんわり外へ溶ける）
                 drawCircle(
                     brush = Brush.radialGradient(
-                        0f to CloudWhite.copy(alpha = alpha),
-                        0.55f to CloudWhite.copy(alpha = alpha * 0.85f),
-                        1f to CloudWhite.copy(alpha = 0f),
+                        0f to cloudWhite.copy(alpha = alpha),
+                        0.55f to cloudWhite.copy(alpha = alpha * 0.85f),
+                        1f to cloudWhite.copy(alpha = 0f),
                         center = Offset(px, py),
                         radius = r,
                     ),
@@ -461,9 +728,12 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
         /** 雨粒の色：紙の上で見える、青みのある墨 */
         private val RainInk: Color get() = if (Fieldbook.dark) Color(0xFF8FB4E0) else Color(0xFF4F6F96)
 
-        /** 雪の粒のふちと影 */
-        private val SnowEdge = Color(0xFF5F86A8)
-        private val SnowShadow = Color(0xFF2F4A62)
+        /** 雪の粒のまわりのにじみの色（青灰色） */
+        private val SnowShade = Color(0xFF5F86A8)
+
+        /** 雪の粒の絵：白い芯の何倍の大きさまでにじみを描くか、絵の一辺 [px] */
+        private const val FLAKE_SPREAD = 1.9f
+        private const val FLAKE_IMAGE_PX = 64
 
         /** 雲の下側の影、雲の白、くもりの空の色、雲 1 つをつくる丸の数 */
         private val CloudShade: Color get() = if (Fieldbook.dark) Color(0xFF0B0F12) else Color(0xFF55606B)
@@ -494,12 +764,84 @@ private class Particles(private val sky: Sky, precipitationMm: Double) {
             Flare(1.25f, 52f, Color(0xFFB8E3D6), 0.1f, hexagon = true),
         )
 
+        /** 晴れの夜の星の数 */
+        private const val STARS = 46
+
+        /** 夜の空の色（上のほうに敷く）。ライトでも星と月が見えるよう、くすんだ紺 */
+        private val NightSky: Color get() = if (Fieldbook.dark) Color(0xFF0A1424) else Color(0xFF55678C)
+
+        /** 夜のくもりの空と雲の色 */
+        private val NightOvercast: Color get() = if (Fieldbook.dark) Color(0xFF1C2635) else Color(0xFF6E7C96)
+        private val NightCloud: Color get() = if (Fieldbook.dark) Color(0xFF55606F) else Color(0xFFB7C0CE)
+
+        /** 星の色と、月のまわりの光の強さ（ダークでは右上の明るい字が読めるよう弱める） */
+        private val StarLight = Color(0xFFF2F5FF)
+        private val MoonGlow: Float get() = if (Fieldbook.dark) 0.7f else 1f
+
+        /** 月の色：明るい地（少し暖かい白）、海（青みの灰色）、クレーター、ふちのかげり、まわりの光（少し青い白） */
+        private val MoonSurface = Color(0xFFF1EEE6)
+        private val MoonMare = Color(0xFF8A8C93)
+        private val MoonCrater = Color(0xFF9C9A92)
+        private val MoonLimb = Color(0xFF6F6E6A)
+        private val MoonHalo = Color(0xFFE6ECF5)
+
+        /** 月の海：月の半径を 1 とした位置（右が +x、下が +y）・大きさ・濃さ。北を上にした、日本から見た満月の模様 */
+        private class Mare(val x: Float, val y: Float, val size: Float, val alpha: Float)
+
+        private val MARIA = listOf(
+            Mare(-0.30f, -0.45f, 0.32f, 0.34f), // 雨の海
+            Mare(-0.12f, -0.36f, 0.18f, 0.22f), // 雨の海と晴れの海のあいだ
+            Mare(-0.56f, -0.30f, 0.28f, 0.28f), // 嵐の大洋（北）
+            Mare(-0.64f, 0.0f, 0.32f, 0.3f), // 嵐の大洋
+            Mare(-0.50f, 0.28f, 0.26f, 0.26f), // 嵐の大洋（南）
+            Mare(-0.52f, 0.52f, 0.13f, 0.28f), // 湿りの海
+            Mare(-0.22f, 0.42f, 0.2f, 0.22f), // 雲の海
+            Mare(-0.20f, -0.80f, 0.16f, 0.18f), // 氷の海
+            Mare(0.10f, -0.80f, 0.15f, 0.16f), // 氷の海
+            Mare(0.18f, -0.38f, 0.2f, 0.34f), // 晴れの海
+            Mare(-0.02f, -0.16f, 0.13f, 0.22f), // 蒸気の海
+            Mare(0.34f, -0.08f, 0.24f, 0.34f), // 静かの海
+            Mare(0.24f, -0.22f, 0.16f, 0.2f), // 晴れの海と静かの海のあいだ
+            Mare(0.72f, -0.30f, 0.14f, 0.4f), // 危難の海
+            Mare(0.56f, 0.24f, 0.18f, 0.3f), // 豊かの海
+            Mare(0.46f, 0.10f, 0.14f, 0.2f), // 静かの海と豊かの海のあいだ
+            Mare(0.36f, 0.40f, 0.12f, 0.26f), // 神酒の海
+        )
+
+        /** 細かいクレーターの数と並びの種 */
+        private const val CRATER_COUNT = 40
+        private const val MOON_SEED = 11
+
+        /** 三日月の形（位相。0.16 は新月から約 5 日）と、光る側の向き（右から時計回りに。右下へ） */
+        private const val CRESCENT_PHASE = 0.16
+        private const val CRESCENT_TILT = 28f
+
+        /** 三日月の欠けた側の見え方（地球の照り返し） */
+        private const val EARTHSHINE = 0.08f
+
+        /** 光と影の境のぼかし：位相を [FEATHER_PHASE] ずつ進めた形を [FEATHER_STEPS] 枚重ねる（1 枚で 2 px ほど） */
+        private const val FEATHER_STEPS = 8
+        private const val FEATHER_PHASE = 0.004
+
         /** 霧のもや（方眼紙の地の色。線を隠す） */
         private val FogPaper: Color get() = Fieldbook.Paper
     }
 }
 
 private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+/**
+ * 月の光の当たる所の形を [path] に入れる（光る側を右にした形。[phase] は 0 新月・0.25 半月・0.5 満月）。
+ * 右半分の丸と、光と影の境（縦長の半分のだ円）で囲む。境は、三日月では右へ、半月を過ぎると左へふくらむ
+ */
+private fun litPart(path: Path, c: Offset, r: Float, phase: Double) {
+    val k = cos(2 * Math.PI * phase).toFloat()
+    val rx = r * abs(k)
+    path.reset()
+    path.arcTo(Rect(c, r), -90f, 180f, forceMoveTo = true)
+    path.arcTo(Rect(c.x - rx, c.y - r, c.x + rx, c.y + r), 90f, if (k > 0) -180f else 180f, forceMoveTo = false)
+    path.close()
+}
 
 /** 0〜[w] に折り返す（画面の端から出た粒を、反対の端から出す） */
 private fun wrap(x: Float, w: Float): Float = ((x % w) + w) % w
@@ -510,4 +852,24 @@ private fun hash(i: Int, j: Int): Float {
     h = (h xor (h ushr 13)) * 1_274_126_177
     h = h xor (h ushr 16)
     return (h and 0x7fffffff) / Int.MAX_VALUE.toFloat()
+}
+
+
+/**
+ * 一度だけ描いて取っておく絵（月の面・雪の粒）。[get] の key が前と同じなら、取っておいた絵を返し、違えば描き直す。
+ * 細かい絵を毎コマ描かず、毎コマは取っておいた絵を置くだけにするため
+ */
+private class CachedImage {
+    private var image: ImageBitmap? = null
+    private var key: Any? = null
+
+    /** 一辺 [sidePx] の正方形の絵を [draw] で描いて返す。[key] が前と同じなら描き直さない */
+    fun get(scope: DrawScope, key: Any, sidePx: Int, draw: DrawScope.() -> Unit): ImageBitmap {
+        image?.takeIf { this.key == key }?.let { return it }
+        val made = ImageBitmap(sidePx, sidePx)
+        CanvasDrawScope().draw(scope, scope.layoutDirection, androidx.compose.ui.graphics.Canvas(made), Size(sidePx.toFloat(), sidePx.toFloat()), draw)
+        image = made
+        this.key = key
+        return made
+    }
 }

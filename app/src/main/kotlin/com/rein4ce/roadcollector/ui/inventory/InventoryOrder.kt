@@ -1,7 +1,16 @@
 package com.rein4ce.roadcollector.ui.inventory
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.data.AppSettings
+import com.rein4ce.roadcollector.data.PartFilter
+import com.rein4ce.roadcollector.data.PartRepository
+import com.rein4ce.roadcollector.data.applyPartFilter
 
 /**
  * 手持ちの並び順。
@@ -22,6 +31,48 @@ internal fun inventoryOrder(parts: List<Part>, order: List<String>): List<Part> 
     return restCollected.sortedByDescending { it.walkedAt } +
         arranged +
         restSamples.sortedBy { samples.indexOf(it.id) }
+}
+
+/**
+ * コレクションに見えている並び（[inventoryOrder]）。コレクション・積む画面・「パーツを選ぶ」の窓で同じ並びを使うので、
+ * 求め方をここ 1 か所にまとめる。手持ちか並び順が変わると、新しい並びになる
+ */
+@Composable
+fun rememberArrangedParts(repository: PartRepository): List<Part> {
+    val parts by repository.parts.collectAsStateWithLifecycle()
+    val order by repository.order.collectAsStateWithLifecycle()
+    return remember(parts, order) { inventoryOrder(parts, order) }
+}
+
+/** いまのコレクションの並び（[rememberArrangedParts] と同じもの）を、その時点の値で求める。画面の外（操作の中など）から使う */
+fun PartRepository.arrangedNow(): List<Part> = inventoryOrder(parts.value, order.value)
+
+/**
+ * 並びと絞り込み（設定に保存。[PartFilter]）・お気に入り・選べる天気をまとめたもの。
+ * コレクションと「パーツを選ぶ」の窓で同じものを使う（片方だけ直して、ずれないように。#75 のレビュー）
+ *
+ * @property skies 持っているパーツの天気（天気の絞り込みで選べるもの）
+ */
+internal class PartFiltering(
+    val filter: PartFilter,
+    val favorites: Set<String>,
+    val skies: Set<Sky>,
+    private val skyOf: (Part) -> Sky?,
+) {
+    /** [arranged]（いつもの順）を絞り込んで並べ替える */
+    fun apply(arranged: List<Part>): List<Part> = applyPartFilter(arranged, filter, skyOf, favorites)
+}
+
+@Composable
+internal fun rememberPartFiltering(repository: PartRepository, settings: AppSettings): PartFiltering {
+    val filter by settings.partFilter.collectAsStateWithLifecycle()
+    val favorites by repository.favorites.collectAsStateWithLifecycle()
+    val weathers by repository.weather.collectAsStateWithLifecycle()
+    val parts by repository.parts.collectAsStateWithLifecycle()
+    return remember(filter, favorites, weathers, parts) {
+        val skyOf: (Part) -> Sky? = { repository.weatherOf(it.id, weathers)?.sky }
+        PartFiltering(filter, favorites, parts.mapNotNullTo(HashSet(), skyOf), skyOf)
+    }
 }
 
 /** [from] 番目の要素を [to] 番目へ動かした列 */

@@ -29,9 +29,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.rein4ce.roadcollector.ui.common.PressIconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.pressFeel
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -122,7 +125,7 @@ internal fun RankingScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        TextButton(
+        PressTextButton(
             onClick = onBack,
             contentPadding = PaddingValues(start = 0.dp, end = 8.dp),
             modifier = Modifier.heightIn(min = 36.dp),
@@ -146,7 +149,7 @@ internal fun RankingScreen(
                 color = Fieldbook.Muted,
                 modifier = Modifier.padding(bottom = 2.dp).paperBand(),
             )
-            IconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
+            PressIconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
                 Icon(
                     Icons.Filled.Refresh,
                     contentDescription = "再読み込み",
@@ -214,11 +217,20 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
     ) {
         options.forEach { s ->
             val selected = s == sort
+            // 押し心地（#76）はほかのボタンとそろえる
+            val source = remember { MutableInteractionSource() }
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .heightIn(min = 40.dp)
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onSelect(s) })
+                    .pressFeel(source)
+                    .selectable(
+                        selected = selected,
+                        interactionSource = source,
+                        indication = LocalIndication.current,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(s) },
+                    )
                     .semantics { contentDescription = s.spoken }
                     .padding(horizontal = 6.dp),
             ) {
@@ -412,7 +424,7 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
         modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = { onPage(page - 1) }, enabled = page > 0) {
+        PressTextButton(onClick = { onPage(page - 1) }, enabled = page > 0) {
             Text("‹ 前の $PAGE_SIZE 個", color = if (page > 0) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Text(
@@ -427,7 +439,7 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
                 .paperBand()
                 .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )
-        TextButton(onClick = { onPage(page + 1) }, enabled = page < pages - 1) {
+        PressTextButton(onClick = { onPage(page + 1) }, enabled = page < pages - 1) {
             Text("次の $PAGE_SIZE 個 ›", color = if (page < pages - 1) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }

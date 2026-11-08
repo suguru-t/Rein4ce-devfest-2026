@@ -72,7 +72,8 @@ class GalleryOrderTest {
         assertTrue(c.mineIsTop)
         assertEquals("mid", c.top?.id)
         assertEquals("tall-old", c.mine?.id)
-        assertEquals(1, c.otherRank)
+        // 自分を 1 番と見なすので、先に並んでいた相手は 2 番目（「1 番」が 2 つにならない）
+        assertEquals(2, c.otherRank)
     }
 
     @Test

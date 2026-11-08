@@ -1,5 +1,7 @@
 package com.rein4ce.roadcollector.data
 
+import com.rein4ce.roadcollector.core.weather.Moon
+import com.rein4ce.roadcollector.core.weather.Sky
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,6 +17,44 @@ class AppSettingsTest {
         override fun put(key: String, value: String) {
             map[key] = value
         }
+    }
+
+    @Test
+    fun `the demo sky is the real weather at first, is saved, and covers every weather`() {
+        val store = MapStore()
+        assertEquals(DemoSky.REAL, AppSettings(store).demoSky.value)
+        assertEquals(null, DemoSky.REAL.weather)
+        AppSettings(store).setDemoSky(DemoSky.SNOW)
+        assertEquals(DemoSky.SNOW, AppSettings(store).demoSky.value)
+        // 7 つの天気を全部選べる。晴れの夜は昼でない、満月は満月の時刻
+        assertEquals(Sky.entries.toSet(), DemoSky.entries.mapNotNull { it.weather?.sky }.toSet())
+        assertEquals(false, DemoSky.CLEAR_NIGHT.weather!!.isDay)
+        assertTrue(DemoSky.FULL_MOON.fullMoon && Moon.isFull(Moon.phase(DemoSky.FULL_MOON_TIME_MS)))
+    }
+
+    @Test
+    fun `when the demo settings are turned off, a saved demo sky is ignored and cannot be set`() {
+        val store = MapStore()
+        AppSettings(store).setDemoSky(DemoSky.RAIN)
+        // 発表が終わって DEMO_SETTINGS を false にした端末：雨を選んだままでも、本当の天気に戻る
+        val off = AppSettings(store, demoEnabled = false)
+        assertEquals(DemoSky.REAL, off.demoSky.value)
+        off.setDemoSky(DemoSky.SNOW)
+        assertEquals(DemoSky.REAL, off.demoSky.value)
+    }
+
+    @Test
+    fun `the part filter starts as the usual order and is saved`() {
+        val store = MapStore()
+        assertEquals(PartFilter(), AppSettings(store).partFilter.value)
+        val filter = PartFilter(sort = PartSort.OLDEST, sky = Sky.SNOW, favoritesOnly = true)
+        AppSettings(store).setPartFilter(filter)
+        assertEquals(filter, AppSettings(store).partFilter.value)
+        // 「すべて」の天気に戻したのも覚える。読めない値（前の版など）は、いつもの順・すべての天気
+        AppSettings(store).setPartFilter(filter.copy(sky = null))
+        assertEquals(null, AppSettings(store).partFilter.value.sky)
+        val broken = MapStore().apply { map["part_sort"] = "RANDOM"; map["part_sky"] = "HAIL" }
+        assertEquals(PartFilter(), AppSettings(broken).partFilter.value)
     }
 
     @Test
@@ -49,6 +89,7 @@ class AppSettingsTest {
         assertEquals(WeatherMotion.NORMAL, settings.weatherMotion.value)
         assertFalse(settings.keepScreenOn.value)
         assertTrue(settings.aiNaming.value)
+        assertTrue(settings.haptics.value)
         assertEquals("", settings.nickname.value)
     }
 
@@ -59,12 +100,14 @@ class AppSettingsTest {
             setWeatherMotion(WeatherMotion.STILL)
             setKeepScreenOn(true)
             setAiNaming(false)
+            setHaptics(false)
             setNickname("みちつみ太郎")
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
         assertTrue(again.keepScreenOn.value)
         assertFalse(again.aiNaming.value)
+        assertFalse(again.haptics.value)
         assertEquals("みちつみ太郎", again.nickname.value)
     }
 

@@ -32,9 +32,10 @@ object TowerSvg {
         var minY = -0.5
         var maxY = max(tower.height.toDouble(), 1.0) + 0.5
         for (p in tower.placements) {
-            minX = min(minX, p.x - 1.0)
-            maxX = max(maxX, p.x + 1.0)
-            maxY = max(maxY, p.y + 1.0)
+            // パーツは長辺が大きさ（scale）の箱に入るので、置いた点から大きさぶんを見ておく
+            minX = min(minX, p.x - 1.0 * p.scale)
+            maxX = max(maxX, p.x + 1.0 * p.scale)
+            maxY = max(maxY, p.y + 1.0 * p.scale)
         }
         val w = maxX - minX
         val h = maxY - minY
@@ -60,7 +61,8 @@ object TowerSvg {
             val cy = sy(pl.y.toDouble())
             val deg = -Math.toDegrees(pl.angleRad.toDouble()) // SVG は y 下向きなので回転も反転
             // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つの path にまとめて塗る（継ぎ目に線が出ない）
-            val d = PartGeometry.shapes(part, 1.0).joinToString(" ") { poly ->
+            // 大きさ（歩いた距離で決まる）は、形を作るときに掛ける（物理と同じ）
+            val d = PartGeometry.shapes(part, pl.scale.toDouble()).joinToString(" ") { poly ->
                 poly.points.joinToString(" L ", prefix = "M ", postfix = " Z") { "${f(it.x * scale)} ${f(-it.y * scale)}" }
             }
             sb.append("""<path d="$d" fill="$color" transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})"/>""")

@@ -3,7 +3,6 @@ package com.rein4ce.roadcollector.ui.gallery
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -29,16 +29,12 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,6 +69,11 @@ import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
@@ -178,7 +179,6 @@ private fun Overview(
     nicknameMissing: Boolean,
     onNickname: () -> Unit,
 ) {
-    val context = LocalContext.current
     val state = gallery.state
     // 自分のかどうか（isMine）は見ている間に変わりうるので、remember せず毎回選ぶ（軽い処理）
     val cmp = comparison(towers, sort, isMine)
@@ -188,9 +188,7 @@ private fun Overview(
 
     // 開いたときの演出：標尺が伸び、タワーが台から立つ。アプリを立ち上げてから一度だけ。
     // アニメーションを切っている人には動かさない
-    val reduceMotion = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reduceMotion = rememberReduceMotion()
     val intro = remember { Animatable(if (SectionIntro.played || reduceMotion) 1f else 0f) }
     LaunchedEffect(towers.isNotEmpty()) {
         if (towers.isNotEmpty() && intro.value < 1f) {
@@ -216,7 +214,7 @@ private fun Overview(
                 modifier = Modifier.paperBand().marker(),
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
+            PressIconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
                 Icon(
                     Icons.Filled.Refresh,
                     contentDescription = "再読み込み",
@@ -260,41 +258,46 @@ private fun Overview(
                         emptyNote = "まだありません",
                     ),
                 )
-                // 断面図は残りの高さに合わせて縮む（上限 SECTION_HEIGHT）。下のボタンが先に高さを取るので、
-                // 小さい画面や大きい文字でもボタンが押せなくならない（#68 のレビュー）
-                TowerSection(
-                    slots = slots,
-                    sketches = gallery.sketches,
-                    record = record,
-                    selected = openedId,
-                    progress = { intro.value },
-                    onTap = onOpen,
-                    // weight は fill=true にする（Canvas の中身は Spacer で、高さが決まった制約のときだけその高さを取る。
-                    // fill=false だと 0 になる）。上限は SECTION_HEIGHT、残りの 3/4 まで（1/4 は下の Spacer）
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(3f)
-                        .heightIn(max = SECTION_HEIGHT)
-                        .paperBand(bleedX = 8.dp, bleedY = 6.dp),
-                )
-                Spacer(Modifier.height(6.dp))
-                // 断面図の 2 基を 1 行ずつ（押すと紙片）
-                slots.forEach { s ->
-                    val t = s.tower ?: return@forEach
-                    TowerRow(label = s.caption, tower = t, mine = isMine(t), sort = sort, onClick = { onOpen(t) })
-                }
-                // ニックネームを付けていない自分のタワーがあるときだけ、一言。押すとニックネームの窓。
-                // 作者名は送るときにタワーに入るので、付けても今までのタワーは名無しのまま（文もそう書く）
-                if (nicknameMissing && towers.any { isMine(it) && it.author.isNullOrBlank() }) {
-                    TextButton(onClick = onNickname, modifier = Modifier.padding(top = 2.dp)) {
-                        Text("名前を付けると、次に送るタワーから名前が出ます", color = Fieldbook.Survey, fontSize = 12.sp)
+                // 残りの高さは、下のボタン 2 つが先に取り、残り全部をこの Box（断面図・2 行・案内）に渡す。
+                // 断面図は Box の中で、2 行と案内を引いた残り（上限 SECTION_HEIGHT）まで伸びる。上限を超えて余った分は
+                // Box の下の空き（案内とボタンのあいだ）になる。前は断面図と空きを Column の weight で 3 対 1 に分けていたので、
+                // 足りないときも空きが先に 1/4 を取って断面図が縮みすぎていた（#68 のレビュー）
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        TowerSection(
+                            slots = slots,
+                            sketches = gallery.sketches,
+                            record = record,
+                            selected = openedId,
+                            progress = { intro.value },
+                            onTap = onOpen,
+                            // weight は fill=true にする（Canvas の中身は Spacer で、高さが決まった制約のときだけその高さを取る。
+                            // fill=false だと 0 になる）。とても低くなったら（80dp を切る）描かず、下の 2 行だけになる
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .heightIn(max = SECTION_HEIGHT)
+                                .paperBand(bleedX = 8.dp, bleedY = 6.dp),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        // 断面図の 2 基を 1 行ずつ（押すと紙片）
+                        slots.forEach { s ->
+                            val t = s.tower ?: return@forEach
+                            TowerRow(label = s.caption, tower = t, mine = isMine(t), sort = sort, onClick = { onOpen(t) })
+                        }
+                        // ニックネームを付けていない自分のタワーがあるときだけ、一言。押すとニックネームの窓。
+                        // 作者名は送るときにタワーに入るので、付けても今までのタワーは名無しのまま（文もそう書く）
+                        if (nicknameMissing && towers.any { isMine(it) && it.author.isNullOrBlank() }) {
+                            PressTextButton(onClick = onNickname, modifier = Modifier.padding(top = 2.dp)) {
+                                Text("名前を付けると、次に送るタワーから名前が出ます", color = Fieldbook.Survey, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.weight(1f))
                 // 自分のタワーだけの一覧（送っていなければ「まだ送っていません」の案内が出る）。
                 // ボタンの高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
                 val mineCount = towers.count(isMine)
-                OutlinedButton(
+                PressOutlinedButton(
                     onClick = onMine,
                     shape = RoundedCornerShape(6.dp),
                     border = BorderStroke(1.dp, Fieldbook.Survey),
@@ -304,7 +307,7 @@ private fun Overview(
                     Text("あなたのタワー（$mineCount 個）", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(
+                PressButton(
                     onClick = onRanking,
                     shape = RoundedCornerShape(6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
@@ -497,7 +500,7 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
             )
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
+                PressButton(
                     onClick = { uriHandler.openUri(url) },
                     shape = RoundedCornerShape(6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
@@ -505,7 +508,7 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
                 ) {
                     Text("共有ページを開く", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
-                TextButton(
+                PressTextButton(
                     onClick = {
                         context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("ミチツミ", url))
                         // Android 13 以降は端末が「コピーしました」を出すので、それより前だけ自分で知らせる

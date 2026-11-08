@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -83,6 +84,8 @@ internal fun TowerSection(
     }
     Canvas(
         modifier
+            // 枠の外には描かない（小さい画面で枠がとても低くなっても、上の切り替えに重ならない）
+            .clipToBounds()
             .semantics { contentDescription = description }
             .pointerInput(slots) {
                 detectTapGestures { pos ->
@@ -95,6 +98,8 @@ internal fun TowerSection(
         val progressNow = progress()
         val w = size.width
         val h = size.height
+        // 枠がとても低いとき（小さい画面・大きい文字）は、つぶれた絵を出すより何も描かない。下の 2 行が残る
+        if (h < MIN_HEIGHT_DP.dp.toPx()) return@Canvas
         // 紙の色を半分透かして敷く。方眼の線は消えるが（paperBand）、雨や太陽の光は通るので、その上で絵が読めるように
         drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(4.dp.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
@@ -230,5 +235,8 @@ private const val STAFF_WIDTH_DP = 30f
 private const val TOP_PAD_DP = 16f
 private const val BOTTOM_PAD_DP = 30f
 
-/** 1 スロットに必要な幅 [m]：台 1.4 m と、台からはみ出して静止したパーツのぶん */
-private const val SLOT_WIDTH_M = PLATFORM_WIDTH + 0.8f
+/** これより低い枠には描かない（小さい画面で枠がつぶれたとき。GalleryScreen の断面図） */
+private const val MIN_HEIGHT_DP = 80f
+
+/** 1 スロットに必要な幅 [m]：台 1.4 m と、台からはみ出して静止したパーツのぶん（いちばん大きいパーツで見る） */
+private val SLOT_WIDTH_M = PLATFORM_WIDTH + 0.8f * MAX_PART_SCALE
