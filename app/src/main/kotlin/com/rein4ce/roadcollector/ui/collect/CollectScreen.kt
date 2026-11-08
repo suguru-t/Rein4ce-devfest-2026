@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -92,7 +94,6 @@ import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
-import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -161,14 +162,27 @@ fun CollectScreen(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(AppIcons.Footprints, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                BasicText(
-                    "$walkedM m",
-                    style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
-                    maxLines = 1,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
-                )
+                // 足跡（と長さ）を押すと、足跡が 1 歩ずつ上へ歩く（遊びの仕掛け。読み上げには出さない）。
+                // 歩いている途中に押しても、始めからやり直さない
+                val footSteps = remember { Animatable(0f) }
+                val footScope = rememberCoroutineScope()
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures {
+                            if (!footSteps.isRunning) footScope.launch { footSteps.walkFootprints() }
+                        }
+                    },
+                ) {
+                    WalkingFootprints(steps = { footSteps.value }, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(4.dp))
+                    BasicText(
+                        "$walkedM m",
+                        style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
+                    )
+                }
             }
             // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
             Spacer(Modifier.width(10.dp))
