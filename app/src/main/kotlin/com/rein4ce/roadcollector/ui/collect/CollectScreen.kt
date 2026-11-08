@@ -391,7 +391,8 @@ private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier =
             disabledContainerColor = Fieldbook.GridMajor,
             disabledContentColor = Fieldbook.Muted,
         ),
-        modifier = modifier.height(52.dp),
+        // 高さは「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
+        modifier = modifier.heightIn(min = 48.dp),
     ) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
@@ -412,7 +413,7 @@ private fun DemoMenuButton(
             shape = ButtonDefaults.outlinedShape,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
             border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
-            modifier = Modifier.height(52.dp),
+            modifier = Modifier.heightIn(min = 48.dp),
         ) {
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

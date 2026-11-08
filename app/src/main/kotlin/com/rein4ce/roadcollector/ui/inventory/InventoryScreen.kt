@@ -342,7 +342,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 disabledContainerColor = Fieldbook.GridMajor,
                 disabledContentColor = Fieldbook.Muted,
             ),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            // 高さも「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(
                 when {
