@@ -14,7 +14,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * 下のタブのアイコン。Material の標準セットに「足跡」「ノート」「積み木」「トロフィー」が無いので、24×24 で自作。
- * Instagram のタブのように、選択中は「塗り」、それ以外は「線画」を使い分ける（同じ形で 2 種類）。
+ * 選ばれていないタブは「線画」。選ばれたタブの「塗り」は、部品ごとに動かすので ui/TabIcons.kt が下の形（〜Path）から描く
+ * （足跡の塗りは、注記の足跡のマーク（WalkNote）にも使う）。
  * 色は呼び出し側（タブバー）が tint で付けるので、ここでは黒で描く。
  */
 object AppIcons {
@@ -174,17 +175,6 @@ object AppIcons {
         close()
     }
 
-    /** 閉じたノート（塗り）。横線とリングの穴はくり抜く */
-    val Notebook: ImageVector by lazy {
-        icon("Notebook") {
-            filled(evenOdd = true) {
-                notebookCover()
-                notebookMarkHoles()
-                notebookHoles()
-            }
-            ring { notebookRings() }
-        }
-    }
 
     val NotebookOutline: ImageVector by lazy {
         icon("NotebookOutline") {
@@ -256,14 +246,6 @@ object AppIcons {
         close()
     }
 
-    /** 積む：□・○・△ の積み木（下に四角と丸、上に三角） */
-    val Blocks: ImageVector by lazy {
-        icon("Blocks") {
-            filled { block(1.5f, 12.4f, BLOCK) }
-            filled { ellipse(17.7f, 17.2f, 4.8f, 4.8f) }
-            filled { triangle(12f, 1.8f, 11.4f, 9.8f) }
-        }
-    }
 
     val BlocksOutline: ImageVector by lazy {
         icon("BlocksOutline") {
@@ -316,13 +298,6 @@ object AppIcons {
         close()
     }
 
-    val Trophy: ImageVector by lazy {
-        icon("Trophy") {
-            filled { trophyCup() }
-            outlined { trophyEars() }
-            filled { trophyStand() }
-        }
-    }
 
     val TrophyOutline: ImageVector by lazy {
         icon("TrophyOutline") {

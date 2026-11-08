@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -50,7 +51,8 @@ internal fun NicknameDialog(current: String, onSave: (String) -> Unit, onDismiss
         titleContentColor = Fieldbook.Ink,
         textContentColor = Fieldbook.Ink,
         title = { Text("ニックネーム", fontWeight = FontWeight.Bold) },
-        text = {
+        // 入力欄で字を長押しして選ぶときの振動も、設定の「振動」に従わせる（ui/common/Haptics.kt）
+        text = { ProvideAppHaptics {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -94,7 +96,7 @@ internal fun NicknameDialog(current: String, onSave: (String) -> Unit, onDismiss
                 ),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
-        },
+        } },
         confirmButton = {
             PressTextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
                 Text("保存", color = if (tooLong) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)

@@ -40,11 +40,13 @@ import kotlin.math.sin
  * - 積む（積み木）：上の三角が落ちてきて、下の積み木に乗る（乗った瞬間、下が少しつぶれて弾む）
  * - みんな（トロフィー）：トロフィーが跳ねて、カップに光が走り、まわりに小さな星がきらめく
  *
- * 動くのは選ばれた瞬間だけ。アプリを開いたときに選ばれているタブは、動かさずに止まった形で出す。
+ * 動くのは選ばれた瞬間だけ。タブバーを作ったとき（アプリを開いたとき・画面の作り直し）に選ばれているタブは、動かさずに止まった形で出す。
  * 端末の設定でアニメーションを切っている人には動かさない（Compose が設定に従う）
+ *
+ * @param animate 選ばれた瞬間に動かすか。タブバーを作ったときに選ばれているタブ（アプリを開いたとき・画面の作り直し）は false
  */
 @Composable
-internal fun TabIcon(dest: Dest, selected: Boolean, tint: Color, modifier: Modifier = Modifier) {
+internal fun TabIcon(dest: Dest, selected: Boolean, animate: Boolean, tint: Color, modifier: Modifier = Modifier) {
     if (!selected) {
         Icon(dest.iconOutline, contentDescription = null, tint = tint, modifier = modifier)
         return
@@ -53,11 +55,8 @@ internal fun TabIcon(dest: Dest, selected: Boolean, tint: Color, modifier: Modif
     val play = remember { Animatable(1f) }
     val walk = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        // アプリを開いたときに選ばれているタブは動かさない
-        if (!TabIconState.started) {
-            TabIconState.started = true
-            return@LaunchedEffect
-        }
+        // タブバーを作ったときに選ばれているタブは動かさない
+        if (!animate) return@LaunchedEffect
         when (dest) {
             Dest.Collect -> walk.walkFootprints(count = 2)
             Dest.Inventory -> {
@@ -87,11 +86,6 @@ internal fun TabIcon(dest: Dest, selected: Boolean, tint: Color, modifier: Modif
             }
         }
     }
-}
-
-/** アプリを開いて最初に選ばれているタブは動かさないための印（タブバーは 1 つだけなので、アプリ全体で 1 つ） */
-private object TabIconState {
-    var started = false
 }
 
 /**
@@ -125,7 +119,8 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
         }
         drawRoundRect(ink, topLeft = page.topLeft, size = page.size, cornerRadius = corner, style = Stroke(width = 1.3f))
         // 表紙：リングの所を中心に横に縮んで裏返る（cos で 1 → -1）。表は背の線と題名の線の入った表紙、裏返ったら罫線のページ
-        val flip = cos(PI.toFloat() * open)
+        // ほかの部分と同じく 0〜1 に収めた t を使う（バネの行き過ぎで、表紙だけがもう一度揺れないように）
+        val flip = cos(PI.toFloat() * t)
         scale(scaleX = flip, scaleY = 1f, pivot = Offset(spine, 12f)) {
             translate(left = spine - AppIcons.NOTE_LEFT) {
                 val left = AppIcons.NOTE_LEFT

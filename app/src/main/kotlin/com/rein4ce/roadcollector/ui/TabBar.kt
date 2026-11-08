@@ -27,7 +27,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +55,8 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -69,6 +73,7 @@ import kotlin.math.min
  *   しずくの近くのアイコンは、レンズで拡大したように少し大きくなる
  * - タブバーそのものも、押すと少しへこみ、離すとぷるんと戻る。なぞっている間は、指の方へ少し引っぱられる
  * - 押したときと、なぞって次のタブに移ったときに、軽い振動を返す
+ * - 指をタブバーの外へ出してから離すと、取り消し（切り替えない）。押している途中に取り消されたときも切り替えない
  *
  * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡し、ダブルタップで切り替えられるようにする
  */
@@ -117,8 +122,10 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             fun indexAt(x: Float) = (x / tabWidthPx).toInt().coerceIn(0, count - 1)
 
             val selectedIndex = Dest.all.indexOfFirst { dest -> current?.hierarchy?.any { it.route == dest.route } == true }
-            val targetCenter = fingerX?.coerceIn(lensWidthPx / 2, barWidthPx - lensWidthPx / 2)
-                ?: if (selectedIndex >= 0) centerOf(selectedIndex) else null
+            val selectedNow by rememberUpdatedState(selectedIndex)
+            // しずくのまん中の行き先：指でなぞっている間は指の位置、それ以外は選ばれているタブ
+            fun targetCenter(): Float? = fingerX?.coerceIn(lensWidthPx / 2, barWidthPx - lensWidthPx / 2)
+                ?: if (selectedNow >= 0) centerOf(selectedNow) else null
 
             // しずくの左右の端。進む側の端は固いバネで先に、後ろの端はやわらかいバネで遅れて動く
             val start = if (selectedIndex >= 0) centerOf(selectedIndex) else 0f
@@ -126,20 +133,25 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             val right = remember { Animatable(start + lensWidthPx / 2) }
             // アプリを開いて最初にタブが決まったときは、すべらせずにその場に置く
             val placed = remember { booleanArrayOf(selectedIndex >= 0) }
-            LaunchedEffect(targetCenter, fingerX != null) {
-                if (targetCenter == null) return@LaunchedEffect
-                if (!placed[0]) {
-                    placed[0] = true
-                    left.snapTo(targetCenter - lensWidthPx / 2)
-                    right.snapTo(targetCenter + lensWidthPx / 2)
-                    return@LaunchedEffect
+            // 行き先が変わるたびに、両端のバネを向け直す。効果は 1 つのまま、行き先だけを見る
+            // （なぞっている間、指が動くたびに効果を作り直さないように。#79 のレビュー）
+            LaunchedEffect(lensWidthPx, tabWidthPx) {
+                snapshotFlow { targetCenter() to (fingerX != null) }.collectLatest { (center, following) ->
+                    if (center == null) return@collectLatest
+                    if (!placed[0]) {
+                        placed[0] = true
+                        left.snapTo(center - lensWidthPx / 2)
+                        right.snapTo(center + lensWidthPx / 2)
+                        return@collectLatest
+                    }
+                    val toLeft = center - lensWidthPx / 2
+                    val toRight = center + lensWidthPx / 2
+                    val movingRight = toLeft > left.value
+                    coroutineScope {
+                        launch { right.animateTo(toRight, if (movingRight) lead(following) else trail(following)) }
+                        launch { left.animateTo(toLeft, if (movingRight) trail(following) else lead(following)) }
+                    }
                 }
-                val toLeft = targetCenter - lensWidthPx / 2
-                val toRight = targetCenter + lensWidthPx / 2
-                val movingRight = toLeft > left.value
-                val following = fingerX != null
-                launch { right.animateTo(toRight, if (movingRight) lead(following) else trail(following)) }
-                launch { left.animateTo(toLeft, if (movingRight) trail(following) else lead(following)) }
             }
             // 押している間、しずくがふくらんで持ち上がる（離すとぷるんと戻る）
             val lift = remember { Animatable(0f) }
@@ -150,37 +162,60 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                 GlassLens(left = left, right = right, lift = { lift.value })
             }
 
+            // タブバーを作ったときに選ばれているタブは、アイコンを動かさない。そこから一度でも選び直したら動かす
+            // （アプリ全体で 1 つの印にすると、画面の作り直しやすぐ開き直したときに、開いた瞬間に動いてしまう。#79 のレビュー）
+            val firstPick = remember { intArrayOf(-1) }
+            val moved = remember { booleanArrayOf(false) }
+            if (selectedIndex >= 0) {
+                if (firstPick[0] < 0) firstPick[0] = selectedIndex else if (selectedIndex != firstPick[0]) moved[0] = true
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     // 押す・なぞる・離すを、タブバー全体で受ける（1 つずつのタブでは、なぞって移る動きが作れないため）
                     .pointerInput(count, tabWidthPx) {
+                        val margin = OutsideMargin.toPx()
+                        // 指がタブバーの外（少しの余裕を足した範囲）にあるか
+                        fun outside(p: Offset) =
+                            p.x < -margin || p.x > size.width + margin || p.y < -margin || p.y > size.height + margin
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
                             var x = down.position.x
                             var hovered = indexAt(x)
                             fingerX = x
-                            var released = false
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) {
-                                    released = true
-                                    break
+                            var go = false
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) {
+                                        // 離したとき：タブバーの中（余裕を含む）で離したときだけ切り替える。
+                                        // 外へ出してから離したら取り消し。押している途中に取り消された（戻るジェスチャーや通知のパネルなど）ときは、
+                                        // Compose が「離した」を消費済みにして知らせてくるので、それも取り消し（#79 のレビュー）
+                                        go = !change.isConsumed && !outside(change.position)
+                                        break
+                                    }
+                                    x = change.position.x
+                                    if (outside(change.position)) {
+                                        // 外へ出たら、しずくは選ばれているタブへ戻す（離すと取り消しになることが見て分かるように）
+                                        fingerX = null
+                                    } else {
+                                        fingerX = x
+                                        val now = indexAt(x)
+                                        if (now != hovered) {
+                                            hovered = now
+                                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        }
+                                    }
+                                    change.consume()
                                 }
-                                x = change.position.x
-                                fingerX = x
-                                val now = indexAt(x)
-                                if (now != hovered) {
-                                    hovered = now
-                                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                }
-                                change.consume()
+                            } finally {
+                                // どう終わっても（鍵が変わって作り直されたときも）、しずくとタブバーを元に戻す
+                                fingerX = null
                             }
-                            fingerX = null
-                            // 離した所のタブに切り替える（指がタブバーの外へ出ていても、いちばん近いタブ）
-                            if (released) onGo(Dest.all[indexAt(x)])
+                            if (go) onGo(Dest.all[indexAt(x)])
                         }
                     },
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -213,6 +248,7 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                         TabIcon(
                             dest = dest,
                             selected = isSelected,
+                            animate = moved[0],
                             tint = Fieldbook.Ink,
                             modifier = Modifier
                                 .size(26.dp)
@@ -282,6 +318,9 @@ private fun lead(following: Boolean) =
 /** 後ろの端のバネ（やわらかい。遅れて付いてくるので、しずくが伸びる） */
 private fun trail(following: Boolean) =
     spring<Float>(dampingRatio = 0.68f, stiffness = if (following) 520f else 210f)
+
+/** 指がタブバーの外へ出たとみなすまでの余裕（ここより外で離すと取り消し） */
+private val OutsideMargin = 24.dp
 
 /** ピルの形（高さ 56dp の半分の角丸） */
 private val PillShape = RoundedCornerShape(28.dp)

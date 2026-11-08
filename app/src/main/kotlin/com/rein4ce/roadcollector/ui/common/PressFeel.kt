@@ -102,6 +102,8 @@ private fun rememberPressMotion(interactionSource: InteractionSource): PressMoti
                     launch {
                         pressed?.join()
                         motion.press.animateTo(0f, ReleaseSpring)
+                        // 戻りきったら指の位置を消す（キーボードや読み上げで押したときに、前に触った位置の方へ寄らないように。#79 のレビュー）
+                        motion.finger = null
                     }
                 }
             }

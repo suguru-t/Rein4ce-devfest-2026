@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
+import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackScreen
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
@@ -39,17 +40,16 @@ import com.rein4ce.roadcollector.ui.weather.WeatherLayer
  *   stack     … D：積み上げゲーム（ui/game）
  *   gallery   … C：サーバ連携（ui/gallery, net/）
  *
- * @property icon        選択中に出す「塗り」のアイコン
- * @property iconOutline それ以外のときに出す「線画」のアイコン
+ * @property iconOutline 選ばれていないときに出す「線画」のアイコン（選ばれているときは、TabIcon が塗りの形を描いて動かす）
  */
-sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
+sealed class Dest(val route: String, val label: String, val iconOutline: ImageVector) {
     // 足跡・ノート・積み木・トロフィーは自作のベクター（AppIcons）。選ばれた瞬間の動きは ui/TabIcons.kt
     // 画面の名前は「記録」（「記録開始」のボタンや設定の「記録」とそろえる。前は「採集」。route とコードの名前はそのまま）
-    data object Collect : Dest("collect", "記録", AppIcons.Footprints, AppIcons.FootprintsOutline)
-    data object Inventory : Dest("inventory", "コレクション", AppIcons.Notebook, AppIcons.NotebookOutline)
-    data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
+    data object Collect : Dest("collect", "記録", AppIcons.FootprintsOutline)
+    data object Inventory : Dest("inventory", "コレクション", AppIcons.NotebookOutline)
+    data object Stack : Dest("stack", "積む", AppIcons.BlocksOutline)
     // 「みんな」は、高さを競うランキングなのでトロフィー（前は共有の印）
-    data object Gallery : Dest("gallery", "みんな", AppIcons.Trophy, AppIcons.TrophyOutline)
+    data object Gallery : Dest("gallery", "みんな", AppIcons.TrophyOutline)
 
     companion object {
         // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
@@ -80,41 +80,44 @@ fun AppNav() {
 
     // 地はアプリ全体で方眼紙。その上に、見ている画面に合わせた天気（雨・雪など）を降らせる（B：ui/weather）。
     // 画面の部品はさらにその上。タブバーは透明なので、浮いたピルの下に方眼と雨が透けて見える
-    Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
-        val backdrop = when (currentDestination?.route) {
-            Dest.Collect.route -> BackdropScreen.COLLECT
-            Dest.Inventory.route -> BackdropScreen.COLLECTION
-            Dest.Gallery.route -> BackdropScreen.GALLERY
-            else -> BackdropScreen.OTHER
-        }
-        WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
-        Scaffold(
-            containerColor = Color.Transparent,
-            bottomBar = { TabBar(currentDestination, onGo = ::go) },
-        ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = Dest.Collect.route,
-                modifier = Modifier.padding(innerPadding),
-            ) {
-                composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
-                composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
-                composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
-                composable(Dest.Gallery.route) { GalleryScreen() }
+    // 中の LocalHapticFeedback を設定の「振動」に従うものにする（Compose の部品が自分で鳴らす振動にも効くように）
+    ProvideAppHaptics {
+        Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
+            val backdrop = when (currentDestination?.route) {
+                Dest.Collect.route -> BackdropScreen.COLLECT
+                Dest.Inventory.route -> BackdropScreen.COLLECTION
+                Dest.Gallery.route -> BackdropScreen.GALLERY
+                else -> BackdropScreen.OTHER
             }
-        }
+            WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
+            Scaffold(
+                containerColor = Color.Transparent,
+                bottomBar = { TabBar(currentDestination, onGo = ::go) },
+            ) { innerPadding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = Dest.Collect.route,
+                    modifier = Modifier.padding(innerPadding),
+                ) {
+                    composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
+                    composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
+                    composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
+                    composable(Dest.Gallery.route) { GalleryScreen() }
+                }
+            }
 
-        // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
-        // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
-        // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
-        val settings = RoadCollectorApp.from(context).settings
-        val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
-        var howToClosed by rememberSaveable { mutableStateOf(false) }
-        if (!howToSeen && !howToClosed) {
-            HowToDialog(onClose = { dontShowAgain ->
-                if (dontShowAgain) settings.setHowToSeen(true)
-                howToClosed = true
-            })
+            // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
+            // （チェックなしで閉じたら、その回だけ閉じる。画面の回転やダークへの切り替えでは出し直さない）。
+            // 設定の「使い方」ではいつでも見られる。起動画面の下で先に出しておくので、門をくぐると使い方が出ている
+            val settings = RoadCollectorApp.from(context).settings
+            val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
+            var howToClosed by rememberSaveable { mutableStateOf(false) }
+            if (!howToSeen && !howToClosed) {
+                HowToDialog(onClose = { dontShowAgain ->
+                    if (dontShowAgain) settings.setHowToSeen(true)
+                    howToClosed = true
+                })
+            }
         }
     }
 }
