@@ -223,7 +223,7 @@ private fun Overview(
             }
         }
 
-        GalleryHero(state = state, cmp = cmp, sort = sort)
+        GalleryHero(state = state, cmp = cmp, sort = sort, reduceMotion = reduceMotion)
 
         // 状態の行：読み込み中・つながらない・更新中・取り直せなかった、のときだけ出す（ランキングと共通）
         GalleryStatusRow(gallery)
@@ -334,13 +334,29 @@ private object SectionIntro {
  * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, reduceMotion: Boolean) {
     val isLoaded = state is TowerGallery.State.Loaded
     val isError = state is TowerGallery.State.Error
     val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
     val myValue = myTower?.let { sort.valueOf(it) }
     val topValue = cmp.top?.let { sort.valueOf(it) } ?: 0f
     val none = isLoaded && myTower == null
+    // 数字はコレクションの合計距離と同じく、メーターのように 0 から回って上がる（開いたとき・物差しを変えたとき。
+    // 取り直して値が変わったときは今の値から）。アニメーションを切っている人には回さず、すぐ出す
+    val meter = remember { Animatable(0f) }
+    val lastSort = remember { arrayOf(sort) }
+    LaunchedEffect(sort, myValue) {
+        if (myValue == null) return@LaunchedEffect
+        if (reduceMotion) {
+            meter.snapTo(myValue)
+            return@LaunchedEffect
+        }
+        if (lastSort[0] != sort) {
+            lastSort[0] = sort
+            meter.snapTo(0f)
+        }
+        meter.animateTo(myValue, tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
+    }
     val label = if (none) "まだ送っていません" else if (sort == TowerSort.HEIGHT) "あなたの最高" else "あなたの最多"
     // つながらないときは、下の状態の行と同じ言葉にする（「読み込み中」のままだと食い違って見える）
     val sub = when {
@@ -371,7 +387,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
             )
             if (!none) {
                 Text(
-                    myValue?.let { sort.format(it) } ?: "—",
+                    if (myValue != null) sort.format(meter.value) else "—",
                     fontFamily = Fieldbook.Data,
                     fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
