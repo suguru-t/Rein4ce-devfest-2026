@@ -104,8 +104,11 @@ object Fieldbook {
  * 見出しの字の下だけ線を消す場所（ui/common/PaperBand）が動くと描き直すので（メーターの数字が回る間は毎コマ）、
  * 線は大きさが変わったときだけ作り（drawWithCache）、描き直しでは作っておいた線を描くだけにする（軽く済む）。
  * 色はダークモードで変わるので、描くときに読む
+ *
+ * @param clearings 見出しの字の下の線を消すか。消す場所はメイン画面の位置で覚えているので、
+ *   下から出る窓など、別の窓に敷くときは false にする（true のままだと、ずれた所の線が消える）
  */
-fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
+fun Modifier.fieldbookGrid(clearings: Boolean = true): Modifier = drawWithCache {
     val step = 8.dp.toPx()
     val minor = Path()
     val major = Path()
@@ -129,7 +132,7 @@ fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
         drawPath(minor, Fieldbook.GridMinor, style = line)
         drawPath(major, Fieldbook.GridMajor, style = line)
         // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
-        drawGridClearings()
+        if (clearings) drawGridClearings()
     }
 }
 

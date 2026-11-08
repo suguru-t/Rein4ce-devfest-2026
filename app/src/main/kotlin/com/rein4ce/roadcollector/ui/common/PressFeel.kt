@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 /*
  * ボタンの押し心地（アプリの全ボタン共通）。
  * 押している間は少し縮み、離すとバネで弾んで戻る。押した瞬間に指へ軽く振動を返す。
- * 数値は Figma「ミチツミ ボタンの押し心地」で決めたもの（決定 36）。
+ * 数値は Figma「ミチツミ ボタンの押し心地」で決めたもの（決定 38）。
  * 使い方は Material の Button / OutlinedButton / TextButton / IconButton と同じで、名前の頭に Press を付けるだけ。
  * 無効のボタンは Material が押した知らせを出さないので、縮みも振動もしない。
  */
