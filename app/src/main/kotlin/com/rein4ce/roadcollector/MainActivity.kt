@@ -184,10 +184,13 @@ class MainActivity : ComponentActivity() {
                     at[0] + icon.width / 2f,
                     at[1] + icon.height / 2f + TITLE_DY_DP * dp,
                 )
-                TitleIntroState.splashGone = true
             }
 
-            override fun onAnimationEnd(animation: Animator) = splash.remove()
+            // 起動画面が消えきってから、タイトルの題字を出す（消えかけの起動画面と、タイトルの題字が二重に見えないように）
+            override fun onAnimationEnd(animation: Animator) {
+                splash.remove()
+                TitleIntroState.splashGone = true
+            }
         })
         fade.start()
     }
@@ -200,8 +203,8 @@ class MainActivity : ComponentActivity() {
         const val TITLE_DY_DP = 44.2f
 
         /**
-         * タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms]。
-         * 長いと、大きくなり始めた題字に、消えかけの積み木の塔が重なって見えたので短くした（タイトルはこの間だけ待ってから動き出す）
+         * タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms]。タイトルの題字は、消えきってから出る。
+         * 長いと、消えかけの積み木の塔とタイトルの題字が重なって見えたので短くした
          */
         const val HANDOVER_FADE_MS = 120L
 
