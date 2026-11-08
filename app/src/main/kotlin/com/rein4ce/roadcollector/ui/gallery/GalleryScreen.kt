@@ -62,8 +62,6 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
-import com.rein4ce.roadcollector.ui.common.noteStyle
-import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
@@ -454,19 +452,8 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    notes("${tower.partCount} 本") + " ・ ",
-                    style = noteStyle,
-                    fontSize = 12.sp,
-                    fontWeight = if (sort == TowerSort.PARTS) FontWeight.Bold else FontWeight.Normal,
-                    color = if (sort == TowerSort.PARTS) Fieldbook.Ink else Fieldbook.Muted,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                Text(author, fontSize = 12.sp, color = Fieldbook.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Text(" ・ " + notes(formatDate(tower.createdAt)), style = noteStyle, fontSize = 12.sp, color = Fieldbook.Muted, maxLines = 1, softWrap = false)
-            }
+            // 本数・作者・日時（太い丸ゴシック。並びに使っている値は濃い墨）
+            TowerMeta(tower, sort, modifier = Modifier.padding(top = 1.dp, bottom = 2.dp))
         }
         Text(
             "$heightText m",
@@ -490,7 +477,6 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val url = "${ApiClient.baseUrl}/towers/${tower.id}"
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -521,13 +507,9 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
             ) {
                 if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(12.dp))
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                notes("パーツ ${tower.partCount} 本", author, formatDate(tower.createdAt)),
-                style = noteStyle,
-                fontSize = 13.sp,
-                color = Fieldbook.Muted,
-            )
+            Spacer(Modifier.height(10.dp))
+            // 紙片では物差しに関係なく並べる（どの値も塗らない）。並びは高い順として渡す（高さは上の大きな数字）
+            TowerMeta(tower, TowerSort.HEIGHT, partsLabel = true)
             Spacer(Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                 PopButton(

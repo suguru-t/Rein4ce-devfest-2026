@@ -50,16 +50,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
-import com.rein4ce.roadcollector.ui.common.noteStyle
-import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
@@ -295,16 +291,10 @@ private fun TowerCard(
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Fieldbook.GridMajor, RoundedCornerShape(3.dp))) {
                 Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(6.dp).background(sortInk(sort), RoundedCornerShape(3.dp)))
             }
-            Spacer(Modifier.height(5.dp))
-            // 注記：等幅だと字間が開いて見えるので、本文の字。幅 360dp の端末では 1 行に入らないので、日時は 2 行目に。
-            // 作者名が長くても本数が消えないよう、作者だけ「…」で詰める。並びの物差しになっている値（多い順なら本数、新しい順なら日時）は墨で
-            val dimStyle = TextStyle(fontSize = 12.sp, color = Fieldbook.Muted)
-            val inkStyle = dimStyle.copy(color = Fieldbook.Ink, fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(notes("パーツ ${tower.partCount} 本") + " ・ ", style = if (sort == TowerSort.PARTS) inkStyle else dimStyle, maxLines = 1, softWrap = false)
-                Text(author, style = dimStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            }
-            Text(notes(formatDate(tower.createdAt)), style = if (sort == TowerSort.NEWEST) inkStyle else dimStyle, maxLines = 1, softWrap = false)
+            Spacer(Modifier.height(7.dp))
+            // 注記：本数・作者・日時（太い丸ゴシック。作者は「…」で詰める）。幅 360dp の端末では 1 行に入らないので、日時は 2 行目に。
+            // 並びの物差しになっている値（多い順なら本数、新しい順なら日時）は濃い墨
+            TowerMeta(tower, sort, partsLabel = true, dateOnNewLine = true)
         }
     }
 }
