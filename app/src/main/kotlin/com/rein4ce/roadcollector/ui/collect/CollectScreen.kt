@@ -448,24 +448,13 @@ private fun DemoMenuButton(
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
-        // 見本は 1 本ずつ小さな図を添えて、名札（棒・L字…）と名前で選べるようにする
+        // 見本は 1 本ずつ小さな図を添えて、形の名前（棒・L字…）だけで選ぶ（並び・天気のメニューと同じ、1 行 1 語の形）
         FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "見本の散歩") {
             SampleTracks.all.forEach { track ->
                 val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
                     leadingIcon = { if (part != null) PartThumb(part, size = 30.dp) },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                track.expectedKind.label,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Fieldbook.Muted,
-                                modifier = Modifier.width(56.dp),
-                            )
-                            Text(track.name, fontSize = 15.sp, color = Fieldbook.Ink)
-                        }
-                    },
+                    text = { Text(track.expectedKind.label, fontSize = 15.sp, color = Fieldbook.Ink) },
                     colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
                     contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                     onClick = { open = false; onPick(track) },
@@ -494,10 +483,16 @@ private fun DemoMenuButton(
                         }
                     }
                 },
-                text = { Text("ファイルから再生", fontSize = 15.sp, color = Fieldbook.Ink) },
-                trailingIcon = { Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted) },
-                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink, trailingIconColor = Fieldbook.Muted),
-                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                // 「ファイル」の下に、読める形式を小さく添える（横に並べると、メニューの幅はいちばん長い行で決まるので、
+                // 上の見本の行の右が空きすぎる。2 行にすれば、幅は見本の行と同じくらいに収まる）
+                text = {
+                    Column {
+                        Text("ファイル", fontSize = 15.sp, color = Fieldbook.Ink)
+                        Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                    }
+                },
+                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
+                contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                 onClick = { open = false; onPickFile() },
             )
         }
