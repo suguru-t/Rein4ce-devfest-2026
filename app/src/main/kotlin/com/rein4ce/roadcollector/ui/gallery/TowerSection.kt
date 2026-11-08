@@ -70,10 +70,10 @@ internal fun TowerSection(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     // 図の中の字は図の一部なので、文字の大きさの設定では大きくしない（大きくすると目盛りや呼び名がぶつかる）
-    val tick = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Muted)
-    val caption = TextStyle(fontSize = with(density) { 12.dp.toSp() }, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-    val small = TextStyle(fontFamily = Fieldbook.Data, fontSize = with(density) { 8.dp.toSp() }, fontWeight = FontWeight.Bold)
-    val note = TextStyle(fontSize = with(density) { 10.dp.toSp() }, color = Fieldbook.Muted)
+    val tick = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Muted)
+    val caption = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 13.dp.toSp() }, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+    val small = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 9.dp.toSp() }, fontWeight = FontWeight.Black)
+    val note = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 10.dp.toSp() }, color = Fieldbook.Muted)
     val description = buildString {
         append("断面図。")
         slots.forEach { s ->
@@ -101,7 +101,7 @@ internal fun TowerSection(
         // 枠がとても低いとき（小さい画面・大きい文字）は、つぶれた絵を出すより何も描かない。下の 2 行が残る
         if (h < MIN_HEIGHT_DP.dp.toPx()) return@Canvas
         // 紙の色を半分透かして敷く。方眼の線は消えるが（paperBand）、雨や太陽の光は通るので、その上で絵が読めるように
-        drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(4.dp.toPx()))
+        drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(SECTION_CORNER.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()
         val slotW = (w - staffW) / max(1, slots.size)
@@ -139,7 +139,7 @@ internal fun TowerSection(
             val t = s.tower
             // 自分のは道の色。ただし字は、紙の上で読める濃い縁の色（道のオレンジは字には薄すぎる）
             val color = if (s.mine) Fieldbook.Road else Fieldbook.Ink
-            val textColor = if (s.mine) Fieldbook.RoadCasing else Fieldbook.Ink
+            val textColor = if (s.mine) Pop.MineInk else Fieldbook.Ink
             // 台：上面が baseY。塗りつぶすとパーツの棒と見分けにくいので、測量の断面図の地面のように、枠と斜線で描く。
             // タワーが無い枠は、破線の枠だけ
             val platform = Rect(Offset(cx - PLATFORM_WIDTH / 2 * pxPerM, baseY), Size(PLATFORM_WIDTH * pxPerM, PLATFORM_THICKNESS * pxPerM))
@@ -173,13 +173,13 @@ internal fun TowerSection(
             // 呼び名（自分のは道の濃い縁の色）
             val c = measurer.measure(s.caption, caption.copy(color = if (t == null) Fieldbook.Muted else textColor))
             drawText(c, topLeft = Offset(cx - c.size.width / 2, baseY + PLATFORM_THICKNESS * pxPerM + 4.dp.toPx()))
-            // 開いているタワーの破線の枠（コレクションで選んだカードと同じ、測量の青）
+            // 開いているタワーの破線の枠（ボタンと同じ青緑）
             if (t != null && t.id == selected) {
                 drawRoundRect(
-                    color = Fieldbook.Survey,
+                    color = Pop.TealLine,
                     topLeft = Offset(cx - slotW / 2 + 2.dp.toPx(), topPad),
                     size = Size(slotW - 4.dp.toPx(), baseY - topPad + PLATFORM_THICKNESS * pxPerM + 2.dp.toPx()),
-                    cornerRadius = CornerRadius(4.dp.toPx()),
+                    cornerRadius = CornerRadius(10.dp.toPx()),
                     style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
                 )
             }

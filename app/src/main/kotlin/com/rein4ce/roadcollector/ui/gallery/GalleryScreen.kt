@@ -8,7 +8,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,12 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -51,6 +46,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -69,9 +65,6 @@ import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
-import com.rein4ce.roadcollector.ui.common.PressButton
-import com.rein4ce.roadcollector.ui.common.PressIconButton
-import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -79,12 +72,13 @@ import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
 
 /**
- * みんなのタワー（C）。見た目は「測量野帳」（Fieldbook.kt）で、記憶に残る要素は**断面図**（TowerSection.kt）：
+ * みんなのタワー（C）。地は「測量野帳」（Fieldbook.kt）の方眼紙で、画面の部品は題字「ミチツミ」の積み木に合わせた
+ * ポップな見た目（Pop.kt：太い丸ゴシック、アイコンの 4 色、下に濃い色がのぞくブロックの面）。記憶に残る要素は**断面図**（TowerSection.kt）：
  * 物差し（高い順＝高さ、多い順＝パーツ数）ごとに、**1 番のタワーと自分のいちばん良いタワーの 2 基**を同じ縮尺で
  * 1 本の台に並べ、左に標尺、いちばん高い記録に赤鉛筆の線。絵がそのまま差を語る。
  *
  * - 主役は「あなたの最高（最多）」と「最長（最多）まで あと いくつ」
- * - 青は押せるものだけ（切り替え・ボタン）。強調は道の色（あなた）と赤鉛筆（記録）の 2 本
+ * - 物差しごとに色を持つ（高い順はオレンジ、多い順は青緑、新しい順は紺）。自分は道の色（オレンジ）、記録は赤鉛筆
  * - 全部のタワーは「ランキングを見る」で別の画面（RankingScreen.kt。紙片の一覧、5 個ずつ）。戻るで帰る
  * - タワーを押すと、下から紙片がせり上がる（アプリの中で完結）。外に出るのは「共有ページを開く」を押したときだけ
  * - 動きは開いたときに一度だけ（標尺が伸び、タワーが台から立つ）。端末でアニメーションを切っている人には動かさない
@@ -203,24 +197,11 @@ private fun Overview(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 画面名（野帳にマーカーで線を引いたように）と、右にリロードの印
+        // 画面名（題字と同じ積み木）と、右にリロードのブロック
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "みんなのタワー",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp,
-                color = Fieldbook.Ink,
-                modifier = Modifier.paperBand().marker(),
-            )
+            BlockWord("みんなのタワー")
             Spacer(Modifier.weight(1f))
-            PressIconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
-                Icon(
-                    Icons.Filled.Refresh,
-                    contentDescription = "再読み込み",
-                    tint = if (gallery.refreshing) Fieldbook.Mark else Fieldbook.Survey,
-                )
-            }
+            PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
 
         GalleryHero(state = state, cmp = cmp, sort = sort, reduceMotion = reduceMotion)
@@ -230,7 +211,7 @@ private fun Overview(
 
         when (state) {
             TowerGallery.State.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Fieldbook.Survey)
+                CircularProgressIndicator(color = Pop.Teal)
             }
             // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明は出さない（手元のサーバの使い方は README）
             is TowerGallery.State.Error -> Note {
@@ -280,7 +261,9 @@ private fun Overview(
                                 .weight(1f, fill = false)
                                 .heightIn(max = SECTION_HEIGHT)
                                 .fillMaxHeight()
-                                .paperBand(bleedX = 8.dp, bleedY = 6.dp),
+                                .paperBand(bleedX = 8.dp, bleedY = 6.dp)
+                                // ブロックの面（下に側面がのぞく）。中身は TowerSection が同じ角の丸さで描く
+                                .popBlock(face = Fieldbook.Paper, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge),
                         )
                         Spacer(Modifier.height(6.dp))
                         // 断面図の 2 基を 1 行ずつ（押すと紙片）
@@ -292,32 +275,39 @@ private fun Overview(
                         // 作者名は送るときにタワーに入るので、付けても今までのタワーは名無しのまま（文もそう書く）
                         if (nicknameMissing && towers.any { isMine(it) && it.author.isNullOrBlank() }) {
                             PressTextButton(onClick = onNickname, modifier = Modifier.padding(top = 2.dp)) {
-                                Text("名前を付けると、次に送るタワーから名前が出ます", color = Fieldbook.Survey, fontSize = 12.sp)
+                                Text(
+                                    "名前を付けると、次に送るタワーから名前が出ます ›",
+                                    fontFamily = Pop.Rounded,
+                                    fontWeight = FontWeight.Black,
+                                    color = Pop.TealLine,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.paperBand(bleedX = 6.dp, bleedY = 2.dp),
+                                )
                             }
                         }
                     }
                 }
-                // 自分のタワーだけの一覧（送っていなければ「まだ送っていません」の案内が出る）。
-                // ボタンの高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
+                // 自分のタワーだけの一覧（送っていなければ「まだ送っていません」の案内が出る）は二番手の白いブロック、
+                // ランキングは主役のオレンジのブロック。高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
                 val mineCount = towers.count(isMine)
-                PressOutlinedButton(
+                PopButton(
+                    label = "あなたのタワー（$mineCount 個）",
                     onClick = onMine,
-                    shape = RoundedCornerShape(6.dp),
-                    border = BorderStroke(1.dp, Fieldbook.Survey),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Text("あなたのタワー（$mineCount 個）", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
+                    face = Fieldbook.Card,
+                    text = Pop.TealLine,
+                    edge = Pop.TealLine,
+                    fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(8.dp))
-                PressButton(
+                PopButton(
+                    label = "ランキングを見る（${towers.size} 個）",
                     onClick = onRanking,
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                ) {
-                    Text("ランキングを見る（${towers.size} 個）", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
+                    face = Pop.OrangeDeep,
+                    text = Pop.Letter,
+                    fontSize = 17.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
@@ -376,37 +366,51 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
             }
         },
     ) {
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(4.dp))
         Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
             Text(
                 label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 15.sp,
                 color = Fieldbook.Ink,
-                modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 7.dp),
+                modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 8.dp),
             )
             if (!none) {
+                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色
                 Text(
                     if (myValue != null) sort.format(meter.value) else "—",
-                    fontFamily = Fieldbook.Data,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp,
-                    color = Fieldbook.Ink,
+                    fontFamily = Pop.Rounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 40.sp,
+                    color = sortInk(sort),
                     maxLines = 1,
                     softWrap = false,
                 )
                 Text(
                     sort.unit,
-                    fontFamily = Fieldbook.Data,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Fieldbook.Ink,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                    fontFamily = Pop.Rounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    color = sortInk(sort),
+                    modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
                 )
             }
         }
-        Text(sub, style = noteStyle, fontSize = 13.sp, color = Fieldbook.Ink, modifier = Modifier.paperBand())
+        Spacer(Modifier.height(4.dp))
+        when {
+            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札
+            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter, tiltDeg = -2f)
+            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow, tiltDeg = -2f)
+            else -> Text(
+                sub,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 13.sp,
+                color = if (isError) Fieldbook.Danger else Fieldbook.Muted,
+                modifier = Modifier.paperBand(),
+            )
+        }
     }
 }
 
@@ -431,13 +435,22 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
             .paperBand(bleedX = 4.dp, bleedY = 0.dp)
             .padding(horizontal = 4.dp),
     ) {
+        // 左の小さな積み木：自分のは道の色（オレンジ）、ほかの人のは紺
+        Box(
+            modifier = Modifier
+                .padding(end = 10.dp)
+                .graphicsLayer { rotationZ = if (mine) -6f else 5f }
+                .size(14.dp)
+                .popBlock(face = if (mine) Pop.Orange else Pop.Navy, corner = 4.dp, depth = 2.dp),
+        )
         // 幅を決めずに、左は呼び名と注記（作者だけ「…」で詰める）、右は高さ。文字を大きくしても切れない
         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
             Text(
                 label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (mine) Fieldbook.RoadCasing else Fieldbook.Ink,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 13.sp,
+                color = if (mine) Pop.MineInk else Fieldbook.Ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -457,9 +470,9 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
         }
         Text(
             "$heightText m",
-            fontFamily = Fieldbook.Data,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 17.sp,
             color = Fieldbook.Ink,
             maxLines = 1,
             softWrap = false,
@@ -488,24 +501,23 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     "%.2f".format(Locale.US, tower.height),
-                    fontFamily = Fieldbook.Data,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp,
+                    fontFamily = Pop.Rounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 40.sp,
                     color = Fieldbook.Ink,
                 )
-                Text("m", fontFamily = Fieldbook.Data, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+                Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 7.dp))
                 if (mine) {
-                    Text("あなたのタワー", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.RoadCasing, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+                    PopTag("あなたのタワー", face = Pop.OrangeDeep, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
                 }
             }
+            Spacer(Modifier.height(4.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Fieldbook.Card)
-                    .border(1.dp, Fieldbook.CardEdge, RoundedCornerShape(4.dp)),
+                    .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge)
+                    .clip(RoundedCornerShape(SECTION_CORNER)),
             ) {
                 if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(12.dp))
             }
@@ -513,30 +525,31 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
             Text(
                 notes("パーツ ${tower.partCount} 本", author, formatDate(tower.createdAt)),
                 style = noteStyle,
-                fontFamily = Fieldbook.Data,
                 fontSize = 13.sp,
                 color = Fieldbook.Muted,
             )
             Spacer(Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                PressButton(
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                PopButton(
+                    label = "共有ページを開く",
                     onClick = { uriHandler.openUri(url) },
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
-                    modifier = Modifier.weight(1f).height(48.dp),
-                ) {
-                    Text("共有ページを開く", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-                PressTextButton(
+                    face = Pop.OrangeDeep,
+                    text = Pop.Letter,
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                PopButton(
+                    label = "リンクをコピー",
                     onClick = {
                         context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("ミチツミ", url))
                         // Android 13 以降は端末が「コピーしました」を出すので、それより前だけ自分で知らせる
                         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, "リンクをコピーしました", Toast.LENGTH_SHORT).show()
                     },
-                    modifier = Modifier.height(48.dp),
-                ) {
-                    Text("リンクをコピー", color = Fieldbook.Survey, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
+                    face = Fieldbook.Card,
+                    text = Pop.TealLine,
+                    edge = Pop.TealLine,
+                    fontSize = 14.sp,
+                )
             }
         }
     }
@@ -549,9 +562,8 @@ private fun Note(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 4.dp)
-            .background(Fieldbook.Card, RoundedCornerShape(4.dp))
-            .border(1.dp, Fieldbook.CardEdge, RoundedCornerShape(4.dp))
-            .padding(12.dp),
+            .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
+            .padding(14.dp),
     ) { content() }
 }
 
