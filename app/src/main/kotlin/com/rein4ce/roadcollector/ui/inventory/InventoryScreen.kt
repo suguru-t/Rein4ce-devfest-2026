@@ -123,12 +123,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(context).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
-    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    val shown = rememberArrangedParts(repository)
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
     var arranged by remember { mutableStateOf(shown) }
     // 並びと絞り込み（設定に保存。「パーツを選ぶ」の窓と共通）とお気に入り。画面に出すのは、いつもの順（arranged）を絞り込んで並べ替えたもの
@@ -341,7 +340,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                                 if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
                                 // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
                                 // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
-                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
+                                arranged = repository.arrangedNow()
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作

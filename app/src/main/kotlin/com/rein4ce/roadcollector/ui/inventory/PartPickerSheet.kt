@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,13 +46,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Part
-import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.applyPartFilter
+import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
-import java.util.Locale
+import com.rein4ce.roadcollector.ui.common.partSizeText
+import kotlinx.coroutines.launch
 
 /**
  * 積む画面から開く「積むパーツを選ぶ」窓（下から出る）。コレクションに戻らずに、その場で積むパーツを選び直せる。
@@ -69,14 +72,13 @@ import java.util.Locale
 @Composable
 fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List<String>) -> Unit) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
-    val parts by repository.parts.collectAsStateWithLifecycle()
-    val savedOrder by repository.order.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
-    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    val shown = rememberArrangedParts(repository)
     // 並びと絞り込みは、コレクションと共通（設定に保存）。お気に入りには ★ を付ける
     val settings = RoadCollectorApp.from(LocalContext.current).settings
     val filter by settings.partFilter.collectAsStateWithLifecycle()
     val favorites by repository.favorites.collectAsStateWithLifecycle()
+    val parts by repository.parts.collectAsStateWithLifecycle()
     val visible = remember(shown, filter, weathers, favorites) {
         applyPartFilter(shown, filter, { repository.weatherOf(it.id, weathers)?.sky }, favorites)
     }
@@ -86,9 +88,11 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
     val have = shown.mapTo(HashSet()) { it.id }
     val valid = selected.filter { it in have }
 
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         containerColor = Fieldbook.Paper,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -123,7 +127,9 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).fieldbookGrid(clearings = false),
+                // 一覧は、見出しとボタンを置いた残りの高さに収める（決まった高さにすると、小さい画面や大きい文字で
+                // 窓に入りきらず、下の「選んだ n 本で積む」が切れて押せなくなる。#74 の A のレビュー）
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).fieldbookGrid(clearings = false),
             ) {
                 if (visible.isEmpty()) {
                     // 絞り込んだら何も残らなかった
@@ -153,7 +159,11 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
             }
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { onStart(valid) },
+                // 窓を閉じる動きが終わってから始める（Material3 の下から出る窓の作法。すぐ消すと、閉じる動き無しに消える）
+                onClick = {
+                    val picked = valid
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { onStart(picked) }
+                },
                 enabled = valid.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 48.dp),
@@ -172,7 +182,6 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
 @Composable
 private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, canSelect: Boolean, onToggle: () -> Unit) {
     val shape = RoundedCornerShape(4.dp)
-    val size = PartSize.of(part.distanceM)
     Column(
         modifier = Modifier
             .background(Fieldbook.Card, shape)
@@ -196,10 +205,12 @@ private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, ca
                 enabled = canSelect,
                 name = part.displayName,
                 onToggle = onToggle,
-                modifier = Modifier.align(Alignment.BottomEnd),
+                // 小さい図では、左下の縮尺の字と近くならないよう、丸を角へ少し寄せる
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp),
             )
         }
-        // 名前と、歩いた長さ・大きさ。お気に入りなら、コレクションのカードと同じ右下に黄色の ★（この窓では見るだけ）
+        // 名前と、歩いた長さ・大きさ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。
+        // お気に入りなら、コレクションのカードと同じ右下に黄色の ★（この窓では見るだけ）
         Box {
             Column(modifier = Modifier.padding(end = if (favorite) 18.dp else 0.dp)) {
                 Text(
@@ -211,11 +222,13 @@ private fun PickerCard(part: Part, sky: Sky?, favorite: Boolean, order: Int?, ca
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
-                Text(
-                    notes("${part.distanceM} m", "%.1f 倍".format(Locale.US, size), separator = "・"),
-                    fontFamily = Fieldbook.Data,
+                WalkNote(
+                    distanceM = part.distanceM,
+                    size = partSizeText(part.distanceM),
+                    date = null,
+                    weather = null,
                     fontSize = 10.sp,
-                    color = Fieldbook.Muted,
+                    separator = "・",
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 4.dp),
