@@ -378,13 +378,13 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
     }
 }
 
-/** 手持ちの「積む」ボタンと同じ見た目のボタン */
+/** コレクションの「積む」ボタンと同じ見た目のボタン（両端が丸い Material の標準の形。「パーツを選ぶ」の窓のボタンとも同じ） */
 @Composable
 private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(6.dp),
+        shape = ButtonDefaults.shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Fieldbook.Survey,
             contentColor = Color.White,
@@ -408,7 +408,8 @@ private fun DemoMenuButton(
         OutlinedButton(
             onClick = { open = true },
             enabled = enabled,
-            shape = RoundedCornerShape(6.dp),
+            // 隣の「記録開始」と同じ、両端が丸い形
+            shape = ButtonDefaults.outlinedShape,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
             border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
             modifier = Modifier.height(52.dp),

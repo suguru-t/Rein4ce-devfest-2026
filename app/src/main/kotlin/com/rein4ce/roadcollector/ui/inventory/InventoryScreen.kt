@@ -334,7 +334,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 }
             },
             enabled = editing || !selecting || validSelected.isNotEmpty(),
-            shape = RoundedCornerShape(6.dp),
+            // 角の丸い形（Material の標準）。積む画面の「パーツを選ぶ」の窓の「選んだ n 本で積む」と同じ形
+            shape = ButtonDefaults.shape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Fieldbook.Survey,
                 contentColor = Color.White,
