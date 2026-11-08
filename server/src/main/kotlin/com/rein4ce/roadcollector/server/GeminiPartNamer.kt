@@ -8,6 +8,7 @@ import com.google.genai.types.Schema
 import com.google.genai.types.ThinkingConfig
 import com.google.genai.types.ThinkingLevel
 import com.google.genai.types.Type
+import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.model.Part
 import java.net.URI
 import java.net.http.HttpClient
@@ -46,6 +47,11 @@ class GeminiPartNamer(
 
     /** 長すぎたときの聞き直し。前の案を見せて「短く」と頼む（NamingPrompt） */
     override suspend fun retryName(part: Part, tooLong: String): String? = generate(buildNamingPrompt(part, tooLong))
+
+    /** ニックネーム。返事の形（{"name": "..."}）と設定はパーツの名前と同じ */
+    override suspend fun nickname(hints: NicknameHints): String? = generate(buildNicknamePrompt(hints))
+
+    override suspend fun retryNickname(hints: NicknameHints, tooLong: String): String? = generate(buildNicknamePrompt(hints, tooLong))
 
     private suspend fun generate(prompt: String): String? = withContext(Dispatchers.IO) {
         val response = client.async.models

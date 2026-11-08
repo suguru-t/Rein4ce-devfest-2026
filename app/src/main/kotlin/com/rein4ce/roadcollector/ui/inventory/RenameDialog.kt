@@ -1,46 +1,38 @@
 package com.rein4ce.roadcollector.ui.inventory
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
+import com.rein4ce.roadcollector.ui.common.AiNamingRow
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
+import com.rein4ce.roadcollector.ui.common.fieldbookTextFieldColors
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
-import kotlinx.coroutines.launch
+import com.rein4ce.roadcollector.ui.common.rememberAiNaming
 
 /** 名前の長さの上限。命名 API と同じ（docs/decisions.md の 9 番）で、カードに収まる長さ */
 internal const val MAX_NAME_LENGTH = 10
@@ -75,24 +67,8 @@ internal fun RenameDialog(
     // 開いたらすぐ打てるように、入力欄にカーソルを置く（キーボードも出る）
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    // AI に名前を考えてもらっているところ（ダイアログを閉じると取りやめる）
-    val scope = rememberCoroutineScope()
-    var asking by remember { mutableStateOf(false) }
-    var aiResult by remember { mutableStateOf<AiResult?>(null) }
-    fun ask() {
-        asking = true
-        aiResult = null
-        scope.launch {
-            val name = suggest(part)
-            asking = false
-            if (name != null) {
-                text = TextFieldValue(name, selection = TextRange(name.length))
-                aiResult = AiResult.Named
-            } else {
-                aiResult = AiResult.Failed
-            }
-        }
-    }
+    // AI に名前を考えてもらっているところ（ダイアログを閉じると取りやめる。ui/common/NameField.kt）
+    val naming = rememberAiNaming()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -107,6 +83,8 @@ internal fun RenameDialog(
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
+                    // AI に聞いている間は打てなくする（届いた案で、待っている間に打った字を上書きしないように）
+                    readOnly = naming.asking,
                     singleLine = true,
                     label = { Text("名前") },
                     placeholder = { Text(fallback) },
@@ -125,43 +103,19 @@ internal fun RenameDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { if (!tooLong) onSave(text.text) }),
                     shape = RoundedCornerShape(4.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Fieldbook.Ink,
-                        unfocusedTextColor = Fieldbook.Ink,
-                        errorTextColor = Fieldbook.Ink,
-                        focusedContainerColor = Fieldbook.Card,
-                        unfocusedContainerColor = Fieldbook.Card,
-                        errorContainerColor = Fieldbook.Card,
-                        cursorColor = Fieldbook.Survey,
-                        errorCursorColor = Fieldbook.Danger,
-                        focusedBorderColor = Fieldbook.Survey,
-                        unfocusedBorderColor = Fieldbook.CardEdge,
-                        errorBorderColor = Fieldbook.Danger,
-                        focusedLabelColor = Fieldbook.Survey,
-                        unfocusedLabelColor = Fieldbook.Muted,
-                        errorLabelColor = Fieldbook.Danger,
-                        focusedPlaceholderColor = Fieldbook.Mark,
-                        unfocusedPlaceholderColor = Fieldbook.Mark,
-                        focusedSupportingTextColor = Fieldbook.Muted,
-                        unfocusedSupportingTextColor = Fieldbook.Muted,
-                        errorSupportingTextColor = Fieldbook.Danger,
-                    ),
+                    colors = fieldbookTextFieldColors(),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 )
                 // 設定で AI の名前付けをオフにしていたら、ボタンを出さない
                 if (aiOn) {
-                    AiNameButton(asking = asking, again = aiResult == AiResult.Named, onClick = ::ask)
-                    Text(
-                        when (aiResult) {
-                            AiResult.Named -> notes("AI の案です", "直してから保存もできます")
-                            AiResult.Failed -> notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください")
-                            null -> notes("場所は送らず、形・距離・日時で考えます")
+                    AiNamingRow(
+                        naming = naming,
+                        enabled = true,
+                        idleNote = notes("歩いた場所（位置）は送らず、形・距離・日時で考えます"),
+                        failedNote = notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください"),
+                        onAsk = {
+                            naming.ask(suggest = { suggest(part) }) { name -> text = TextFieldValue(name, selection = TextRange(name.length)) }
                         },
-                        style = noteStyle,
-                        fontSize = 12.sp,
-                        color = if (aiResult == AiResult.Failed) Fieldbook.Danger else Fieldbook.Muted,
-                        // 結果は入力欄の外に出るので、読み上げでも知らせる
-                        modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
             }
@@ -175,26 +129,4 @@ internal fun RenameDialog(
             PressTextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
         },
     )
-}
-
-/** AI に名前を考えてもらった結果 */
-private enum class AiResult { Named, Failed }
-
-/** 「AI に考えてもらう」ボタン。考えている間は押せず、「考え中…」と回る印を出す */
-@Composable
-private fun AiNameButton(asking: Boolean, again: Boolean, onClick: () -> Unit) {
-    PressTextButton(onClick = onClick, enabled = !asking) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (asking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Fieldbook.Survey)
-            Text(
-                when {
-                    asking -> "考え中…"
-                    again -> "AI にもう一度考えてもらう"
-                    else -> "AI に考えてもらう"
-                },
-                color = if (asking) Fieldbook.Muted else Fieldbook.Survey,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
 }

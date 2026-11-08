@@ -84,9 +84,13 @@ gcloud run services describe road-collector \
 curl -s $U/health                      # ok
 curl -s $U/towers                      # 一覧（JSON）。Firestore 化後は再デプロイしても消えない
 
-# 命名（名前が返る。503 ならサーバのログで「パーツの命名が時間切れ／に失敗／なし」のどれかを見る）
+# 命名（名前が返る。503 ならサーバのログで「パーツの名前を考えるのが時間切れ」「〜に失敗」「パーツの名前なし」「聞き直してもパーツの名前が長すぎる」のどれかを見る）
 curl -s -X POST $U/parts/name -H "Content-Type: application/json" \
   -d '{"id":"p1","points":[{"x":-0.5,"y":0},{"x":0,"y":0.3},{"x":0.5,"y":0}],"kind":"ZIGZAG","distanceM":820,"walkedAt":1793952000000}'
+
+# ニックネームの案（名前が返る。503 ならサーバのログで「ニックネームを考えるのが時間切れ」「〜に失敗」「ニックネームなし」「聞き直してもニックネームが長すぎる」のどれかを見る）
+curl -s -X POST $U/nickname -H "Content-Type: application/json" \
+  -d '{"partNames":["晩秋のジグザグ","深夜の縦線"],"partCount":5,"totalDistanceM":2400}'
 
 # エラーのログが出ていないか。このサーバのログは素のテキスト（logback）で severity が付かないので、
 # 本文の ERROR / WARN も検索する。WARN も混ざるので、出ただけで失敗と決めず中身を見る
