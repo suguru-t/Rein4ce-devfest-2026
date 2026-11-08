@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartNameResponse
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.contentLength
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -51,9 +52,16 @@ fun Route.partRoutes(namer: PartNamer) {
      *   リクエスト：NicknameHints（JSON）。手がかりはパーツの名前・本数・合計距離だけ
      *   200 { "name": "..." }   考えられた（12 文字以内）
      *   400                     NicknameHints として読めない、数が変（負の数・多すぎる名前）
+     *   413                     大きすぎる（16 KB を超える）
      *   503                     考えられなかった（時間切れ、Gemini の失敗、命名が無効）。アプリは入力欄をそのままにする
      */
     post("/nickname") {
+        // 受け取る大きさの上限（名前 50 個ぶんでも数 KB。それより大きいものは読まない。#81 のレビュー）
+        val size = call.request.contentLength()
+        if (size != null && size > MAX_NICKNAME_BODY_BYTES) {
+            call.respond(HttpStatusCode.PayloadTooLarge, "body too large")
+            return@post
+        }
         val hints = try {
             call.receive<NicknameHints>()
         } catch (e: CancellationException) {
@@ -77,6 +85,9 @@ fun Route.partRoutes(namer: PartNamer) {
         call.respond(PartNameResponse(name))
     }
 }
+
+/** POST /nickname で受け付ける大きさの上限 [バイト] */
+const val MAX_NICKNAME_BODY_BYTES = 16_384L
 
 /** POST /nickname で受け付ける数の上限（いたずらで大きなデータを送られて、Gemini への指示文が長くならないように） */
 const val MAX_HINT_NAMES = 50

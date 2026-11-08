@@ -93,15 +93,24 @@ internal fun buildNicknamePrompt(hints: NicknameHints, tooLong: String? = null):
 
 /**
  * 受け取った手がかりの掃除：名前は前後の空白と改行を取り、空と重複を除いて、先頭から [NicknameHints.MAX_PART_NAMES] 個まで。
- * 1 つの名前が [MAX_HINT_NAME_LENGTH] 文字を超えたら、その名前は使わない（指示文を長くしすぎないため）
+ * - 1 つの名前が [MAX_HINT_NAME_LENGTH] 文字を超えたら、その名前は使わない（指示文を長くしすぎないため）。
+ *   空白をまとめる前に、元の長さでも先にはじく（大きな文字を送られても、そのぶん処理しないように。#81 のレビュー）
+ * - かぎ括弧と引用符は取る（指示文では名前をかぎ括弧で囲んで渡すので、名前の中のかぎ括弧で指示を書き換えにくくする。#81 のレビュー）
  */
 internal fun cleanNicknameHints(hints: NicknameHints): NicknameHints = hints.copy(
     partNames = hints.partNames
-        .map { it.replace(Regex("\\s+"), " ").trim() }
+        .asSequence()
+        .filter { it.length <= MAX_HINT_NAME_LENGTH * 4 }
+        .map { it.replace(HINT_QUOTES, "").replace(WHITESPACE, " ").trim() }
         .filter { it.isNotEmpty() && nameLength(it) <= MAX_HINT_NAME_LENGTH }
         .distinct()
-        .take(NicknameHints.MAX_PART_NAMES),
+        .take(NicknameHints.MAX_PART_NAMES)
+        .toList(),
 )
+
+/** 名前の中の空白・改行（1 つにまとめる）と、かぎ括弧・引用符（取る）。名前ごとに作り直さないよう 1 つずつ作っておく */
+private val WHITESPACE = Regex("\\s+")
+private val HINT_QUOTES = Regex("[「」『』\"“”'‘’]")
 
 /** 手がかりに使うパーツの名前の長さの上限（アプリのパーツの名前は 10 文字まで。少し余裕を持たせる） */
 internal const val MAX_HINT_NAME_LENGTH = 20
