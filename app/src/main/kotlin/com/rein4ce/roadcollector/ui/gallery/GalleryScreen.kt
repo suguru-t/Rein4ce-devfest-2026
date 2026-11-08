@@ -1,18 +1,24 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -20,22 +26,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -49,17 +52,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,58 +69,132 @@ import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import com.rein4ce.roadcollector.ui.inventory.dashedOutline
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
-import kotlin.math.roundToInt
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
- * 見た目は他の画面と同じ「測量野帳」（Fieldbook.kt）。見出しはコレクション（B）と同じ形：
- * 小さな「みんなのタワー」の下に、いちばん高いタワーの高さを大きく出し、その下にタワーの数。
- * 背景には採集画面と同じく今の天気が出る（ui/weather/WeatherLayer）ので、見出しの字の行ごとに紙の色を敷く（決定 26）。
+ * みんなのタワー（C）。見た目は「測量野帳」（Fieldbook.kt）で、記憶に残る要素は**断面図**（TowerSection.kt）：
+ * 物差し（高い順＝高さ、多い順＝パーツ数）ごとに、**1 番のタワーと自分のいちばん良いタワーの 2 基**を同じ縮尺で
+ * 1 本の台に並べ、左に標尺、いちばん高い記録に赤鉛筆の線。絵がそのまま差を語る。
  *
- * 方眼の上に、タワーを 1 基ずつ紙片として並べる。一度に出すのは [PAGE_SIZE] 基までで、多いときは下の「前へ」「次へ」でめくる。
- * 並びは見出しの下の札で選ぶ（高い順・新しい順・パーツ数）。カードの番号はいまの並びの上から 1、2、3 で、
- * 1 番には並びに合わせた札（最長・最新・最多）が付く。
- * タワーをタップすると、サーバの共有ページ（LINE / X に貼るのと同じもの）をブラウザで開く。
+ * - 主役は「あなたの最高（最多）」と「最長（最多）まで あと いくつ」
+ * - 青は押せるものだけ（切り替え・ボタン）。強調は道の色（あなた）と赤鉛筆（記録）の 2 本
+ * - 全部のタワーは「ランキングを見る」で別の画面（RankingScreen.kt。紙片の一覧、5 個ずつ）。戻るで帰る
+ * - タワーを押すと、下から紙片がせり上がる（アプリの中で完結）。外に出るのは「共有ページを開く」を押したときだけ
+ * - 動きは開いたときに一度だけ（標尺が伸び、タワーが台から立つ）。端末でアニメーションを切っている人には動かさない
  */
 @Composable
 fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.current).gallery) {
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val app = RoadCollectorApp.from(context)
     val state = gallery.state
     val towers = (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
-    // このスマホから送信したタワーの id（data/MyTowers）。カードに「あなた」の札を出す
-    val mine by RoadCollectorApp.from(LocalContext.current).myTowers.ids.collectAsStateWithLifecycle()
+    // 自分のタワー：サーバの答え（持ち主の印が同じ）か、この端末から送った記録（data/MyTowers）のどちらか
+    val local by app.myTowers.ids.collectAsStateWithLifecycle()
+    val isMine: (TowerSummary) -> Boolean = { it.mine || it.id in local }
+    val nickname by app.settings.nickname.collectAsStateWithLifecycle()
 
-    // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。積んで送信した直後に来ても、押さずに新しいタワーが出る。
-    // 起動時の先読み（TowerGallery.prefetch）がまだ走っていれば止めずに待ち、その結果を先に出す
+    // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。起動時の先読み（TowerGallery.prefetch）が
+    // まだ走っていれば止めずに待ち、その結果を先に出す
     LaunchedEffect(Unit) { gallery.refresh() }
 
-    // 並び順とページ。タブを行き来しても、画面を回しても残す
+    // 物差し（高い順・多い順）と、どの画面を開いているか（最初の画面・ランキング・あなたのタワー）。タブを行き来しても、画面を回しても残す
     var sort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
-    var page by rememberSaveable { mutableIntStateOf(0) }
-    val sorted = remember(towers, sort) { sortTowers(towers, sort) }
-    val pages = pageCount(sorted.size)
-    // 取り直してタワーが減り、見ていたページが無くなったら最後のページへ
-    val current = page.coerceIn(0, (pages - 1).coerceAtLeast(0))
-    LaunchedEffect(current) { page = current }
-    val shown = pageOf(sorted, current)
+    // 「あなたのタワー」の並びは別に持つ（ここだけ新しい順も選べるので、断面図の物差しと混ぜない）
+    var mineSort by rememberSaveable { mutableStateOf(TowerSort.NEWEST) }
+    // ほかのタブ（記録・コレクション・積む）に移って戻ってきたときは、ランキングや「あなたのタワー」ではなく最初の画面から。
+    // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、最初の画面に戻る）
+    var page by remember { mutableStateOf(GalleryPage.OVERVIEW) }
+    BackHandler(enabled = page != GalleryPage.OVERVIEW) { page = GalleryPage.OVERVIEW }
 
-    // 一覧の位置。並びやページを変えたら上から。取り直して新しいタワーが①に入ったとき、上のほうを見ていたなら①から見せる。
-    // 一覧を残したまま取り直すので同じ LazyColumn が使われ続け、項目に key を付けていると Compose は
-    // 「見えていた項目」を先頭に残す。何もしないと前の①が先頭のままで、新しい①は画面の上に隠れる（#49 のレビュー）
-    val listState = rememberLazyListState()
-    LaunchedEffect(sort, current) { listState.scrollToItem(0) }
-    LaunchedEffect(shown.firstOrNull()?.id) {
-        if (listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+    // 紙片を開いているタワーと、ニックネームの窓
+    var opened by remember { mutableStateOf<TowerSummary?>(null) }
+    var showNickname by remember { mutableStateOf(false) }
+
+    when (page) {
+        GalleryPage.OVERVIEW -> Overview(
+            gallery = gallery,
+            towers = towers,
+            isMine = isMine,
+            sort = sort,
+            onSort = { sort = it },
+            openedId = opened?.id,
+            onOpen = { opened = it },
+            onRanking = { page = GalleryPage.RANKING },
+            onMine = { page = GalleryPage.MINE },
+            nicknameMissing = nickname.isBlank(),
+            onNickname = { showNickname = true },
+        )
+        GalleryPage.RANKING, GalleryPage.MINE -> RankingScreen(
+            gallery = gallery,
+            towers = towers,
+            isMine = isMine,
+            mineOnly = page == GalleryPage.MINE,
+            sort = if (page == GalleryPage.MINE) mineSort else sort,
+            onSort = { if (page == GalleryPage.MINE) mineSort = it else sort = it },
+            onBack = { page = GalleryPage.OVERVIEW },
+            onOpen = { opened = it },
+        )
+    }
+
+    opened?.let { t ->
+        TowerSheet(
+            tower = t,
+            sketch = gallery.sketches[t.id],
+            mine = isMine(t),
+            onDismiss = { opened = null },
+        )
+    }
+    // ニックネームの窓を直接開く（設定の窓をまるごと開くより 1 回で済む）。設定の中のものと同じ窓
+    if (showNickname) {
+        NicknameDialog(
+            current = nickname,
+            onSave = { app.settings.setNickname(it); showNickname = false },
+            onDismiss = { showNickname = false },
+        )
+    }
+}
+
+/** 「みんな」の中の画面。最初の画面（断面図）から、ランキングと「あなたのタワー」へ行き、戻るで帰る */
+private enum class GalleryPage { OVERVIEW, RANKING, MINE }
+
+/** 「みんな」の最初の画面：見出し、物差しの切り替え、断面図（1 番と自分）、2 基の行、「ランキングを見る」「あなたのタワー」 */
+@Composable
+private fun Overview(
+    gallery: TowerGallery,
+    towers: List<TowerSummary>,
+    isMine: (TowerSummary) -> Boolean,
+    sort: TowerSort,
+    onSort: (TowerSort) -> Unit,
+    openedId: String?,
+    onOpen: (TowerSummary) -> Unit,
+    onRanking: () -> Unit,
+    onMine: () -> Unit,
+    nicknameMissing: Boolean,
+    onNickname: () -> Unit,
+) {
+    val state = gallery.state
+    // 自分のかどうか（isMine）は見ている間に変わりうるので、remember せず毎回選ぶ（軽い処理）
+    val cmp = comparison(towers, sort, isMine)
+    val record = towers.maxOfOrNull { it.height } ?: 0f
+    // 断面図に出す 2 基の絵を取る（一覧の JSON には置き方が入っていない）
+    LaunchedEffect(cmp) { listOfNotNull(cmp.top, cmp.mine).forEach { gallery.loadSketch(it.id) } }
+
+    // 開いたときの演出：標尺が伸び、タワーが台から立つ。アプリを立ち上げてから一度だけ。
+    // アニメーションを切っている人には動かさない
+    val reduceMotion = rememberReduceMotion()
+    val intro = remember { Animatable(if (SectionIntro.played || reduceMotion) 1f else 0f) }
+    LaunchedEffect(towers.isNotEmpty()) {
+        if (towers.isNotEmpty() && intro.value < 1f) {
+            intro.animateTo(1f, tween(durationMillis = 900, easing = FastOutSlowInEasing))
+            SectionIntro.played = true
+        }
     }
 
     // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
@@ -130,45 +203,17 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        GalleryMeter(
-            top = sorted.firstOrNull(),
-            total = towers.size,
-            sort = sort,
-            isLoaded = state is TowerGallery.State.Loaded,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        // 案内の行：普段はタップの説明。裏で取り直しているときは青い点と「更新中」、取り直せなかったときは赤い点。
-        // 右はリロードの印（押すと取り直す）
-        val status = when {
-            state is TowerGallery.State.Loading -> StatusLine("サーバから読み込み中…", Fieldbook.Survey)
-            state is TowerGallery.State.Error -> StatusLine("サーバに接続できません", Fieldbook.Danger)
-            gallery.refreshing -> StatusLine("更新中…", Fieldbook.Survey)
-            gallery.refreshFailed -> StatusLine("取り直せませんでした（前の一覧のまま）", Fieldbook.Danger)
-            else -> null
-        }
-        Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                // 字の幅だけ紙の色を敷く（ui/common/PaperBand。字が方眼の線や天気にかぶって読みにくいため）
-                modifier = Modifier
-                    .weight(1f)
-                    .wrapContentWidth(Alignment.Start)
-                    .paperBand()
-                    // 少しあとから変わるので、読み上げでも知らせる
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-            ) {
-                if (status != null) {
-                    Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    status?.text ?: notes("タップで共有ページを開く", "LINE や X に貼れる"),
-                    style = noteStyle,
-                    fontSize = 12.sp,
-                    color = Fieldbook.Muted,
-                )
-            }
+        // 画面名（野帳にマーカーで線を引いたように）と、右にリロードの印
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "みんなのタワー",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = Fieldbook.Ink,
+                modifier = Modifier.paperBand().marker(),
+            )
+            Spacer(Modifier.weight(1f))
             PressIconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
                 Icon(
                     Icons.Filled.Refresh,
@@ -178,12 +223,16 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
             }
         }
 
+        GalleryHero(state = state, cmp = cmp, sort = sort, reduceMotion = reduceMotion)
+
+        // 状態の行：読み込み中・つながらない・更新中・取り直せなかった、のときだけ出す（ランキングと共通）
+        GalleryStatusRow(gallery)
+
         when (state) {
             TowerGallery.State.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Fieldbook.Survey)
             }
-            // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明（手元のサーバの使い方）は出さない。
-            // 手元のサーバにつなぐ方法は README「サーバの接続先」にある
+            // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明は出さない（手元のサーバの使い方は README）
             is TowerGallery.State.Error -> Note {
                 Text("少し待って、右上のリロードの印を押してください。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
                 Text("電波のない場所か、サーバが起動中かもしれません。", fontSize = 12.sp, color = Fieldbook.Muted)
@@ -191,193 +240,227 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
             is TowerGallery.State.Loaded -> if (towers.isEmpty()) {
                 Note {
                     Text("まだタワーがありません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                    Text("積んで「サーバに送信」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                    Text("積んで「サーバに送信」すると、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
                 }
             } else {
-                SortRow(sort = sort, onSelect = { sort = it; page = 0 })
-                val tallest = towers.maxOf { it.height }.coerceAtLeast(0.01f)
-                // 5 基が「前へ」「次へ」の上にちょうど収まるよう、カードの間と上下の余白は詰めてある
-                // （下の余白があると、5 基目の下の縁が「次へ」の行に隠れて切れて見えた）
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(top = 2.dp, bottom = 2.dp),
-                ) {
-                    itemsIndexed(shown, key = { _, t -> t.id }, contentType = { _, _ -> "tower" }) { i, t ->
-                        // 絵の中身はカードが見えたときに取る（一覧の JSON には入っていない）
-                        LaunchedEffect(t.id) { gallery.loadSketch(t.id) }
-                        TowerCard(
-                            tower = t,
-                            sketch = gallery.sketches[t.id],
-                            // 番号はいまの並びの上から（2 ページ目は 6 から）。1 番には並びに合わせた札（最長・最新・最多）
-                            rank = current * PAGE_SIZE + i + 1,
-                            sort = sort,
-                            // サーバの答え（持ち主の印が同じ）か、この端末から送った記録のどちらかなら「あなた」
-                            mine = t.mine || t.id in mine,
-                            ratio = t.height / tallest,
-                            onClick = { uriHandler.openUri("${ApiClient.baseUrl}/towers/${t.id}") },
+                SortTabs(sort = sort, options = TowerSort.COMPARABLE, onSelect = onSort)
+                // 左：その物差しで 1 番。右：自分のいちばん良いタワー（自分が 1 番なら、他人で 1 番のタワー。その順位を呼び名に）
+                val slots = listOf(
+                    SectionSlot(
+                        tower = cmp.top,
+                        caption = if (cmp.mineIsTop) "${sort.topLabel}・あなた" else sort.topLabel,
+                        mine = cmp.mineIsTop,
+                    ),
+                    SectionSlot(
+                        tower = cmp.mine,
+                        caption = if (cmp.mineIsTop) "${cmp.otherRank ?: 2} 番目" else "あなた",
+                        mine = !cmp.mineIsTop && cmp.mine != null,
+                        emptyNote = "まだありません",
+                    ),
+                )
+                // 残りの高さは、下のボタン 2 つが先に取り、残り全部をこの Box（断面図・2 行・案内）に渡す。
+                // 断面図は Box の中で、2 行と案内を引いた残り（上限 SECTION_HEIGHT）まで伸びる。上限を超えて余った分は
+                // Box の下の空き（案内とボタンのあいだ）になる。前は断面図と空きを Column の weight で 3 対 1 に分けていたので、
+                // 足りないときも空きが先に 1/4 を取って断面図が縮みすぎていた（#68 のレビュー）
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        TowerSection(
+                            slots = slots,
+                            sketches = gallery.sketches,
+                            record = record,
+                            selected = openedId,
+                            progress = { intro.value },
+                            onTap = onOpen,
+                            // weight は fill=false にして（fill=true だと高さが決め打ちの制約になり、heightIn(max) が効かない）、
+                            // 上限を掛けたあとに fillMaxHeight で「残りか上限の小さいほう」の高さを取る
+                            // （Canvas の中身は Spacer なので、高さが決まった制約でないと 0 になる）。
+                            // とても低くなったら（80dp を切る）描かず、下の 2 行だけになる
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .heightIn(max = SECTION_HEIGHT)
+                                .fillMaxHeight()
+                                .paperBand(bleedX = 8.dp, bleedY = 6.dp),
                         )
+                        Spacer(Modifier.height(6.dp))
+                        // 断面図の 2 基を 1 行ずつ（押すと紙片）
+                        slots.forEach { s ->
+                            val t = s.tower ?: return@forEach
+                            TowerRow(label = s.caption, tower = t, mine = isMine(t), sort = sort, onClick = { onOpen(t) })
+                        }
+                        // ニックネームを付けていない自分のタワーがあるときだけ、一言。押すとニックネームの窓。
+                        // 作者名は送るときにタワーに入るので、付けても今までのタワーは名無しのまま（文もそう書く）
+                        if (nicknameMissing && towers.any { isMine(it) && it.author.isNullOrBlank() }) {
+                            PressTextButton(onClick = onNickname, modifier = Modifier.padding(top = 2.dp)) {
+                                Text("名前を付けると、次に送るタワーから名前が出ます", color = Fieldbook.Survey, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
-                if (pages > 1) {
-                    PagerRow(page = current, pages = pages, total = sorted.size, onPage = { page = it })
+                // 自分のタワーだけの一覧（送っていなければ「まだ送っていません」の案内が出る）。
+                // ボタンの高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
+                val mineCount = towers.count(isMine)
+                PressOutlinedButton(
+                    onClick = onMine,
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, Fieldbook.Survey),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text("あなたのタワー（$mineCount 個）", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                PressButton(
+                    onClick = onRanking,
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) {
+                    Text("ランキングを見る（${towers.size} 個）", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
+/** 開いたときの演出を、アプリを立ち上げてから一度だけにするための覚え */
+private object SectionIntro {
+    var played = false
+}
+
 /**
- * 見出し。コレクションの見出し（CollectionMeter）と同じ形：小さな画面名の下に、並びに合わせた 1 番の値を大きく出し
- * （高い順は「最長 3.45 m」、新しい順は「最新 11/7 10:16」、パーツ数は「最多 5 本」）、その下に「合計 6 個」。読み込み中は数字を出さない。
- * 字の行ごとに紙の色を敷く（背景に天気が出るので、字が方眼や雨にかぶらないように。決定 26）
+ * 見出しの主役：物差しに合わせて「あなたの最高 2.30 m」「最長まで あと 1.15 m」（多い順なら「あなたの最多 4 本」「最多まで あと 1 本」）。
+ * 自分が 1 番なら「あなたが最長です」。まだ送っていなければ、その旨と、送るとここに立つこと。
+ * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryMeter(top: TowerSummary?, total: Int, sort: TowerSort, isLoaded: Boolean, modifier: Modifier = Modifier) {
-    // 並びごとに、1 番のタワーの「その値」を出す：高い順は高さ [m]、パーツ数は本数、新しい順は日時（数字は回さない）
-    val target: Float = when (sort) {
-        TowerSort.HEIGHT -> top?.height ?: 0f
-        TowerSort.PARTS -> top?.partCount?.toFloat() ?: 0f
-        TowerSort.NEWEST -> 0f
-    }
-    // 数字はメーターのように 0 から回って上がる（開くたび・並びを変えたとき・取り直して伸びたとき）。
-    // アニメーションを切っている人には回さず、すぐ出す
-    val context = LocalContext.current
-    val reduceMotion = rememberReduceMotion()
-    val shown = remember { Animatable(0f) }
-    LaunchedEffect(sort, target) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, reduceMotion: Boolean) {
+    val isLoaded = state is TowerGallery.State.Loaded
+    val isError = state is TowerGallery.State.Error
+    val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
+    val myValue = myTower?.let { sort.valueOf(it) }
+    val topValue = cmp.top?.let { sort.valueOf(it) } ?: 0f
+    val none = isLoaded && myTower == null
+    // 数字はコレクションの合計距離と同じく、メーターのように 0 から回って上がる（開いたとき・物差しを変えたとき。
+    // 取り直して値が変わったときは今の値から）。アニメーションを切っている人には回さず、すぐ出す
+    val meter = remember { Animatable(0f) }
+    val lastSort = remember { arrayOf(sort) }
+    LaunchedEffect(sort, myValue) {
+        if (myValue == null) return@LaunchedEffect
         if (reduceMotion) {
-            shown.snapTo(target)
-        } else {
-            shown.snapTo(0f)
-            shown.animateTo(target, tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
+            meter.snapTo(myValue)
+            return@LaunchedEffect
         }
+        if (lastSort[0] != sort) {
+            lastSort[0] = sort
+            meter.snapTo(0f)
+        }
+        meter.animateTo(myValue, tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
     }
-    // 大きな字と、その右の小さな字（単位。新しい順は時刻）。読み上げ用の言い方も一緒に
-    val big: String
-    val small: String
-    val spoken: String
-    when (sort) {
-        TowerSort.HEIGHT -> {
-            big = if (top != null) "%.2f".format(Locale.US, shown.value) else "—"
-            small = "m"
-            spoken = "最長 ${top?.let { "%.2f".format(Locale.US, it.height) }} メートル"
-        }
-        TowerSort.PARTS -> {
-            big = if (top != null) "${shown.value.roundToInt()}" else "—"
-            small = "本"
-            spoken = "最多 ${top?.partCount} 本"
-        }
-        TowerSort.NEWEST -> {
-            big = top?.let { formatDay(it.createdAt) } ?: "—"
-            small = top?.let { formatTime(it.createdAt) } ?: ""
-            spoken = "最新 ${top?.let { formatDate(it.createdAt) }}"
-        }
+    val label = if (none) "まだ送っていません" else if (sort == TowerSort.HEIGHT) "あなたの最高" else "あなたの最多"
+    // つながらないときは、下の状態の行と同じ言葉にする（「読み込み中」のままだと食い違って見える）
+    val sub = when {
+        isError -> "サーバに接続できません"
+        !isLoaded -> "読み込み中…"
+        myValue == null -> "積んで「サーバに送信」すると、ここに立ちます"
+        cmp.mineIsTop -> "あなたが${sort.topLabel}です"
+        else -> "${sort.topLabel}まで あと ${sort.format(topValue - myValue)} ${sort.unit}"
     }
     Column(
-        modifier = modifier.semantics(mergeDescendants = true) {
+        modifier = Modifier.semantics(mergeDescendants = true) {
             contentDescription = when {
-                !isLoaded -> "みんなのタワー。読み込み中"
-                top == null -> "みんなのタワー。まだタワーがありません"
-                else -> "みんなのタワー。$spoken。合計 $total 個"
+                isError -> "$label。サーバに接続できません"
+                !isLoaded -> "読み込み中"
+                myValue == null -> "$label。$sub"
+                else -> "$label ${sort.format(myValue)} ${if (sort == TowerSort.HEIGHT) "メートル" else "本"}。$sub"
             }
         },
     ) {
-        // 画面名：野帳にマーカーで線を引いたように、字の下半分に道の色（オレンジ）を透かして敷く
-        Text(
-            "みんなのタワー",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp,
-            color = Fieldbook.Ink,
-            modifier = Modifier.paperBand().marker(),
-        )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
-            // 並びに合わせた札（最長・最新・最多）。1 番のカードにも同じ札が付く
-            Tag(sort.topLabel, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp, bottom = 10.dp))
             Text(
-                big,
-                fontFamily = Fieldbook.Data,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp,
-                color = Fieldbook.Ink,
-                maxLines = 1,
-                softWrap = false,
-            )
-            Text(
-                small,
-                fontFamily = Fieldbook.Data,
-                fontSize = 18.sp,
+                label,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Fieldbook.Ink,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
+                modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 7.dp),
             )
+            if (!none) {
+                Text(
+                    if (myValue != null) sort.format(meter.value) else "—",
+                    fontFamily = Fieldbook.Data,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp,
+                    color = Fieldbook.Ink,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Text(
+                    sort.unit,
+                    fontFamily = Fieldbook.Data,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Fieldbook.Ink,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                )
+            }
         }
-        Text(
-            if (isLoaded) notes("合計 $total 個") else "読み込み中…",
-            style = noteStyle,
-            fontSize = 13.sp,
-            color = Fieldbook.Ink,
-            modifier = Modifier.paperBand(),
-        )
+        Text(sub, style = noteStyle, fontSize = 13.sp, color = Fieldbook.Ink, modifier = Modifier.paperBand())
     }
 }
 
-/** 野帳にマーカーで引いた線：字の下半分に、道の色（オレンジ）を透かして敷く。字の左右に少しはみ出す */
-private fun Modifier.marker(): Modifier = drawBehind {
-    val bleed = 4.dp.toPx()
-    val top = size.height * 0.45f
-    drawRoundRect(
-        color = Fieldbook.Road.copy(alpha = 0.4f),
-        topLeft = Offset(-bleed, top),
-        size = Size(size.width + bleed * 2, size.height - top),
-        cornerRadius = CornerRadius(2.dp.toPx()),
-    )
-}
-
-/** 色で塗った小さな札（測量の青の「最長」、道の色の「あなた」）。白い字。見出しとカードで同じ形 */
-@Composable
-private fun Tag(text: String, fontSize: TextUnit, modifier: Modifier = Modifier, color: Color = Fieldbook.Survey) {
-    Text(
-        text,
-        color = Color.White,
-        fontSize = fontSize,
-        fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        modifier = modifier
-            .background(color, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    )
-}
-
 /**
- * 高さの順位の丸。1〜3 位は測量の青で塗って白い数字、4 位からは細い縁だけ（コレクションの「選ぶ丸」と同じ形）。
- * 丸の大きさは決まっているので、数字は文字の大きさの設定で大きくしない（大きくすると丸からはみ出す）
+ * 断面図の下の 1 行：呼び名（最長・あなた）、高さ、パーツ数、作者、日時。紙片（カード）にはせず、薄い線で区切る。
+ * 押すと紙片が開く。物差しに合わせて、多い順ならパーツ数を墨で
  */
 @Composable
-private fun RankMark(rank: Int, modifier: Modifier = Modifier) {
-    val top = rank in 1..3
-    val numberSize = with(LocalDensity.current) { (if (rank >= 100) 11.dp else 14.dp).toSp() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(if (top) Fieldbook.Survey else Color.Transparent)
-            .border(1.5.dp, if (top) Fieldbook.Survey else Fieldbook.Muted, CircleShape),
+private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: TowerSort, onClick: () -> Unit) {
+    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
+    val heightText = "%.2f".format(Locale.US, tower.height)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .clickable(onClickLabel = "詳しく見る", onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$label。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
+            }
+            .drawBehind { drawLine(Fieldbook.GridMajor, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
+            .paperBand(bleedX = 4.dp, bleedY = 0.dp)
+            .padding(horizontal = 4.dp),
     ) {
+        // 幅を決めずに、左は呼び名と注記（作者だけ「…」で詰める）、右は高さ。文字を大きくしても切れない
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (mine) Fieldbook.RoadCasing else Fieldbook.Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    notes("${tower.partCount} 本") + " ・ ",
+                    style = noteStyle,
+                    fontSize = 12.sp,
+                    fontWeight = if (sort == TowerSort.PARTS) FontWeight.Bold else FontWeight.Normal,
+                    color = if (sort == TowerSort.PARTS) Fieldbook.Ink else Fieldbook.Muted,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Text(author, fontSize = 12.sp, color = Fieldbook.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(" ・ " + notes(formatDate(tower.createdAt)), style = noteStyle, fontSize = 12.sp, color = Fieldbook.Muted, maxLines = 1, softWrap = false)
+            }
+        }
         Text(
-            "$rank",
-            color = if (top) Color.White else Fieldbook.Muted,
+            "$heightText m",
             fontFamily = Fieldbook.Data,
-            fontSize = numberSize,
-            lineHeight = numberSize,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
+            color = Fieldbook.Ink,
             maxLines = 1,
             softWrap = false,
         )
@@ -385,138 +468,75 @@ private fun RankMark(rank: Int, modifier: Modifier = Modifier) {
 }
 
 /**
- * 並び順を選ぶ札の列（高い順・新しい順・パーツ数）。コレクションの「選択」ボタンと同じ、測量の青の細い縁の小さな丸い札。
- * 選んでいる札は青く塗る。読み上げではラジオボタンの組として伝える
+ * タワー 1 個の紙片（下からせり上がる）。大きな絵、高さ、パーツ数、作者、日時。
+ * ボタンは「共有ページを開く」（ブラウザ）と「リンクをコピー」。コピーしたら同じ言葉で知らせる
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SortRow(sort: TowerSort, onSelect: (TowerSort) -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TowerSort.entries.forEach { s ->
-            val selected = s == sort
-            val source = remember { MutableInteractionSource() }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .heightIn(min = 40.dp)
-                    .pressFeel(source)
-                    .selectable(
-                        selected = selected,
-                        interactionSource = source,
-                        indication = LocalIndication.current,
-                        role = Role.RadioButton,
-                        onClick = { onSelect(s) },
-                    )
-                    .semantics { contentDescription = s.spoken },
-            ) {
-                Text(
-                    s.label,
-                    color = if (selected) Color.White else Fieldbook.Survey,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .background(if (selected) Fieldbook.Survey else Fieldbook.Card, shape)
-                        .border(1.dp, Fieldbook.Survey, shape)
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                )
-            }
-        }
-    }
-}
-
-/**
- * 下の「前へ」「次へ」と、いま出している範囲（「1〜5 / 12」）。一度に [PAGE_SIZE] 基までしか出さないので、
- * それより多いときだけ出す。端のページでは、その向きのボタンを押せなくする
- */
-@Composable
-private fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) {
-    val first = page * PAGE_SIZE + 1
-    val last = minOf((page + 1) * PAGE_SIZE, total)
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PressTextButton(onClick = { onPage(page - 1) }, enabled = page > 0) {
-            Text("‹ 前へ", color = if (page > 0) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
-        Text(
-            "$first〜$last / $total",
-            fontFamily = Fieldbook.Data,
-            fontSize = 12.sp,
-            color = Fieldbook.Muted,
-            maxLines = 1,
-            modifier = Modifier
-                .weight(1f)
-                .wrapContentWidth(Alignment.CenterHorizontally)
-                .paperBand()
-                .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
-        )
-        PressTextButton(onClick = { onPage(page + 1) }, enabled = page < pages - 1) {
-            Text("次へ ›", color = if (page < pages - 1) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-/**
- * タワー 1 基ぶんの紙片：高さの順位、タワーの絵、高さ（主役）、高さの目盛り、パーツ数・作者・日時。
- * [sketch] はまだ取れていなければ null で、絵の場所に破線の枠だけ出す（取れたら差し替わる）
- */
-@Composable
-private fun TowerCard(tower: TowerSummary, sketch: Tower?, rank: Int, sort: TowerSort, mine: Boolean, ratio: Float, onClick: () -> Unit) {
+private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val url = "${ApiClient.baseUrl}/towers/${tower.id}"
     val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
-    val heightText = "%.2f".format(Locale.US, tower.height)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Fieldbook.Card, CardShape)
-            .border(1.dp, Fieldbook.CardEdge, CardShape)
-            .clickable(onClickLabel = "共有ページを開く", onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                contentDescription = (if (mine) "あなたのタワー。" else "") +
-                    "${sort.label}で $rank 番目。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
-            }
-            .padding(start = 10.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Fieldbook.Paper,
+        contentColor = Fieldbook.Ink,
     ) {
-        // 高さの順位の丸（幅 36dp の中に置く）
-        Box(modifier = Modifier.width(36.dp), contentAlignment = Alignment.CenterStart) { RankMark(rank) }
-        // タワーの絵（野帳の図）。コレクションのカードと同じ「紙の上の図」の見せ方
-        Box(
-            modifier = Modifier
-                .size(width = 72.dp, height = 80.dp)
-                // 範囲の見積もりが外れて絵がはみ出しても、枠で切れるだけにする（隣の順位や文字の上に描かない）
-                .clip(SketchShape)
-                .background(Fieldbook.Paper, SketchShape)
-                .then(if (sketch == null) Modifier.dashedOutline(Fieldbook.CardEdge, corner = 3.dp) else Modifier.border(1.dp, Fieldbook.CardEdge, SketchShape)),
-        ) {
-            if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(4.dp))
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(heightText, fontFamily = Fieldbook.Data, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp, color = Fieldbook.Ink)
-                Text("m", fontFamily = Fieldbook.Data, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
-                // 1 番のタワーには、並びに合わせた札（高い順は見出しと同じ「最長」、新しい順は「最新」、パーツ数は「最多」）
-                if (rank == 1) Tag(sort.topLabel, fontSize = 10.sp, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
-                // このスマホから送信したタワーには、道の色（オレンジ）の「あなた」の札
-                if (mine) Tag("あなた", fontSize = 10.sp, color = Fieldbook.Road, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+                Text(
+                    "%.2f".format(Locale.US, tower.height),
+                    fontFamily = Fieldbook.Data,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.5).sp,
+                    color = Fieldbook.Ink,
+                )
+                Text("m", fontFamily = Fieldbook.Data, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+                if (mine) {
+                    Text("あなたのタワー", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Fieldbook.RoadCasing, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+                }
             }
-            // 高さの目盛り：いちばん高いタワーを 100% にした横棒（測量の断面図のイメージ）
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Fieldbook.GridMajor, RoundedCornerShape(2.dp))) {
-                Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(4.dp).background(Fieldbook.Road, RoundedCornerShape(2.dp)))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Fieldbook.Card)
+                    .border(1.dp, Fieldbook.CardEdge, RoundedCornerShape(4.dp)),
+            ) {
+                if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(12.dp))
             }
-            Spacer(Modifier.height(4.dp))
-            // 作者名が長くても日時が消えないよう、作者だけ「…」で詰める
-            val metaStyle = TextStyle(fontFamily = Fieldbook.Data, fontSize = 10.5.sp, color = Fieldbook.Muted)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("パーツ ${tower.partCount} 本 ・ ", style = metaStyle, maxLines = 1, softWrap = false)
-                Text(author, style = metaStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Text(" ・ ${formatDate(tower.createdAt)}", style = metaStyle, maxLines = 1, softWrap = false)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                notes("パーツ ${tower.partCount} 本", author, formatDate(tower.createdAt)),
+                style = noteStyle,
+                fontFamily = Fieldbook.Data,
+                fontSize = 13.sp,
+                color = Fieldbook.Muted,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                PressButton(
+                    onClick = { uriHandler.openUri(url) },
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Fieldbook.Survey, contentColor = Color.White),
+                    modifier = Modifier.weight(1f).height(48.dp),
+                ) {
+                    Text("共有ページを開く", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+                PressTextButton(
+                    onClick = {
+                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("ミチツミ", url))
+                        // Android 13 以降は端末が「コピーしました」を出すので、それより前だけ自分で知らせる
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, "リンクをコピーしました", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Text("リンクをコピー", color = Fieldbook.Survey, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -529,26 +549,11 @@ private fun Note(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 4.dp)
-            .background(Fieldbook.Card, CardShape)
-            .border(1.dp, Fieldbook.CardEdge, CardShape)
+            .background(Fieldbook.Card, RoundedCornerShape(4.dp))
+            .border(1.dp, Fieldbook.CardEdge, RoundedCornerShape(4.dp))
             .padding(12.dp),
     ) { content() }
 }
 
-private data class StatusLine(val text: String, val color: Color)
-
-/** タワー 1 基ぶんの紙片の形（手持ちのカードと同じ角丸） */
-private val CardShape = RoundedCornerShape(4.dp)
-
-/** 紙片の中のタワーの絵の枠 */
-private val SketchShape = RoundedCornerShape(3.dp)
-
-private fun formatDate(epochMs: Long): String =
-    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d HH:mm", Locale.JAPAN).format(Date(epochMs))
-
-/** 見出しの「最新」用：日付だけ（11/7）と、時刻だけ（10:16） */
-private fun formatDay(epochMs: Long): String =
-    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))
-
-private fun formatTime(epochMs: Long): String =
-    if (epochMs <= 0L) "" else SimpleDateFormat("HH:mm", Locale.JAPAN).format(Date(epochMs))
+/** 断面図の高さ */
+private val SECTION_HEIGHT = 260.dp
