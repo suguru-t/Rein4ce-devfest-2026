@@ -1,8 +1,6 @@
 package com.rein4ce.roadcollector.ui.inventory
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -30,8 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
@@ -50,6 +47,8 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.gallery.Pop
+import com.rein4ce.roadcollector.ui.gallery.popBlock
 
 /**
  * 並びと絞り込みの行：［並び：いつもの順 ▾］［天気：すべて ▾］［☆ お気に入り］。
@@ -59,7 +58,8 @@ import com.rein4ce.roadcollector.ui.common.pressFeel
  * - 天気：すべてか、1 つの天気。持っているパーツに無い天気は選べない（選んでも何も出ないため）
  * - お気に入り：押すと、お気に入りだけを出す（もう一度押すと全部）
  *
- * いつもの順・絞り込みなし以外を選んでいる札は、測量の青で塗る（何かで絞っていることが分かるように）。
+ * 札は「みんな」の並びの札と同じ丸いブロック。いつもの順・絞り込みなし以外を選んでいる札は塗る（何かで絞っていることが分かるように。
+ * 並び・天気は青緑、お気に入りは ★ と同じ黄色）。
  * 小さい画面や大きい文字では、札が次の行に折り返す
  *
  * @param skies 持っているパーツの天気（選べる天気）
@@ -68,7 +68,8 @@ import com.rein4ce.roadcollector.ui.common.pressFeel
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set<Sky>, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 丸ゴシックは字の幅が広いので、札の字・間を少し詰めて、ふつうの文字の大きさなら 3 つが 1 行に収まるようにする
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // 並び
         Box {
             var open by remember { mutableStateOf(false) }
@@ -106,22 +107,33 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
             menu = false,
             enabled = enabled,
             switch = true,
+            activeFace = Pop.Yellow,
+            activeText = Pop.InkOnYellow,
         ) { onChange(filter.copy(favoritesOnly = !filter.favoritesOnly)) }
     }
 }
 
 /**
- * 並びと絞り込みの札。コレクションの右上の「選択」と同じ、測量の青の細い縁の丸い札。
+ * 並びと絞り込みの札。「みんな」の並びの札（ui/gallery/RankingScreen の SortTabs）と同じ、下に側面がのぞく丸いブロック：
+ * ふだんは白い面に青緑の縁と字、選んでいるときは色の面に字を載せ、少し傾けて積み木を置いたように見せる。
  * 見た目は小さいが、押せる範囲は高さ 48dp（指で押しやすいように）。
  * 押したときは、ほかのボタンと同じ押し心地（ui/common/PressFeel）で、丸い札の形だけが縮む（押せる範囲の四角に波紋は出さない）
  *
- * @param active いつもの順・絞り込みなし以外を選んでいるか（青く塗る）
+ * @param active いつもの順・絞り込みなし以外を選んでいるか（[activeFace] で塗る）
  * @param menu 押すと選ぶ一覧が開く（右に ▾）
  * @param switch 入る・切れるの札か（読み上げではスイッチとして伝える）
  */
 @Composable
-private fun FilterTag(text: String, active: Boolean, menu: Boolean, enabled: Boolean, switch: Boolean = false, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
+private fun FilterTag(
+    text: String,
+    active: Boolean,
+    menu: Boolean,
+    enabled: Boolean,
+    switch: Boolean = false,
+    activeFace: Color = Pop.TealDeep,
+    activeText: Color = Pop.Letter,
+    onClick: () -> Unit,
+) {
     val source = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
@@ -147,14 +159,20 @@ private fun FilterTag(text: String, active: Boolean, menu: Boolean, enabled: Boo
     ) {
         Text(
             if (menu) "$text ▾" else text,
-            color = if (active) Color.White else Fieldbook.Survey,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            color = if (active) activeText else Pop.TealLine,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp,
+            maxLines = 1,
             modifier = Modifier
-                .clip(shape)
-                .background(if (active) Fieldbook.Survey else Fieldbook.Card, shape)
-                .border(1.dp, Fieldbook.Survey, shape)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .graphicsLayer { rotationZ = if (active) -2f else 0f }
+                .popBlock(
+                    face = if (active) activeFace else Fieldbook.Card,
+                    corner = 50.dp,
+                    depth = if (active) 4.dp else 2.dp,
+                    edge = if (active) null else Pop.TealLine,
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
         )
     }
 }
