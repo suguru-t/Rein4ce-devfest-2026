@@ -36,8 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.rein4ce.roadcollector.ui.gallery.Pop
-import com.rein4ce.roadcollector.ui.gallery.popBlock
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /** ポップな枠の角の丸さ（「みんな」の紙片・カードより一回り大きい窓なので、少し大きく） */
@@ -51,7 +49,7 @@ private val POP_CORNER = 18.dp
  * @param onClose 枠の下の「×」を押したとき（ふつうは [onDismiss] と同じ）
  * @param onBack あれば、枠の下の丸いボタンを「×」ではなく「＜」にして、押すとこれを呼ぶ
  *   （設定の中の「画面の明るさ」などから、設定の一覧に戻る。戻るボタンも閉じるボタンと同じ場所にそろえる）
- * @param pop 「みんな」・コレクションと同じポップな見た目にする（ui/gallery/Pop.kt）：枠と下の丸いボタンを、
+ * @param pop 「みんな」・コレクションと同じポップな見た目にする（Pop.kt）：枠と下の丸いボタンを、
  *   下に側面がのぞくブロックの面にし、角を大きく丸める。見出しは灰色の帯の代わりに、紺の名札のブロックに白い字で載せる
  *   （「みんな」の断面図の名札の台と同じ考え方）。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
  */

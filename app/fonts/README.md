@@ -6,7 +6,7 @@ Google Fonts の M PLUS Rounded 1c Black（Coji Morishita、SIL Open Font Licens
 | ファイル | 使う所 | 元のフォント | ライセンス |
 |---|---|---|---|
 | `res/font/mplus_rounded_michitsumi.ttf`（2 KB） | 題字「ミチツミ」（`ui/collect/TitleBlocks.kt`） | [M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) Black | `OFL-MPLUSRounded1c.txt`（著作権表示と OFL 1.1 の本文） |
-| `res/font/mplus_rounded_gallery.ttf`（82 KB） | 「みんな」とコレクションの画面の字（`ui/gallery/Pop.kt`。コレクションも同じ部品を使う） | 同上 | 同上 |
+| `res/font/mplus_rounded_ui.ttf`（82 KB） | 「みんな」とコレクションの画面の字（`ui/common/Pop.kt` の `Pop.Rounded`） | 同上 | 同上 |
 
 切り出し方（fonttools）：
 

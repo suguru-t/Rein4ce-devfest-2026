@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ポップな見た目の画面（「みんな」・コレクション）で使う太い丸ゴシックを、使う字だけに切り出す
-（app/src/main/res/font/mplus_rounded_gallery.ttf を作り直す）。
+（app/src/main/res/font/mplus_rounded_ui.ttf を作り直す）。
 
 画面の字は、下の SOURCES の .kt にある文字列（"…" の中身。コメントは除く）から集める。
 それに、半角の英数字・記号と、数字まわりの記号（EXTRA）を足す。
@@ -24,12 +24,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app/src/main/kotlin/com/rein4ce/roadcollector"
-OUT = ROOT / "app/src/main/res/font/mplus_rounded_gallery.ttf"
+OUT = ROOT / "app/src/main/res/font/mplus_rounded_ui.ttf"
 
 # 字を集める .kt（フォルダなら中の .kt 全部）
 SOURCES = [
     APP / "ui/gallery",
     APP / "ui/inventory",
+    # ポップな見た目の共通の部品（「再読み込み」など）
+    APP / "ui/common/Pop.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）

@@ -4,9 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.semantics.heading
 import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.gallery.Pop
-import com.rein4ce.roadcollector.ui.gallery.PopButton
-import com.rein4ce.roadcollector.ui.gallery.popBlock
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.popBlock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -61,7 +61,7 @@ import kotlinx.coroutines.launch
 /**
  * 積む画面から開く「積むパーツを選ぶ」窓（下から出る）。コレクションに戻らずに、その場で積むパーツを選び直せる。
  *
- * - 見た目はコレクションの一覧と同じポップな形（太い丸ゴシックの見出し、ブロックの札・カード・ボタン。ui/gallery/Pop.kt）
+ * - 見た目はコレクションの一覧と同じポップな形（太い丸ゴシックの見出し、ブロックの札・カード・ボタン。ui/common/Pop.kt）
  * - コレクションと同じ並びで、小さなカード（野帳の図・名前・歩いた長さ）を 3 列に並べる。
  *   図には天気の色とアイコンが出るので、どれが大きいか・滑るかを見て選べる
  * - タップで選ぶ／外す（[GameSession.MAX_PARTS] 本まで）。図の右下の丸に積む順の数字が入る（コレクションの選択と同じ）

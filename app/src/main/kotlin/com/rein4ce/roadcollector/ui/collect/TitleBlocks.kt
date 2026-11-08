@@ -1,12 +1,5 @@
 package com.rein4ce.roadcollector.ui.collect
 
-import android.os.Build
-import android.view.View
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseInQuad
-import androidx.compose.animation.core.EaseOutQuad
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +16,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -39,9 +31,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.ui.common.BlockMotion
+import com.rein4ce.roadcollector.ui.common.BlockMotionSpec
+import com.rein4ce.roadcollector.ui.common.cameraPoint
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 /** 題字のブロックの上の字の色（起動画面の題字と同じ） */
@@ -76,12 +70,12 @@ private val Blocks = listOf(
     TitleBlock('ミ', Color(0xFF4A4E69), tiltDeg = 8f, liftDp = -9f),
 )
 
-/** ブロック 1 つの、ふだんの位置からのずれ（横・縦 [dp]、回転 [度]）。押したときだけ動く */
-private class BlockMotion {
-    val dx = Animatable(0f)
-    val dy = Animatable(0f)
-    val turn = Animatable(0f)
-}
+/**
+ * 題字の動きの大きさ（ui/common/BlockMotion.kt。画面名の積み木と同じ動きで、大きさだけ違う）。
+ * 32dp のブロックで決めた値を、[TITLE_BLOCK_DP] に合わせて同じ割合で大きくする。
+ * 落ちてきて着く位置のずれ・はねる高さは、起動画面（splash_icon_animated）の「ミ」のはね方を、起動画面の絵と題字の大きさの比で小さくしたもの
+ */
+private val TitleMotion = BlockMotionSpec(hopDp = 12f * K, hopBounceDp = 4f * K, fallMs = 160, landDxDp = 13f * K, landBounceDp = 8f * K)
 
 /**
  * 採集画面の題字「ミチツミ」。1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べた、積み木を積んでいる途中の絵。
@@ -136,13 +130,13 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                             running[i] = scope.launch {
                                 if (isLast) {
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
-                                    val camera = cameraPoint(view, offscreenPx = OFFSCREEN_DP * density.density)
+                                    val camera = cameraPoint(view, blockPx = TITLE_BLOCK_DP * density.density)
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density - liftDp
-                                    motion.dropIn(fromDx, fromDy) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
+                                    motion.dropIn(fromDx, fromDy, TitleMotion) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                    motion.hop(sign = if (block.tiltDeg < 0f) -1f else 1f)
+                                    motion.hop(sign = if (block.tiltDeg < 0f) -1f else 1f, spec = TitleMotion)
                                 }
                             }
                         }
@@ -168,72 +162,3 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
         }
     }
 }
-
-/**
- * その場で軽く跳ねる：傾きを少し増しながら上がって落ち、1 回小さくはねて戻る。
- * はね方は起動画面の「ミ」と同じ形（上がりは減速、下がりは加速）。[sign] は傾ける向き（ふだんの傾きと同じ向きに増す）
- */
-private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
-    launch {
-        turn.animateTo(8f * sign, tween(HOP_UP_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
-        turn.animateTo(-3f * sign, tween(BOUNCE_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-    }
-    dy.animateTo(-12f * K, tween(HOP_UP_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
-    dy.animateTo(-4f * K, tween(BOUNCE_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-}
-
-/**
- * 落ち始めの点：画面の上のカメラの穴のまん中（画面の左上から [px]）。ブロックは穴とほぼ同じ大きさなので、穴から出てくるように見える。
- * 穴のない端末では、画面のまん中の、上の端より [offscreenPx] だけ上（ブロックが画面の外に隠れている所）
- */
-private fun cameraPoint(view: View, offscreenPx: Float): Offset {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        val hole = view.rootWindowInsets?.displayCutout?.boundingRects
-            ?.filter { it.top <= 0 && !it.isEmpty }
-            ?.minByOrNull { kotlin.math.abs(it.exactCenterX() - view.rootView.width / 2f) }
-        if (hole != null) return Offset(hole.exactCenterX(), hole.exactCenterY())
-    }
-    return Offset(view.rootView.width / 2f, -offscreenPx)
-}
-
-/**
- * カメラの穴のあたり（ふだんの位置から [fromDx], [fromDy] [dp] ずれた所）から回りながら斜めに落ちてきて、
- * 止まる位置の少し右に着き、左へ弧を描いて 1 回はねて収まる。はね方は起動画面（splash_icon_animated）の「ミ」と同じで、
- * 着く位置のずれ・はねる高さは、起動画面の絵と題字の大きさの比で小さくする（32dp のブロックのとき 1.55 倍として決め、
- * 題字の大きさ [TITLE_BLOCK_DP] に合わせて同じ割合で大きくする）。[onLand] は着いたとき（手ごたえの振動）
- */
-private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () -> Unit) = coroutineScope {
-    dx.snapTo(fromDx)
-    dy.snapTo(fromDy)
-    turn.snapTo(60f)
-    val fallMs = 160
-    launch {
-        dx.animateTo(13f * K, tween(fallMs, easing = LinearEasing))
-        dx.animateTo(0f, tween(BOUNCE_MS * 2, easing = LinearEasing))
-    }
-    launch {
-        turn.animateTo(10f, tween(fallMs, easing = LinearEasing))
-        turn.animateTo(-6f, tween(BOUNCE_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-    }
-    dy.animateTo(0f, tween(fallMs, easing = EaseInQuad))
-    onLand()
-    dy.animateTo(-8f * K, tween(BOUNCE_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-}
-
-/**
- * 穴のない端末で、落ち始めにブロックのまん中を画面の上の端からどれだけ上に置くか [dp]。
- * ブロックを 60° 傾けても、角が画面に出ない長さ（対角線の半分 ≈ 0.71 倍より少し長く）
- */
-private const val OFFSCREEN_DP = TITLE_BLOCK_DP * 0.75f
-
-/** 跳ねるときの、上がる（下がる）時間 [ms] */
-private const val HOP_UP_MS = 120
-
-/** 1 回はねるときの、上がる（下がる）時間 [ms]。起動画面の「ミ」と同じ */
-private const val BOUNCE_MS = 55

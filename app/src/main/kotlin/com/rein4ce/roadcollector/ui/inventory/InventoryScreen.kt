@@ -100,13 +100,13 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
 import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.gallery.BlockWord
-import com.rein4ce.roadcollector.ui.gallery.Pop
-import com.rein4ce.roadcollector.ui.gallery.PopButton
-import com.rein4ce.roadcollector.ui.gallery.PopChip
-import com.rein4ce.roadcollector.ui.gallery.PopTag
-import com.rein4ce.roadcollector.ui.gallery.SECTION_CORNER
-import com.rein4ce.roadcollector.ui.gallery.popBlock
+import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopTag
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.popBlock
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：

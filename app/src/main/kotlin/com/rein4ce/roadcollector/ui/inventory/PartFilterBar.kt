@@ -47,8 +47,8 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.gallery.Pop
-import com.rein4ce.roadcollector.ui.gallery.popBlock
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
 
 /**
  * 並びと絞り込みの行：［並び：いつもの順 ▾］［天気：すべて ▾］［☆ お気に入り］。
