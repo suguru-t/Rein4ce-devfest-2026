@@ -139,9 +139,15 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
                 }
             }
         }
-        // リング：左の端（開いたらまん中の綴じ目）をまたぐ短い線。いちばん手前に描く
+        // リング：左の端（開いたらまん中の綴じ目）の内と外に半分ずつかかる小さな輪。いちばん手前に描く
         AppIcons.NOTE_RINGS.forEach { y ->
-            drawLine(ink, Offset(spine - 2.2f, y), Offset(spine + 1.6f + 0.6f * t, y), strokeWidth = AppIcons.STROKE_WIDTH, cap = StrokeCap.Round)
+            drawRoundRect(
+                ink,
+                topLeft = Offset(spine - AppIcons.RING_HALF_W, y - AppIcons.RING_HALF_H),
+                size = Size(2 * AppIcons.RING_HALF_W, 2 * AppIcons.RING_HALF_H),
+                cornerRadius = CornerRadius(AppIcons.RING_HALF_H),
+                style = Stroke(width = AppIcons.RING_STROKE),
+            )
         }
     }
 }

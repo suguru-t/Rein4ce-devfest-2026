@@ -138,16 +138,20 @@ object AppIcons {
         }
     }
 
-    /** リングを通す穴（表紙をくり抜く） */
+    /** リングの内側に見える所（表紙をくり抜く。リングの輪の中に、下の紙が見える） */
     private fun PathBuilder.notebookHoles() {
-        NOTE_RINGS.forEach { y -> ellipse(NOTE_LEFT + 1.5f, y, 0.75f, 0.75f) }
+        NOTE_RINGS.forEach { y ->
+            roundRect(NOTE_LEFT, y - RING_HALF_H, RING_HALF_W, 2 * RING_HALF_H, RING_HALF_H)
+        }
     }
 
-    /** リング（左の端をまたぐ短い線。外側から穴まで） */
+    /**
+     * リング（左の端をまたぐ小さな輪）。前は外側だけに出る横棒だったが、ノートが右へ動いている線に見えたので、
+     * 端の内と外に半分ずつかかる輪にした
+     */
     private fun PathBuilder.notebookRings() {
         NOTE_RINGS.forEach { y ->
-            moveTo(NOTE_LEFT - 2.2f, y)
-            lineTo(NOTE_LEFT + 1.5f, y)
+            roundRect(NOTE_LEFT - RING_HALF_W, y - RING_HALF_H, 2 * RING_HALF_W, 2 * RING_HALF_H, RING_HALF_H)
         }
     }
 
@@ -172,7 +176,7 @@ object AppIcons {
                 notebookLineHoles()
                 notebookHoles()
             }
-            outlined { notebookRings() }
+            ring { notebookRings() }
         }
     }
 
@@ -180,8 +184,20 @@ object AppIcons {
         icon("NotebookOutline") {
             outlined { notebookCover(inset = STROKE / 2) }
             outlined { notebookLines() }
-            outlined { notebookRings() }
+            ring { notebookRings() }
         }
+    }
+
+    /** リングの線（ほかの線画より細い。太いと小さな輪がつぶれる） */
+    private fun ImageVector.Builder.ring(draw: PathBuilder.() -> Unit) {
+        path(
+            fill = null,
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = RING_STROKE,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+            pathBuilder = draw,
+        )
     }
 
     /** ノートの位置と大きさ（閉じたとき。開くと、リングの所（左の端）を中心に表紙がめくれる。ui/TabIcons.kt） */
@@ -190,8 +206,11 @@ object AppIcons {
     internal const val NOTE_WIDTH = 12.5f
     internal const val NOTE_HEIGHT = 19f
 
-    /** リングの高さ（4 つ） */
+    /** リングの高さ（4 つ）と、輪の半分の幅・高さ、線の太さ */
     internal val NOTE_RINGS = floatArrayOf(5.8f, 9.8f, 13.8f, 17.8f)
+    internal const val RING_HALF_W = 1.9f
+    internal const val RING_HALF_H = 0.95f
+    internal const val RING_STROKE = 1.2f
 
     /** 表紙の横線の高さ（3 本） */
     private val NOTE_LINES = floatArrayOf(8.6f, 12.2f, 15.8f)
