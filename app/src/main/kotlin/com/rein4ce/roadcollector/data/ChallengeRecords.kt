@@ -4,7 +4,7 @@ import com.rein4ce.roadcollector.core.challenge.ChallengeScore
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** IO is supplied by the screen's private AtomicFile. Failed writes never update the in-memory list. */
+/** IO is supplied by ChallengeStorage. Failed writes never update the in-memory list. */
 class ChallengeRecords(private val read: () -> String?, private val write: (String) -> Unit) {
     private val json = Json { ignoreUnknownKeys = true }
     private var scores = read()?.let { json.decodeFromString<List<ChallengeScore>>(it) }.orEmpty()

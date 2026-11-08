@@ -5,6 +5,57 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChallengeRunTest {
+    @Test fun `intermediate moving tower continues until the actual deadline`() {
+        var now = 0L
+        val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
+        physics.world.setGravity(0.0, 0.0)
+        val run = ChallengeRun(1, clock = { now }, world = physics)
+        run.resume(); val first = run.current.id; run.place()
+        physics.world.bodies.last().angularVelocity = 1.0
+        repeat(121) { now += 50_000_000; run.tick() }
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        assertNotEquals(first, run.current.id)
+        assertTrue(run.remainingNs > 0)
+        assertNull(run.score)
+    }
+    @Test fun `final wait is bounded by foreground time even at low frame rates`() {
+        var now = 0L
+        val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
+        physics.world.setGravity(0.0, 0.0)
+        val run = ChallengeRun(1, clock = { now }, world = physics)
+        run.resume(); run.place()
+        physics.world.bodies.last().angularVelocity = 1.0
+        now = ChallengeRules.DURATION_NS; run.tick()
+        run.pause(); now += 100_000_000_000; run.resume()
+        repeat(5) { now += 1_000_000_000; run.tick() }
+        assertEquals(ChallengeRun.Phase.FINALIZING, run.phase)
+        now += 1_000_000_000; run.tick()
+        assertEquals(ChallengeRun.Phase.UNRESOLVED, run.phase)
+    }
+    @Test fun `three minute play can place more than five pieces without an early finish`() {
+        var now = 0L
+        val run = ChallengeRun(123, clock = { now })
+        var placed = 0
+        run.resume()
+        repeat(3600) {
+            if (run.place()) placed++
+            now += 50_000_000; run.tick()
+            assertFalse(run.terminal)
+        }
+        assertTrue(placed > 5)
+        assertEquals(ChallengeRun.Phase.FINALIZING, run.phase)
+        repeat(125) { now += 50_000_000; run.tick() }
+        assertTrue(run.terminal)
+    }
+    @Test fun `camera bounds remain stable while aiming and falling`() {
+        var now = 0L
+        val run = ChallengeRun(1, clock = { now })
+        run.resume(); val bounds = run.bounds
+        run.move(1.0); run.rotate(45.0)
+        assertEquals(bounds, run.bounds)
+        run.place(); now += 50_000_000; run.tick()
+        assertEquals(bounds, run.bounds)
+    }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L
         val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
@@ -78,13 +129,13 @@ class ChallengeRunTest {
         now += 60_000_000_000; run.tick(); run.move(1.0); run.rotate(90.0)
         assertSame(result, run.score); assertFalse(run.place())
     }
-    @Test fun `falling completes or terminates within bounded simulated time`() {
+    @Test fun `falling advances to the next piece within bounded time`() {
         var now = 0L
         val run = ChallengeRun(2, clock = { now })
         run.resume(); val first = run.current.id; run.place()
         repeat(125) { now += 50_000_000; run.tick() }
-        assertTrue(run.phase == ChallengeRun.Phase.AIMING || run.phase == ChallengeRun.Phase.UNRESOLVED)
-        if (run.phase == ChallengeRun.Phase.AIMING) assertNotEquals(first, run.current.id)
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        assertNotEquals(first, run.current.id)
         assertNull(run.score)
     }
 }

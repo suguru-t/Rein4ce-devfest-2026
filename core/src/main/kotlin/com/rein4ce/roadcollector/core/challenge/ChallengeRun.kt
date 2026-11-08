@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 
 /** Fixed, versioned catalogue; changes to shapes, friction or timing require a new rule id. */
 object ChallengeRules {
-    const val ID = "manual-180-v1"
+    const val ID = "manual-180-v2"
     const val DURATION_NS = 180_000_000_000L
     val parts = listOf(
         Part("bar", listOf(Pt(-.5f, 0f), Pt(.5f, 0f)), kind = Kind.BAR, name = "棒"),
@@ -44,6 +44,8 @@ data class ChallengeScore(
     val rule: String = ChallengeRules.ID,
 )
 
+data class ChallengeBounds(val halfWidth: Double, val top: Double, val bottom: Double)
+
 /** Foreground monotonic time is independent of wall time and of the physics step cap. */
 class ChallengeRun(
     val seed: Long,
@@ -62,11 +64,12 @@ class ChallengeRun(
     var remainingNs = ChallengeRules.DURATION_NS; private set
     var score: ChallengeScore? = null; private set
     var shapes = world.renderShapes(); private set
-    var focusHeight = 2.2; private set
+    var bounds = ChallengeBounds(2.5, 2.2, -.4); private set
     var spawnY = 1.3; private set
     private var active = false
     private var last = 0L
     private var settling = 0.0
+    private var settleWait = 0.0
     val terminal get() = phase == Phase.FINISHED || phase == Phase.UNRESOLVED
 
     fun resume() { if (!active && !terminal) { active = true; last = clock() } }
@@ -77,30 +80,64 @@ class ChallengeRun(
         val elapsed = (now - last).coerceAtLeast(0)
         last = now
         val wasFinalizing = phase == Phase.FINALIZING
+        val beforeDeadline = remainingNs
         remainingNs = (remainingNs - elapsed).coerceAtLeast(0)
-        if (remainingNs == 0L && !wasFinalizing) { phase = Phase.FINALIZING; settling = 0.0 }
+        val crossedDeadline = remainingNs == 0L && !wasFinalizing
+        if (crossedDeadline) { phase = Phase.FINALIZING; settling = 0.0; settleWait = 0.0 }
         val dt = (elapsed / 1e9).coerceAtMost(.05)
         world.step(dt)
         world.removeFallen()
         shapes = world.renderShapes()
         if (phase == Phase.FALLING || phase == Phase.FINALIZING) {
-            settling += dt
+            val waitDelta = if (crossedDeadline) (elapsed - beforeDeadline) / 1e9 else elapsed / 1e9
+            settling += if (crossedDeadline) minOf(dt, waitDelta) else dt
+            settleWait += waitDelta
             if (settling >= .8 && world.isSettled()) {
                 if (phase == Phase.FINALIZING) {
                     score = ChallengeScore(runId, seed, world.height(), wallClock())
                     phase = Phase.FINISHED
+                    updateBounds(includeGhost = false)
                 } else {
-                    current = next; next = pieces.next()
-                    x = 0.0; angle = 0.0
-                    spawnY = world.height() + 1.3
-                    focusHeight = spawnY + .9
-                    phase = Phase.AIMING
+                    nextPiece()
                 }
-            } else if (settling >= 6.0) {
-                // Never rank an airborne snapshot as a settled tower (#41).
-                phase = Phase.UNRESOLVED
+            } else if (settleWait >= 6.0) {
+                if (phase == Phase.FINALIZING) {
+                    // Only the final score requires rest. Never rank an airborne snapshot (#41).
+                    phase = Phase.UNRESOLVED
+                    updateBounds(includeGhost = false)
+                } else {
+                    // A moving tower must not end the three-minute game prematurely.
+                    nextPiece()
+                }
             }
         }
+    }
+    private fun nextPiece() {
+        current = next
+        next = pieces.next()
+        x = 0.0
+        angle = 0.0
+        spawnY = world.height() + 1.3
+        phase = Phase.AIMING
+        updateBounds(includeGhost = true)
+    }
+
+    private fun updateBounds(includeGhost: Boolean) {
+        var halfWidth = 2.5
+        var top = if (includeGhost) spawnY + .9 else .5
+        var bottom = -.4
+        for (shape in shapes) when (shape) {
+            is StackWorld.RenderShape.Poly -> {
+                shape.xs.forEach { halfWidth = maxOf(halfWidth, kotlin.math.abs(it) + .1) }
+                shape.ys.forEach { top = maxOf(top, it + .1); bottom = minOf(bottom, it - .1) }
+            }
+            is StackWorld.RenderShape.Disc -> {
+                halfWidth = maxOf(halfWidth, kotlin.math.abs(shape.cx) + shape.r + .1)
+                top = maxOf(top, shape.cy + shape.r + .1)
+                bottom = minOf(bottom, shape.cy - shape.r - .1)
+            }
+        }
+        bounds = ChallengeBounds(halfWidth, top, bottom)
     }
     private fun canAct(): Boolean { tick(); return active && phase == Phase.AIMING && remainingNs > 0 }
     fun move(dx: Double) { if (canAct()) x = (x + dx).coerceIn(-1.5, 1.5) }
@@ -108,7 +145,7 @@ class ChallengeRun(
     fun place(): Boolean {
         if (!canAct()) return false
         world.place(current, x, spawnY, Math.toRadians(angle))
-        phase = Phase.FALLING; settling = 0.0
+        phase = Phase.FALLING; settling = 0.0; settleWait = 0.0
         return true
     }
 }
