@@ -8,6 +8,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -66,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -106,6 +108,7 @@ import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
+import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 
@@ -817,17 +820,36 @@ private fun PartCard(
 /**
  * カードの右下のお気に入り。入っていないときは灰色の ☆、押すと黄色の ★（もう一度押すと外れる）。
  * 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）。読み上げではチェックボックスとして伝える。
- * 押したときは、押せる範囲の四角（灰色の波紋）ではなく、星だけが少し縮んで応える
+ * 押したときは、押せる範囲の四角（灰色の波紋）ではなく、星だけが少し縮んで応える。
+ * 入れたときだけ、星がぽんと弾み、周りに小さな光が散る（外すときは静かに ☆ に戻す）。
+ * 端末の設定でアニメーションを切っている人には、どちらも動かさない（Compose が設定に従う）
  */
 @Composable
 private fun FavoriteToggle(favorite: Boolean, name: String, enabled: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val starScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarScale")
+    val pressScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarPress")
+    val pop = remember { Animatable(1f) }
+    // 光の進み具合（0 → 1）。1 は何も描かない
+    val burst = remember { Animatable(1f) }
+    // 前に見た値。はじめから入っているカードや、一覧に戻ってきたカードでは弾ませない
+    val last = remember { booleanArrayOf(favorite) }
+    LaunchedEffect(favorite) {
+        val turnedOn = favorite && !last[0]
+        last[0] = favorite
+        if (!turnedOn) return@LaunchedEffect
+        launch {
+            burst.snapTo(0f)
+            burst.animateTo(1f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
+        }
+        pop.animateTo(1.45f, tween(durationMillis = 110, easing = FastOutSlowInEasing))
+        pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f))
+    }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(width = FavoriteToggleWidth, height = 44.dp)
+            .drawBehind { drawFavoriteBurst(center, burst.value) }
             .toggleable(
                 value = favorite,
                 interactionSource = interaction,
@@ -849,8 +871,8 @@ private fun FavoriteToggle(favorite: Boolean, name: String, enabled: Boolean, on
             fontSize = starSize,
             lineHeight = starSize,
             modifier = Modifier.graphicsLayer {
-                scaleX = starScale
-                scaleY = starScale
+                scaleX = pressScale * pop.value
+                scaleY = pressScale * pop.value
             },
         )
     }
