@@ -14,7 +14,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import kotlinx.coroutines.launch
@@ -165,12 +165,12 @@ internal fun RenameDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
+            PressTextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
                 Text("保存", color = if (tooLong) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
+            PressTextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
         },
     )
 }
@@ -181,7 +181,7 @@ private enum class AiResult { Named, Failed }
 /** 「AI に考えてもらう」ボタン。考えている間は押せず、「考え中…」と回る印を出す */
 @Composable
 private fun AiNameButton(asking: Boolean, again: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = !asking) {
+    PressTextButton(onClick = onClick, enabled = !asking) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (asking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Fieldbook.Survey)
             Text(
