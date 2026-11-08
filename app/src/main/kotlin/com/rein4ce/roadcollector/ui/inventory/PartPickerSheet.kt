@@ -233,8 +233,8 @@ private fun PickerCard(
                 enabled = canSelect,
                 name = part.displayName,
                 onToggle = onToggle,
-                // 小さい図では、左下の縮尺の字と近くならないよう、丸を角へ少し寄せる
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp),
+                // 小さい図では、道や左下の縮尺の字にかからないよう、丸を角の外へ寄せる（半分ほど図の下にはみ出す）
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 14.dp),
             )
         }
         // 名前と、歩いた長さ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。

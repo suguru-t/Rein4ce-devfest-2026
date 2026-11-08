@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.PartFilter
 import com.rein4ce.roadcollector.data.PartSort
+import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -69,7 +70,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         Box {
             var open by remember { mutableStateOf(false) }
             FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true, enabled = enabled) { open = true }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
+            FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "並び") {
                 for (sort in PartSort.entries) {
                     MenuRow(label = sort.label, selected = sort == filter.sort, enabled = true) {
                         onChange(filter.copy(sort = sort))
@@ -82,7 +83,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         Box {
             var open by remember { mutableStateOf(false) }
             FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true, enabled = enabled) { open = true }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
+            FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "歩いた日の天気") {
                 MenuRow(label = "すべて", selected = filter.sky == null, enabled = true) {
                     onChange(filter.copy(sky = null))
                     open = false
@@ -169,7 +170,12 @@ private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky
                 }
                 Text(
                     label,
-                    color = if (enabled) Fieldbook.Ink else Fieldbook.Mark,
+                    // 選んでいるものは、札と同じ測量の青の太字
+                    color = when {
+                        !enabled -> Fieldbook.Mark
+                        selected -> Fieldbook.Survey
+                        else -> Fieldbook.Ink
+                    },
                     fontSize = 14.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 )

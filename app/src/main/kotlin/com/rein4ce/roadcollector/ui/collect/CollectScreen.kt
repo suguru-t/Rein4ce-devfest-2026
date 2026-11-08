@@ -92,6 +92,8 @@ import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.ui.TitleIntroState
+import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
+import com.rein4ce.roadcollector.ui.common.MenuHeading
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
@@ -447,16 +449,7 @@ private fun DemoMenuButton(
         }
         // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
         // 見本は 1 本ずつ小さな図を添えて、名札（棒・L字…）と名前で選べるようにする
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            shape = RoundedCornerShape(6.dp),
-            containerColor = Fieldbook.Paper,
-            tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Fieldbook.CardEdge),
-        ) {
-            MenuHeading("見本の散歩")
+        FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "見本の散歩") {
             SampleTracks.all.forEach { track ->
                 val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
@@ -511,18 +504,6 @@ private fun DemoMenuButton(
     }
 }
 
-/** メニューの小さな見出し（野帳の注記の字。コレクションの「コレクション」と同じ作り） */
-@Composable
-private fun MenuHeading(text: String) {
-    Text(
-        text,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.sp,
-        color = Fieldbook.Muted,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
-    )
-}
 
 /** パーツの小さな図（メニューの見本用）。コレクションのカードと同じ、縁取りした道の色 */
 @Composable
