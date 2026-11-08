@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.ui.game
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import kotlinx.coroutines.CompletableDeferred
@@ -375,6 +376,27 @@ class StackViewModelTest {
         }
     }
 
+    @Test
+    fun `a longer walk is placed bigger and the size is sent with the tower`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            for (distance in listOf(120, 1500)) {
+                var sent: Tower? = null
+                val vm = StackViewModel {
+                    sent = it
+                    TowerCreated("ok", "https://example.test/ok")
+                }
+                vm.updateInventory(listOf(a.copy(distanceM = distance)), true, null)
+                finish(vm) // 寝かせて置く（台から落ちないように。finish の中で 90° 回す）
+                vm.upload()
+                runCurrent()
+                assertEquals(PartSize.of(distance).toFloat(), sent!!.placements.single().scale, 1e-6f)
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
     // ---- #41：落下待ちと完成の判定、完成した結果の固定 ----
 
     @Test
@@ -494,57 +516,72 @@ class StackViewModelTest {
         assertEquals(1, vm.fallenCount) // 2 回数えない
     }
 
-    // ---- #42：カメラに入れる範囲 ----
+    // ---- #42：カメラの狙い（狙っている間は大きさを変えずに上げ、置き切ったら全体が入るように引く） ----
 
     @Test
-    fun `the camera focus covers the platform and everywhere the next part can be moved`() {
+    fun `while aiming the camera keeps the size and covers where the next part appears`() {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a), true, null)
-        val focus = vm.cameraFocus
-        assertTrue(focus.minX <= -vm.dragLimit && focus.maxX >= vm.dragLimit) // 左右の端まで動かしても入る
-        assertTrue(focus.maxY >= vm.spawnY()) // 出てくる高さ
-        assertTrue(focus.minY <= -0.3f + 1e-6f) // 台の下面
+        // 狙っている間は引かない（Follow：大きさは変えず、上へ動かすだけ）
+        val camera = vm.camera as CameraTarget.Follow
+        assertTrue(camera.top > vm.spawnY()) // 出てくる高さに、どう回しても入る半径を足したところまで
     }
 
     @Test
-    fun `the camera focus does not change while aiming or while the part falls`() {
+    fun `the camera covers a bigger part from a longer walk`() {
+        // 長く歩いた道ほどパーツが大きい（#71）。どう回しても入る半径も、置くときの大きさで測る
+        val short = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 150)), true, null) }
+        val long = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 2000)), true, null) }
+        val shortReach = (short.camera as CameraTarget.Follow).top - short.spawnY()
+        val longReach = (long.camera as CameraTarget.Follow).top - long.spawnY()
+        assertEquals(PartSize.of(2000) / PartSize.of(150), (longReach / shortReach).toDouble(), 0.05)
+    }
+
+    @Test
+    fun `the camera does not change while aiming or while the part falls`() {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a, b), true, null)
-        val before = vm.cameraFocus
+        val before = vm.camera as CameraTarget.Follow
         vm.dragBy(1f)
         vm.rotate(45f)
-        assertSame(before, vm.cameraFocus) // 狙っている間は変えない（指で動かしている最中に倍率が変わらない）
+        assertSame(before, vm.camera) // 狙っている間は変えない（指で動かしている最中にカメラが動かない）
         // 真ん中に戻してから寝かせて置く（台に乗せて、塔を高くするため）
         vm.dragBy(-1f)
         vm.rotate(-45f)
         placeFlat(vm)
         repeat(20) { vm.tick(1.0 / 60) }
         assertEquals(StackViewModel.Phase.Settling, vm.phase)
-        assertSame(before, vm.cameraFocus) // 落下中も変えない
+        assertSame(before, vm.camera) // 落下中も変えない
         tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
-        assertTrue(vm.cameraFocus.maxY > before.maxY) // 止まったら、塔の上に出てくる次のパーツの高さまで広げる
+        // 止まったら、塔の上に出てくる次のパーツの高さまで上げる（大きさは変えないまま）
+        assertTrue((vm.camera as CameraTarget.Follow).top > before.top)
     }
 
     @Test
-    fun `after finishing the camera focus no longer includes the next part`() {
+    fun `after finishing the camera pulls back to show the whole tower and the platform`() {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a), true, null)
         placeFlat(vm)
         tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
-        assertTrue(vm.cameraFocus.maxY < vm.spawnY() - 1f)
-        assertTrue(vm.cameraFocus.maxX < vm.dragLimit)
+        val focus = (vm.camera as CameraTarget.Overview).focus
+        val half = (vm.platformWidth / 2).toFloat()
+        assertTrue(focus.minX <= -half && focus.maxX >= half) // 台の端から端まで
+        assertTrue(focus.minY <= -0.3f + 1e-6f) // 台の下面
+        assertTrue("maxY=${focus.maxY} height=${vm.height}", focus.maxY >= vm.height - 0.05f) // 塔のてっぺん
+        assertTrue(focus.maxY < vm.spawnY() - 1f) // 次のパーツが出てくる場所は入れない（もう置かない）
     }
 
     @Test
-    fun `a part falling below the platform is not followed by the camera`() {
-        // 1 個目を台の外に置き、台より下を落ちている途中で時間切れにして、次のパーツへ進む
+    fun `a part falling below the platform is left out when the camera pulls back`() {
+        // 台の外に置き、台より下を落ちている途中で時間切れにする（最後のパーツなので、判定できない結果で終わる）
         val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.7))
-        vm.updateInventory(listOf(a, b), true, null)
+        vm.updateInventory(listOf(a), true, null)
         placeOffPlatform(vm)
         tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals(StackViewModel.Phase.Unresolved, vm.phase)
         assertEquals(0, vm.fallenCount) // まだ落ちきってはいない
-        assertTrue("minY=${vm.cameraFocus.minY}", vm.cameraFocus.minY >= -0.3f - 1e-6f)
+        val focus = (vm.camera as CameraTarget.Overview).focus
+        assertTrue("minY=${focus.minY}", focus.minY >= -0.3f - 1e-6f) // 落ちていくパーツを入れようとして小さくならない
     }
 
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */

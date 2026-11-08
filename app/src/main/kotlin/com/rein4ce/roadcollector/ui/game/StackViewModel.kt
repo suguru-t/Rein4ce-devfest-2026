@@ -8,7 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartGeometry
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
@@ -124,10 +126,10 @@ class StackViewModel(
     val dragLimit: Float get() = (platformWidth / 2 + DRAG_MARGIN_M).toFloat()
 
     /**
-     * カメラに入れる範囲 [m]（台・残っているパーツ・これから置くパーツが動ける範囲）。
-     * パーツが止まったときと始めたときだけ変わる。画面はこれが全部入るように縮める（[StackViewport.zoomToFit]）
+     * カメラの狙い（[CameraTarget]）。パーツが止まったときと始めたときだけ変わる（[nextPart]）。
+     * 狙っている間（ドラッグ・回転）と落下中は変えないので、指で動かしている最中にカメラが動かない
      */
-    var cameraFocus: WorldRect by mutableStateOf(WorldRect(0f, 0f, 0f, 0f))
+    var camera: CameraTarget by mutableStateOf(CameraTarget.Follow(0f))
         private set
 
     /** ゴーストを出す高さ [m]（タワーの上 1.5 m） */
@@ -234,16 +236,20 @@ class StackViewModel(
         } else {
             phase = Phase.Placing
         }
-        cameraFocus = computeFocus()
+        camera = computeCamera()
     }
 
     /**
-     * カメラに入れる範囲 [m]：台、台の上に残っているパーツ、これから置くパーツが動ける範囲（左右の端まで・出てくる高さ）。
-     * パーツが止まったとき（と始めたとき）だけ計算し直す（[nextPart] から呼ぶ）。狙っている間（ドラッグ・回転）と落下中は変えないので、
-     * 指で動かしている最中に倍率が変わらず、落ちていくパーツを追いかけて縮み続けることもない。
-     * 全体が台の下面より下にあるパーツ（落ちている途中のもの）は入れない
+     * カメラの狙いを決める。パーツが止まったとき（と始めたとき）だけ計算し直す（[nextPart] から呼ぶ）。
+     *
+     * - 次のパーツを狙うとき：大きさは変えず、出てくる範囲のいちばん上（出てくる高さ＋どう回しても入る半径）が入るところまで
+     *   カメラを上げる。縮めると、同じ指の動きでパーツが大きく動き、細かく狙いたい高い塔ほど狙いにくくなるため（#70 のレビュー）
+     * - 置き切ったとき：台と、台の上に残っているパーツが全部入るように引く。全体が台の下面より下にあるパーツ
+     *   （落ちている途中のもの）は入れない（落ちていくパーツを入れようとして小さくなりすぎないように）
      */
-    private fun computeFocus(): WorldRect {
+    private fun computeCamera(): CameraTarget {
+        val part = current
+        if (phase == Phase.Placing && part != null) return CameraTarget.Follow(top = spawnY() + reachOf(part))
         val halfWidth = (world.platformWidth / 2).toFloat()
         val bottom = -world.platformThickness.toFloat()
         var focus = WorldRect(-halfWidth, halfWidth, bottom, 0f)
@@ -251,19 +257,18 @@ class StackViewModel(
             val bounds = shapesOfPart.map { it.bounds() }.reduce(WorldRect::union)
             if (bounds.maxY >= bottom) focus = focus.union(bounds)
         }
-        val part = current
-        if (phase == Phase.Placing && part != null) {
-            val reach = reachOf(part)
-            val y = spawnY()
-            focus = focus.union(WorldRect(-dragLimit - reach, dragLimit + reach, y - reach, y + reach))
-        }
-        return focus
+        return CameraTarget.Overview(focus)
     }
 
-    /** パーツの原点から、形のいちばん遠い点までの距離 [m]。どう回しても、この半径の円の中に収まる */
+    /**
+     * パーツの原点から、形のいちばん遠い点までの距離 [m]。どう回しても、この半径の円の中に収まる。
+     * 置くときと同じ大きさ（[PartSize]。長く歩いた道ほど大きい：#71）で測る
+     */
     private fun reachOf(part: Part): Float {
         var reach = 0.0
-        for (poly in PartGeometry.shapes(part)) for (v in poly.points) reach = max(reach, hypot(v.x, v.y))
+        for (poly in PartGeometry.shapes(part, PartSize.of(part.distanceM))) {
+            for (v in poly.points) reach = max(reach, hypot(v.x, v.y))
+        }
         return reach.toFloat()
     }
 
@@ -277,10 +282,22 @@ class StackViewModel(
         ghostAngleDeg = (ghostAngleDeg + deltaDeg + 360f) % 360f
     }
 
-    fun place() {
+    /**
+     * いまのパーツを置く。大きさは歩いた距離で決まる（[PartSize]。長く歩いた道ほど大きい）。
+     *
+     * @param grip いま置くパーツのすべりやすさ（歩いたときの天気。天気は画面がコレクションから引いて渡す）
+     */
+    fun place(grip: Grip = Grip.NORMAL) {
         val part = current ?: return
         if (phase != Phase.Placing) return
-        world.place(part, ghostX.toDouble(), spawnY().toDouble(), Math.toRadians(ghostAngleDeg.toDouble()))
+        world.place(
+            part,
+            ghostX.toDouble(),
+            spawnY().toDouble(),
+            Math.toRadians(ghostAngleDeg.toDouble()),
+            scale = PartSize.of(part.distanceM),
+            grip = grip,
+        )
         phase = Phase.Settling
         settleTimer = 0.0
     }

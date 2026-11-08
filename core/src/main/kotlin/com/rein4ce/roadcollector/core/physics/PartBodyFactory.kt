@@ -29,7 +29,8 @@ object PartBodyFactory {
      */
     fun create(part: Part, scale: Double = 1.0, material: Material = DEFAULT_MATERIAL): Body {
         val body = Body()
-        for (poly in PartGeometry.shapes(part, scale)) {
+        // 当たり判定は角ばった形（見た目は丸い。PartGeometry）
+        for (poly in PartGeometry.collisionShapes(part, scale)) {
             val shape = Geometry.createPolygon(*poly.points.map { Vector2(it.x, it.y) }.toTypedArray())
             val f = body.addFixture(shape)
             f.density = material.density

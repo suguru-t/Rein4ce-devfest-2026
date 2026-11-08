@@ -5,8 +5,10 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -17,16 +19,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +41,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -48,6 +52,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -57,18 +62,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.partSizeText
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
+import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * D 担当：積み上げゲーム画面。上から「情報（高さ・残り・落下）」「キャンバス」「操作（ボタン・完成カード）」の 3 段。
  *
  * キャンバスでは、ワールド座標（m、y 上向き、台の上面が y=0）をキャンバスに写す（[StackViewport]）：
- *   台はキャンバスの下から 22% の位置に置いたまま動かさず、横 5 m がキャンバスの幅になる倍率から始めて、
- *   塔とこれから置くパーツが入りきらなくなったら、全体が入るように縮める（カメラは上へ動かさない）。
+ *   横 5 m がキャンバスの幅になる倍率で、台はキャンバスの下から 22% の位置。
+ *   狙っている間と落下中は大きさを変えず、塔が高くなったら、次のパーツが出てくる高さが入るところまでカメラを上げる
+ *   （台はキャンバスの下へ外れることがある）。置き切ったら、塔全体と台が入るように引いて見せる。
  */
 @Composable
 fun StackScreen(
@@ -79,11 +96,19 @@ fun StackScreen(
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val inventory by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    // 並び順も見ておき、変わったら開始の判断をし直す（「先頭の 5 本」はコレクションの並びで決めるため。#74 の A のレビュー）
+    val order by repository.order.collectAsStateWithLifecycle()
+    val weathers by repository.weather.collectAsStateWithLifecycle()
     val startRequest = GameSession.startRequest
+    // 選ばずに始めたときの「先頭の 5 本」は、コレクションに見えている並び（並べ替えた順・新しく歩いた順）の上から 5 本
+    // （保存の順だと、コレクションや「パーツを選ぶ」の窓の上のほうに無いパーツで始まっていた）。並びの求め方はコレクションと同じ（arrangedNow）
 
-    LaunchedEffect(inventory, isLoaded, startRequest) {
+    // 「パーツを選ぶ」の窓を開いているか。選んで始めると、コレクションから選んだときと同じ開始要求が出て、上の LaunchedEffect が始める
+    var picking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(inventory, order, isLoaded, startRequest) {
         // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
-        vm.updateInventory(repository.parts.value, repository.isLoaded.value, startRequest)
+        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest)
     }
 
     // ゲームループ。画面が見えている間（STARTED 以上）だけ回す。アプリを裏に回すと止まり、戻ったときは
@@ -117,7 +142,7 @@ fun StackScreen(
             } else {
                 Text(vm.startMessage ?: "コレクションにパーツがありません")
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onGoInventory) { Text("コレクションへ") }
+                PressButton(onClick = onGoInventory) { Text("コレクションへ") }
             }
         }
         return
@@ -128,13 +153,13 @@ fun StackScreen(
             onDismissRequest = vm::dismissStartMessage,
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = {
+                PressTextButton(onClick = {
                     vm.dismissStartMessage()
                     onGoInventory()
                 }) { Text("コレクションへ") }
             },
             dismissButton = {
-                TextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
+                PressTextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
             },
         )
     }
@@ -146,6 +171,14 @@ fun StackScreen(
     // rememberSaveable にして、タブを行き来しても測り直さない（ゲームは ViewModel に残っているため）
     val density = LocalDensity.current
     var controlsMinHeightDp by rememberSaveable(vm.runId) { mutableStateOf(0f) }
+    // 情報の段も同じく、1 回のゲームの中では縮めない（いま置くパーツの大きさの行は狙っている間だけ出るので、
+    // そのままだと置くたびに段の高さが変わり、キャンバスの大きさが変わって台と塔がガタつくため）
+    var infoMinHeightDp by rememberSaveable(vm.runId) { mutableStateOf(0f) }
+
+    // いま置くパーツのすべりやすさ。雨や雪の日の道は、置くと滑りやすい（摩擦が小さい）。
+    // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
+    val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
+    val grip = Grip.of(sky)
 
     // 上から「情報」「キャンバス」「操作」の 3 段に分ける。ボタンや完成カードがキャンバスに重ならないので、
     // 台と塔の下の方がボタンの裏に隠れない（#42）。キャンバスは残りの高さを全部使う
@@ -154,22 +187,47 @@ fun StackScreen(
         // 完成カードなど）はスクロールさせ、キャンバスが潰れて塔が見えなくならないようにする
         val controlsMaxHeight = maxHeight * CONTROLS_MAX_FRACTION
         Column(modifier = Modifier.fillMaxSize()) {
-            // 1 段目：情報（高さ・残り・落下）
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+            // 1 段目：情報（高さ・残り・落下）。その下に、いま置くパーツの大きさと、すべりやすいならその一言（置く前に知らせる）
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = infoMinHeightDp.dp)
+                    .onSizeChanged { size ->
+                        val h = with(density) { size.height.toDp() }.value
+                        if (h > infoMinHeightDp) infoMinHeightDp = h
+                    }
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
-                    // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
-                    val fallenModifier = if (vm.fallenCount > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
+                        // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
+                        val fallenModifier = if (vm.fallenCount > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
+                        Text(
+                            "落下 ${vm.fallenCount} 個",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFD64545),
+                            modifier = fallenModifier,
+                        )
+                    }
+                }
+                val current = vm.current
+                if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+                    // 長く歩いた道ほど大きい（PartSize）。何 m 歩いたから何倍か、を出す
                     Text(
-                        "落下 ${vm.fallenCount} 個",
+                        "${current.distanceM} m 歩いた道 ・ 大きさ ${partSizeText(current.distanceM)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFD64545),
-                        modifier = fallenModifier,
+                        color = ink,
                     )
+                    val slippery = grip.label
+                    if (sky != null && slippery != null) {
+                        Spacer(Modifier.height(8.dp))
+                        SlipperyNote(sky, slippery)
+                    }
                 }
             }
 
@@ -204,11 +262,15 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                                Button(onClick = { vm.place() }) { Text("置く") }
-                                OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
+                                PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
+                                PressButton(onClick = { vm.place(grip) }) { Text("置く") }
+                                PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                             }
-                            TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
+                            // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                PressTextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
+                                PressTextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
+                            }
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
@@ -220,7 +282,8 @@ fun StackScreen(
                                     vm = vm,
                                     result = result,
                                     unresolved = vm.phase == StackViewModel.Phase.Unresolved,
-                                    onRetry = { vm.restart(repository.parts.value) },
+                                    onRetry = { vm.restart(repository.arrangedNow()) },
+                                    onPick = { picking = true },
                                     onGoGallery = onGoGallery,
                                 )
                             }
@@ -230,6 +293,42 @@ fun StackScreen(
                 }
             }
         }
+    }
+
+    if (picking) {
+        PartPickerSheet(
+            initial = vm.sessionParts.map { it.id },
+            onDismiss = { picking = false },
+            onStart = { ids ->
+                GameSession.requestStart(ids)
+                picking = false
+            },
+        )
+    }
+}
+
+/**
+ * 「雪の日の道 ・ とてもすべりやすい」。頭の丸は、コレクションで道に付く天気の色（雪は水色、雨は青）と同じ。
+ * 字は道の色の縁取りの濃い色で、地の色（ライト・ダーク）の上でも読めるように、うすく色を敷いた札にする
+ */
+@Composable
+private fun SlipperyNote(sky: Sky, label: String) {
+    val (road, casing) = Fieldbook.roadColors(sky)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(road.copy(alpha = 0.22f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(road).border(1.dp, casing, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "${sky.label}の日の道 ・ $label",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -244,6 +343,7 @@ private fun ResultCard(
     result: StackViewModel.StackResult,
     unresolved: Boolean,
     onRetry: () -> Unit,
+    onPick: () -> Unit,
     onGoGallery: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -271,10 +371,10 @@ private fun ResultCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Button(onClick = onRetry) { Text("もう一度") }
+                PressButton(onClick = onRetry) { Text("もう一度") }
                 if (vm.canUpload) {
                     // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
-                    OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
+                    PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                         when {
                             vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
                             vm.uploaded -> Text("送信済み")
@@ -282,8 +382,10 @@ private fun ResultCard(
                         }
                     }
                 }
-                TextButton(onClick = onGoGallery) { Text("みんな") }
+                PressTextButton(onClick = onGoGallery) { Text("みんな") }
             }
+            // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
+            PressTextButton(onClick = onPick) { Text("パーツを選び直す") }
             vm.uploadMessage?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -294,11 +396,12 @@ private fun ResultCard(
 
 /**
  * キャンバス。ワールド座標（m）とキャンバス（px）の変換は [StackViewport] で行い、描く位置も、指で動かした量を m に直すのも、
- * 同じ変換（キャンバスの大きさと、いまの倍率）を使う。縮めても、指の動きとゴーストがずれない。
+ * 同じ変換（キャンバスの大きさと、いまのカメラ）を使う。カメラが動いても、指の動きとゴーストがずれない。
  *
- * 倍率は、VM の [StackViewModel.cameraFocus]（台・残っているパーツ・これから置くパーツが動ける範囲）が全部入るように決める。
- * cameraFocus はパーツが止まったときだけ変わるので、狙っている間に倍率は変わらず、落ちていくパーツも追いかけない。
- * 倍率が変わるときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで変わる
+ * カメラは VM の [StackViewModel.camera] に合わせる：狙っている間と落下中は、大きさを変えずに次のパーツが出てくる高さまで上げ
+ * （[StackViewport.follow]）、置き切ったら塔全体と台が入るように引く（[StackViewport.overview]）。
+ * camera はパーツが止まったときだけ変わるので、狙っている間と落下中にカメラは動かず、落ちていくパーツも追いかけない。
+ * 動くときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで動く
  */
 @Composable
 private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
@@ -308,17 +411,26 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
     val platform = if (dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
-    val targetZoom = StackViewport.zoomToFit(canvasSize.width.toFloat(), canvasSize.height.toFloat(), vm.cameraFocus)
+    val canvasWidth = canvasSize.width.toFloat()
+    val canvasHeight = canvasSize.height.toFloat()
+    val target = when (val camera = vm.camera) {
+        is CameraTarget.Follow -> StackViewport.follow(canvasWidth, canvasHeight, camera.top)
+        is CameraTarget.Overview -> StackViewport.overview(canvasWidth, canvasHeight, camera.focus)
+    }
     val zoom = remember { Animatable(1f) }
-    var zoomPlaced by remember { mutableStateOf(false) }
-    LaunchedEffect(targetZoom, canvasSize) {
+    val cameraY = remember { Animatable(0f) }
+    var cameraPlaced by remember { mutableStateOf(false) }
+    LaunchedEffect(target) {
         if (canvasSize == IntSize.Zero) return@LaunchedEffect
-        if (!zoomPlaced) {
+        if (!cameraPlaced) {
             // 最初に大きさが決まったとき（タブを戻ったときも）は、動かさずに合わせる
-            zoom.snapTo(targetZoom)
-            zoomPlaced = true
+            zoom.snapTo(target.zoom)
+            cameraY.snapTo(target.cameraY)
+            cameraPlaced = true
         } else {
-            zoom.animateTo(targetZoom, tween(durationMillis = ZOOM_ANIMATION_MS, easing = FastOutSlowInEasing))
+            val spec = tween<Float>(durationMillis = CAMERA_ANIMATION_MS, easing = FastOutSlowInEasing)
+            launch { zoom.animateTo(target.zoom, spec) }
+            launch { cameraY.animateTo(target.cameraY, spec) }
         }
     }
 
@@ -328,12 +440,13 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
             .pointerInput(vm) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    // 描くときと同じ変換（いまのキャンバスの大きさと倍率）で m に直す
-                    vm.dragBy(StackViewport(size.width.toFloat(), size.height.toFloat(), zoom.value).dragToMeters(drag.x))
+                    // 描くときと同じ変換（いまのキャンバスの大きさとカメラ）で m に直す
+                    val viewport = StackViewport(size.width.toFloat(), size.height.toFloat(), zoom.value, cameraY.value)
+                    vm.dragBy(viewport.dragToMeters(drag.x))
                 }
             },
     ) {
-        val viewport = StackViewport(size.width, size.height, zoom.value)
+        val viewport = StackViewport(size.width, size.height, zoom.value, cameraY.value)
         val scalePx = viewport.scale
         fun sx(x: Double) = viewport.toScreenX(x.toFloat())
         fun sy(y: Double) = viewport.toScreenY(y.toFloat())
@@ -369,10 +482,11 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         // ゴースト（これから置くパーツ）
         val current = vm.current
         if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+            // 置いたときと同じ大きさで見せる（長く歩いた道ほど大きい。PartSize）
             drawPart(
                 part = current,
                 center = Offset(sx(vm.ghostX.toDouble()), sy(vm.spawnY().toDouble())),
-                scalePx = scalePx,
+                scalePx = scalePx * PartSize.of(current.distanceM).toFloat(),
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
                 alpha = 0.45f,
             )
@@ -383,5 +497,5 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
 /** 操作の段の高さの上限（画面の高さに対する割合）。超える中身はスクロールさせる */
 private const val CONTROLS_MAX_FRACTION = 0.45f
 
-/** 倍率を変えるときにかける時間 [ms] */
-private const val ZOOM_ANIMATION_MS = 400
+/** カメラを動かす（上げる・引く）ときにかける時間 [ms] */
+private const val CAMERA_ANIMATION_MS = 400
