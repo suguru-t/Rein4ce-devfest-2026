@@ -796,7 +796,7 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
 @Composable
-private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val selected = order != null
     Box(
         contentAlignment = Alignment.Center,

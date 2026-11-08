@@ -28,6 +28,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +54,8 @@ import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
+import com.rein4ce.roadcollector.ui.inventory.inventoryOrder
 import java.util.Locale
 import kotlinx.coroutines.isActive
 import kotlin.math.max
@@ -72,10 +77,16 @@ fun StackScreen(
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     val startRequest = GameSession.startRequest
+    // コレクションに見えている並び（並べ替えた順・新しく歩いた順）。選ばずに始めたときの「先頭の 5 本」を、
+    // コレクションの上から 5 本にそろえる（保存の順だと、コレクションや「パーツを選ぶ」の窓の上のほうに無いパーツで始まっていた）
+    fun arranged() = inventoryOrder(repository.parts.value, repository.order.value)
+
+    // 「パーツを選ぶ」の窓を開いているか。選んで始めると、コレクションから選んだときと同じ開始要求が出て、上の LaunchedEffect が始める
+    var picking by remember { mutableStateOf(false) }
 
     LaunchedEffect(inventory, isLoaded, startRequest) {
         // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
-        vm.updateInventory(repository.parts.value, repository.isLoaded.value, startRequest)
+        vm.updateInventory(arranged(), repository.isLoaded.value, startRequest)
     }
 
     // ゲームループ
@@ -185,7 +196,11 @@ fun StackScreen(
                         Button(onClick = { vm.place(grip) }) { Text("置く") }
                         OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
-                    TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
+                    // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { vm.restart(arranged()) }) { Text("やり直す") }
+                        TextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
+                    }
                 }
                 StackViewModel.Phase.Settling -> {
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
@@ -201,7 +216,7 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
+                                Button(onClick = { vm.restart(arranged()) }) { Text("もう一度") }
                                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                                 OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                                     when {
@@ -212,6 +227,7 @@ fun StackScreen(
                                 }
                                 TextButton(onClick = onGoGallery) { Text("みんな") }
                             }
+                            TextButton(onClick = { picking = true }) { Text("パーツを選び直す") }
                             vm.uploadMessage?.let {
                                 Spacer(Modifier.height(8.dp))
                                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -222,6 +238,17 @@ fun StackScreen(
                 StackViewModel.Phase.Idle -> Unit
             }
         }
+    }
+
+    if (picking) {
+        PartPickerSheet(
+            initial = vm.sessionParts.map { it.id },
+            onDismiss = { picking = false },
+            onStart = { ids ->
+                GameSession.requestStart(ids)
+                picking = false
+            },
+        )
     }
 }
 
