@@ -145,21 +145,32 @@ class StackWorldTest {
 
     @Test
     fun `slippery parts slip on each other but never on the platform`() {
+        // パーツどうし：晴れどうしは前と同じ（掛けて平方根）、滑りやすい面があれば滑りやすい方（乗せても、乗せられても滑る）
         val mixer = StackWorld().world.valueMixer
-        val platform = StackWorld.PLATFORM_FRICTION
-        val sunnyOnPlatform = kotlin.math.sqrt(Grip.NORMAL.friction * platform)
-        // 今までどおりの面どうし（晴れのパーツと台・晴れのパーツどうし）は、前と同じ（掛けて平方根）
-        assertEquals(sunnyOnPlatform, mixer.mixFriction(Grip.NORMAL.friction, platform), 1e-9)
         assertEquals(0.7, mixer.mixFriction(Grip.NORMAL.friction, Grip.NORMAL.friction), 1e-9)
-        // 台との間は、どの天気のパーツでも晴れと同じ（台は滑らない）。どちらの順で渡しても同じ
-        for (grip in Grip.entries) {
-            assertEquals(grip.name, sunnyOnPlatform, mixer.mixFriction(grip.friction, platform), 1e-9)
-            assertEquals(grip.name, sunnyOnPlatform, mixer.mixFriction(platform, grip.friction), 1e-9)
-        }
-        // パーツどうしは、滑りやすい面があれば滑りやすい方の値（乗せても、乗せられても滑る）
         assertEquals(Grip.WET.friction, mixer.mixFriction(Grip.NORMAL.friction, Grip.WET.friction), 1e-9)
         assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.ICY.friction, Grip.NORMAL.friction), 1e-9)
         assertEquals(Grip.ICY.friction, mixer.mixFriction(Grip.WET.friction, Grip.ICY.friction), 1e-9)
+
+        // 台との間：台の印で見分けて、どの天気のパーツでも晴れと同じ値にする（台は滑らない）。実際の接触の摩擦で確かめる
+        val sunnyOnPlatform = kotlin.math.sqrt(Grip.NORMAL.friction * StackWorld.PLATFORM_FRICTION)
+        assertEquals(sunnyOnPlatform, StackWorld.PLATFORM_CONTACT_FRICTION, 1e-9)
+        for (grip in Grip.entries) {
+            val world = StackWorld()
+            val body = world.place(SampleParts.byId("sample-bar")!!, x = 0.0, y = 0.3, angle = Math.PI / 2, grip = grip)
+            settle(world)
+            val contacts = world.world.getContacts(body)
+            assertTrue("${grip.name} touches the platform", contacts.isNotEmpty())
+            contacts.forEach { assertEquals(grip.name, sunnyOnPlatform, it.friction, 1e-9) }
+        }
+    }
+
+    @Test
+    fun `the samples show the size difference from short to long walks`() {
+        // 見本には、短い道（となりの角まで・165 m）と長い道（土手をずっと歩く・1,631 m）があり、積むと大きさの差が見える（#71 の C のレビュー）
+        val sizes = SampleParts.all.associate { it.id to PartSize.of(it.distanceM) }
+        assertTrue("shortest ${sizes.values.min()}", sizes.values.min() <= 0.75)
+        assertTrue("longest ${sizes.values.max()}", sizes.values.max() >= 1.3)
     }
 
     @Test

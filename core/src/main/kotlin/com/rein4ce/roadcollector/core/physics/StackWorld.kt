@@ -8,10 +8,12 @@ import org.dyn4j.geometry.Geometry
 import org.dyn4j.geometry.MassType
 import org.dyn4j.geometry.Polygon
 import org.dyn4j.geometry.Vector2
+import org.dyn4j.world.ContactCollisionData
 import org.dyn4j.world.ValueMixer
 import org.dyn4j.world.World
-import kotlin.math.max
+import org.dyn4j.world.listener.ContactListenerAdapter
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * 積み上げゲームの物理ワールド。UI フレームワークに依存しない。
@@ -57,6 +59,7 @@ class StackWorld(
         s.minimumAtRestTime = 0.8
         world.setGravity(0.0, -9.8)
         world.valueMixer = GripMixer
+        world.addContactListener(PlatformGrip)
 
         platform = Body().apply {
             val rect = Geometry.createRectangle(platformWidth, platformThickness)
@@ -203,25 +206,19 @@ class StackWorld(
     }
 
     /**
-     * 2 つの面が触れたときの摩擦の決め方。
-     * - **台との間**：パーツの天気によらず、晴れのパーツと同じ値（台は滑らない）。雪や雨のパーツでも、台に置いたものは滑り落ちない。
-     *   台の上でも滑ると、5 本とも落ちて送れない回が増えたため（#71 の D のレビュー：雪だけで積むと 5% → 30.5%）
-     * - **パーツどうし**：滑りやすい面（雨・雪の日のパーツ。[Grip]）があれば、滑りやすい方の値。雪のパーツを乗せても、
-     *   雪のパーツの上に乗せても滑る（dyn4j の決まり（掛けて平方根）だと、相手の面に引っ張られて、ほとんど滑らなかった）
-     * - それ以外（晴れのパーツどうしなど）：今までどおり、掛けて平方根
+     * パーツどうしが触れたときの摩擦の決め方。滑りやすい面（雨・雪の日のパーツ。[Grip]）があれば、滑りやすい方の値。
+     * 雪のパーツを乗せても、雪のパーツの上に乗せても滑る（dyn4j の決まり（掛けて平方根）だと、相手の面に引っ張られて、ほとんど滑らなかった）。
+     * 晴れのパーツどうしなどは、今までどおり掛けて平方根。
      *
-     * 台かどうかは摩擦の値で見分ける（台は [PLATFORM_FRICTION]、パーツはどれも [Grip.NORMAL] 以下）
+     * 台との間はここでは決めず、[PlatformGrip] が台の印で見分けて置き換える（摩擦の値だけでは、台かパーツかを確実には見分けられないため）
      */
     private object GripMixer : ValueMixer {
-        override fun mixFriction(friction1: Double, friction2: Double): Double {
-            val platform = max(friction1, friction2)
-            val part = min(friction1, friction2)
-            return when {
-                platform >= PLATFORM_FRICTION -> ValueMixer.DEFAULT_MIXER.mixFriction(max(part, Grip.NORMAL.friction), platform)
-                part < Grip.NORMAL.friction -> part
-                else -> ValueMixer.DEFAULT_MIXER.mixFriction(friction1, friction2)
+        override fun mixFriction(friction1: Double, friction2: Double): Double =
+            if (friction1 < Grip.NORMAL.friction || friction2 < Grip.NORMAL.friction) {
+                min(friction1, friction2)
+            } else {
+                ValueMixer.DEFAULT_MIXER.mixFriction(friction1, friction2)
             }
-        }
 
         override fun mixRestitution(restitution1: Double, restitution2: Double): Double =
             ValueMixer.DEFAULT_MIXER.mixRestitution(restitution1, restitution2)
@@ -230,11 +227,31 @@ class StackWorld(
             ValueMixer.DEFAULT_MIXER.mixRestitutionVelocity(restitutionVelocity1, restitutionVelocity2)
     }
 
+    /**
+     * 台との間の摩擦：パーツの天気によらず、晴れのパーツと同じ値（[PLATFORM_CONTACT_FRICTION]。台は滑らない）。
+     * 雪や雨のパーツでも、台に置いたものは滑り落ちない。台の上でも滑ると、5 本とも落ちて送れない回が増えたため
+     * （#71 の D のレビュー：雪だけで積むと 5% → 30.5%）。
+     *
+     * 台は、ボディの印（[PLATFORM_TAG]）で見分ける（#71 の C のレビュー。摩擦の値で見分けると、摩擦の大きいパーツを足したときに台と間違える）。
+     * dyn4j は毎コマ、接触の摩擦を [GripMixer] で決めてから [collision] を呼ぶので、ここで台との接触だけを置き換える
+     */
+    private object PlatformGrip : ContactListenerAdapter<Body>() {
+        override fun collision(collision: ContactCollisionData<Body>) {
+            val contact = collision.contactConstraint
+            if (contact.body1.userData == PLATFORM_TAG || contact.body2.userData == PLATFORM_TAG) {
+                contact.friction = PLATFORM_CONTACT_FRICTION
+            }
+        }
+    }
+
     companion object {
         const val PLATFORM_TAG = "platform"
 
-        /** 台の面の摩擦。パーツ（どれも [Grip.NORMAL] 以下）より大きいので、摩擦の混ぜ方で台を見分けるのにも使う */
+        /** 台の面の摩擦 */
         const val PLATFORM_FRICTION = 0.9
+
+        /** 台とパーツの間の摩擦。どの天気のパーツでも、晴れのパーツと台の間と同じ値（掛けて平方根。約 0.79） */
+        val PLATFORM_CONTACT_FRICTION: Double = sqrt(Grip.NORMAL.friction * PLATFORM_FRICTION)
 
         /** 台の幅と厚さ [m]。物理と、共有ページの絵（TowerSvg / TowerPng）と、アプリの絵（TowerSketch）で同じ値を使う */
         const val PLATFORM_WIDTH = 1.4
