@@ -67,6 +67,7 @@ import kotlin.math.min
  * - タブを切り替えると、進む側の端が先に、後ろの端が遅れて動くので、しずくが伸びてから縮んで着く（伸びた分だけ少し薄くなる）
  * - 押すと、しずくがふくらんで持ち上がり（影が濃くなる）、指でタブバーをなぞると指に付いてくる。離した所のタブに切り替わる。
  *   しずくの近くのアイコンは、レンズで拡大したように少し大きくなる
+ * - タブバーそのものも、押すと少しへこみ、離すとぷるんと戻る。なぞっている間は、指の方へ少し引っぱられる
  * - 押したときと、なぞって次のタブに移ったときに、軽い振動を返す
  *
  * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡し、ダブルタップで切り替えられるようにする
@@ -79,10 +80,27 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 10.dp),
     ) {
+        // 指でなぞっている間は、しずくのまん中を指の位置に置く（null のときは選ばれているタブ）
+        var fingerX by remember { mutableStateOf<Float?>(null) }
+        // タブバーそのものの押された感じ：押すと少しへこみ（縮む）、離すとぷるんと戻る（少し行き過ぎてから）。
+        // なぞっている間は、指の方へ少しだけ引っぱられる
+        val press = remember { Animatable(0f) }
+        LaunchedEffect(fingerX != null) {
+            if (fingerX != null) press.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 900f))
+            else press.animateTo(0f, spring(dampingRatio = 0.32f, stiffness = 480f))
+        }
+        val maxPull = with(LocalDensity.current) { BarPull.toPx() }
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(BarHeight)
+                .graphicsLayer {
+                    val p = press.value
+                    scaleX = 1f - BarSquash * p
+                    scaleY = 1f - BarSquash * 1.4f * p
+                    val pull = ((fingerX ?: (size.width / 2)) - size.width / 2) * 0.03f
+                    translationX = pull.coerceIn(-maxPull, maxPull) * p.coerceIn(0f, 1f)
+                }
                 .shadow(elevation = 6.dp, shape = PillShape, ambientColor = Fieldbook.Ink, spotColor = Fieldbook.Ink)
                 // 紙色を少し透かして、下の方眼が見えるように
                 .background(Fieldbook.Paper.copy(alpha = 0.88f), PillShape)
@@ -99,8 +117,6 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
             fun indexAt(x: Float) = (x / tabWidthPx).toInt().coerceIn(0, count - 1)
 
             val selectedIndex = Dest.all.indexOfFirst { dest -> current?.hierarchy?.any { it.route == dest.route } == true }
-            // 指でなぞっている間は、しずくのまん中を指の位置に置く（null のときは選ばれているタブ）
-            var fingerX by remember { mutableStateOf<Float?>(null) }
             val targetCenter = fingerX?.coerceIn(lensWidthPx / 2, barWidthPx - lensWidthPx / 2)
                 ?: if (selectedIndex >= 0) centerOf(selectedIndex) else null
 
@@ -270,6 +286,10 @@ private fun trail(following: Boolean) =
 /** ピルの形（高さ 56dp の半分の角丸） */
 private val PillShape = RoundedCornerShape(28.dp)
 private val BarHeight = 56.dp
+
+/** 押したときに、タブバーがどれだけ縮むか（横。縦はその 1.4 倍）と、なぞったときに指の方へ引っぱられる上限 */
+private const val BarSquash = 0.035f
+private val BarPull = 6.dp
 
 /** 止まっているときのしずくの大きさ */
 private val LensWidth = 60.dp
