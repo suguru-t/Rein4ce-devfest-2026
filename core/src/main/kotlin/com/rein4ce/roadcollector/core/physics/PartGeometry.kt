@@ -1,22 +1,27 @@
 package com.rein4ce.roadcollector.core.physics
 
 import com.rein4ce.roadcollector.core.model.Part
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
- * パーツの「見た目の形」を、凸多角形の集まりとして表す。
- * 物理ボディ（dyn4j の fixture）と描画（Compose Canvas / SVG / PNG）の両方がこれを使うので、
- * 見た目と当たり判定が必ず一致する。
+ * パーツの形を、凸多角形の集まりとして表す。見た目と当たり判定で、形を分けている（2026-11-07 の話し合いで決定）：
  *
- * 形は角ばらせている（丸い継ぎ目・丸い端より、置いたときに少し安定するため。`docs/decisions.md` の 18）：
- * - 線分ごとの長方形。輪でないパーツの両端は、太さの半分だけ伸ばして四角く切る
- * - 曲がり角の継ぎ目。外側の角はとがらせ、とがりすぎる角（[MITER_LIMIT] を超える）は斜めに切る
+ * - 見た目（[shapes]）：丸い。線を太さ・丸い端・丸い曲がり角で描いたときと同じ形。
+ *   アプリの絵（Compose Canvas）・共有ページの絵（SVG）と画像（PNG）・積む画面（[StackWorld.renderShapes]）がこれを使う
+ * - 当たり判定（[collisionShapes]）：角ばらせている（丸い端・丸い継ぎ目より、置いたときに少し安定するため。`docs/decisions.md` の 18）。
+ *   物理ボディ（dyn4j の fixture。[PartBodyFactory]）だけがこれを使う
+ *
+ * 丸い見た目は、角ばった当たり判定の内側に収まる（丸い端は四角い端の内側、丸い角はとがった角の内側）。
+ * そのため、角で支え合ったときは、見た目が少し浮いて見えることがある。
  *
  * 多角形どうしは重なっている。描くときは、全部を 1 つのパスにまとめて塗る（継ぎ目に線が出ず、半透明でも重なりが濃くならない）。
- * 線を太さ・四角い端・とがった角（miter、上限 [MITER_LIMIT]）で描いたときと同じ形になる。
+ * どの多角形も頂点は反時計回りなので、まとめて塗っても穴が開かない。
  *
- * 座標はパーツのローカル座標（長辺 = scale、中心が原点、y 上向き）。多角形の頂点は反時計回り。
+ * 座標はパーツのローカル座標（長辺 = scale、中心が原点、y 上向き）。
  */
 object PartGeometry {
 
@@ -32,20 +37,44 @@ object PartGeometry {
      */
     const val MITER_LIMIT = 2.0
 
+    /** 見た目の丸い端・丸い角を、何角形で近づけるか（大きく見せても角ばって見えない数） */
+    const val CIRCLE_SEGMENTS = 24
+
     /**
+     * 見た目の形（丸い）：線分ごとの長方形（端は伸ばさない）と、各点の円（半径は太さの半分）。
+     * 端が丸く、曲がり角も丸くなる。円は [circleSegments] 角形で近づける
+     *
      * @param scale パーツの長辺を何 [m]（描くときは何 px）にするか（ゲーム内では 1.0）
      */
-    fun shapes(part: Part, scale: Double = 1.0): List<Polygon> {
+    fun shapes(part: Part, scale: Double = 1.0, circleSegments: Int = CIRCLE_SEGMENTS): List<Polygon> {
         val h = part.thickness * scale / 2.0
-        // 同じ点が続くと線分の向きが決まらないので、1 つにまとめる
-        val pts = ArrayList<Vec>()
-        for (p in part.points) {
-            val v = Vec(p.x * scale, p.y * scale)
-            if (pts.isEmpty() || dist(pts.last(), v) > EPS * scale) pts += v
+        val (pts, closed) = cleanPoints(part, scale)
+        if (pts.isEmpty() || h <= 0.0) return emptyList()
+        val out = ArrayList<Polygon>()
+        val n = pts.size
+        val segCount = if (pts.size == 1) 0 else if (closed) n else n - 1
+        for (i in 0 until segCount) {
+            val a = pts[i]
+            val b = pts[(i + 1) % n]
+            val d = unit(a, b)
+            val nx = -d.y * h
+            val ny = d.x * h
+            out += Polygon(listOf(Vec(a.x - nx, a.y - ny), Vec(b.x - nx, b.y - ny), Vec(b.x + nx, b.y + ny), Vec(a.x + nx, a.y + ny)))
         }
-        // 輪で、最後の点が最初の点と同じなら、最後の点は要らない（最後から最初へは輪としてつなぐ）
-        if (part.closed && pts.size >= 2 && dist(pts.first(), pts.last()) <= EPS * scale) pts.removeAt(pts.lastIndex)
-        val closed = part.closed && pts.size >= 3
+        for (p in pts) out += circle(p, h, circleSegments)
+        return out
+    }
+
+    /**
+     * 当たり判定の形（角ばっている）：線分ごとの長方形（輪でないパーツの両端は、太さの半分だけ伸ばして四角く切る）と、
+     * 曲がり角の継ぎ目（外側の角はとがらせ、とがりすぎる角（[MITER_LIMIT] を超える）は斜めに切る）。
+     * 線を太さ・四角い端・とがった角（miter、上限 [MITER_LIMIT]）で描いたときと同じ形
+     *
+     * @param scale パーツの長辺を何 [m] にするか（ゲーム内では 1.0）
+     */
+    fun collisionShapes(part: Part, scale: Double = 1.0): List<Polygon> {
+        val h = part.thickness * scale / 2.0
+        val (pts, closed) = cleanPoints(part, scale)
         if (pts.isEmpty() || h <= 0.0) return emptyList()
         if (pts.size == 1) return listOf(square(pts[0], h))
 
@@ -97,7 +126,25 @@ object PartGeometry {
         return if (hull.size >= 3 && area(hull) > 1e-6 * h * h) Polygon(hull) else null
     }
 
-    /** 点が 1 つしかないときの形（ありえないが、何も描かないよりよい）：太さを 1 辺とする正方形 */
+    /**
+     * 同じ点が続くと線分の向きが決まらないので、1 つにまとめた点の列（[scale] 倍）と、輪として扱うか。
+     * 輪で、最後の点が最初の点と同じなら、最後の点は要らない（最後から最初へは輪としてつなぐ）
+     */
+    private fun cleanPoints(part: Part, scale: Double): Pair<List<Vec>, Boolean> {
+        val pts = ArrayList<Vec>()
+        for (p in part.points) {
+            val v = Vec(p.x * scale, p.y * scale)
+            if (pts.isEmpty() || dist(pts.last(), v) > EPS * scale) pts += v
+        }
+        if (part.closed && pts.size >= 2 && dist(pts.first(), pts.last()) <= EPS * scale) pts.removeAt(pts.lastIndex)
+        return pts to (part.closed && pts.size >= 3)
+    }
+
+    /** 中心 [c]・半径 [r] の円を近づけた正多角形（反時計回り） */
+    private fun circle(c: Vec, r: Double, segments: Int) =
+        Polygon(List(segments) { k -> val a = 2 * PI * k / segments; Vec(c.x + r * cos(a), c.y + r * sin(a)) })
+
+    /** 点が 1 つしかないときの当たり判定の形（ありえないが、何もないよりよい）：太さを 1 辺とする正方形 */
     private fun square(c: Vec, h: Double) =
         Polygon(listOf(Vec(c.x - h, c.y - h), Vec(c.x + h, c.y - h), Vec(c.x + h, c.y + h), Vec(c.x - h, c.y + h)))
 

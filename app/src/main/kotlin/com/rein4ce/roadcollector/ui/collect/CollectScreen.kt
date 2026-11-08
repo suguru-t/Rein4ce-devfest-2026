@@ -31,17 +31,13 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -94,6 +90,10 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -204,7 +204,8 @@ fun CollectScreen(
             val gearTurn = remember { Animatable(0f) }
             val gearScope = rememberCoroutineScope()
             val gearJob = remember { mutableStateOf<Job?>(null) }
-            IconButton(onClick = {
+            // 押したときの縮みと振動（#76 の押し心地）に、回転を重ねる
+            PressIconButton(onClick = {
                 if (gearJob.value?.isActive != true) {
                     gearJob.value = gearScope.launch {
                         gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
@@ -322,7 +323,7 @@ fun CollectScreen(
                     date = walkDate(o.part.walkedAt),
                     weather = sky?.label,
                 )
-                TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
+                PressTextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
             }
@@ -398,7 +399,7 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
 /** コレクションの「積む」ボタンと同じ見た目のボタン（両端が丸い Material の標準の形。「パーツを選ぶ」の窓のボタンとも同じ） */
 @Composable
 private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Button(
+    PressButton(
         onClick = onClick,
         enabled = enabled,
         shape = ButtonDefaults.shape,
@@ -424,7 +425,7 @@ private fun DemoMenuButton(
 ) {
     var open by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        OutlinedButton(
+        PressOutlinedButton(
             onClick = { open = true },
             enabled = enabled,
             // 隣の「記録開始」と同じ、両端が丸い形
