@@ -59,7 +59,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -95,6 +94,7 @@ import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
@@ -173,7 +173,7 @@ fun CollectScreen(
                 val footSteps = remember { Animatable(0f) }
                 val footScope = rememberCoroutineScope()
                 val footJob = remember { mutableStateOf<Job?>(null) }
-                val haptics = LocalHapticFeedback.current
+                val haptics = rememberHaptics()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.pointerInput(Unit) {
@@ -272,24 +272,21 @@ fun CollectScreen(
         // 操作：コレクションの「積むパーツを選ぶ」と同じ青・形（両端が丸い）・高さ（48dp）。
         // 文字を大きくして片方だけ 2 行になっても、並んだ 2 つの高さをそろえる（高い方に合わせる）
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isRecording) {
-                SurveyButton(
-                    text = "停止してパーツ化",
-                    onClick = { vm.stopAndConvert() },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            } else {
-                SurveyButton(
-                    text = "記録開始",
-                    onClick = {
-                        if (LocationRecordingService.hasLocationPermission(context)) {
-                            vm.startRecording()
-                        } else {
-                            permissionLauncher.launch(LocationRecordingService.requiredPermissions())
-                        }
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
+            // 「記録開始」と「停止してパーツ化」は 1 つのボタンで、文字と押したときの動作だけを切り替える。
+            // 別々のボタンにすると、押した瞬間に記録が始まって（止まって）ボタンが入れ替わり、
+            // 離したあとの押し心地（バネで戻る動き。ui/common/PressFeel）が途中で消えてしまう
+            SurveyButton(
+                text = if (isRecording) "停止してパーツ化" else "記録開始",
+                onClick = {
+                    when {
+                        isRecording -> vm.stopAndConvert()
+                        LocationRecordingService.hasLocationPermission(context) -> vm.startRecording()
+                        else -> permissionLauncher.launch(LocationRecordingService.requiredPermissions())
+                    }
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            if (!isRecording) {
                 DemoMenuButton(
                     enabled = !vm.isDemoPlaying,
                     onPick = { vm.playDemo(it) },

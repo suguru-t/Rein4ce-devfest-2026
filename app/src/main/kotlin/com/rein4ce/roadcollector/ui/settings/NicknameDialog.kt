@@ -37,6 +37,7 @@ import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.nicknameHintsFor
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.AiNameButton

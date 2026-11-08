@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import kotlinx.coroutines.launch
@@ -100,7 +101,8 @@ internal fun RenameDialog(
         titleContentColor = Fieldbook.Ink,
         textContentColor = Fieldbook.Ink,
         title = { Text("名前を付ける", fontWeight = FontWeight.Bold) },
-        text = {
+        // 入力欄で字を長押しして選ぶときの振動も、設定の「振動」に従わせる（ui/common/Haptics.kt）
+        text = { ProvideAppHaptics {
             Column {
                 OutlinedTextField(
                     value = text,
@@ -163,7 +165,7 @@ internal fun RenameDialog(
                     )
                 }
             }
-        },
+        } },
         confirmButton = {
             PressTextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
                 Text("保存", color = if (tooLong) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
