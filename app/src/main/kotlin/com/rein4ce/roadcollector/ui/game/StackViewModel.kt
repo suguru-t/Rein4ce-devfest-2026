@@ -19,17 +19,42 @@ import kotlinx.coroutines.launch
 /**
  * D 担当：積み上げゲームの進行。物理は :core の StackWorld、ここは「ターン」の管理。
  *
- * Placing  … 手持ちの 1 個をドラッグ・回転して「置く」
- * Settling … 落下中。全部が静止したら次へ（落ちたパーツは消える）
- * Finished … 置き切った。高さ確定
+ * Placing    … 手持ちの 1 個をドラッグ・回転して「置く」
+ * Settling   … 落下中。塔全体が止まったら次へ。落ちたパーツは、落ちた時点で取り除いて数える
+ * Finished   … 置き切って、塔全体が止まったのを確かめた。結果（[result]）を固定し、物理も止める
+ * Unresolved … 最後のパーツのあと、上限の時間までに塔が止まらなかった（判定できない）。結果は見せるが送信はできない
  */
 class StackViewModel(
     /** 送信に失敗したとき、画面に出す接続先。デモ端末で接続先の設定ミスを見分けるため */
     private val serverUrl: () -> String = { ApiClient.baseUrl },
+    /** 落下待ちの時間。テストで短くできるように差し替えられる */
+    private val settleTiming: SettleTiming = SettleTiming(),
     private val postTower: suspend (Tower) -> TowerCreated = { ApiClient.postTower(it) },
 ) : ViewModel() {
 
-    enum class Phase { Idle, Placing, Settling, Finished }
+    enum class Phase { Idle, Placing, Settling, Finished, Unresolved }
+
+    /**
+     * 落下待ちの決まり。[minSeconds] より前は止まっていても次へ進まない（置いた直後の一瞬の静止を拾わないため）。
+     * [maxSeconds] までに止まらなければ時間切れ：途中のパーツならそのまま次へ（最後の判定で塔全体をもう一度確かめる）、
+     * 最後のパーツなら [Phase.Unresolved]
+     */
+    data class SettleTiming(val minSeconds: Double = 0.8, val maxSeconds: Double = 6.0)
+
+    /**
+     * ゲームの結果。置き切った瞬間に 1 つにまとめて固定し、完成の表示と送信の両方がこれを使う（以後の tick では変わらない）。
+     *
+     * @property usedCount   このゲームで置いたパーツの数
+     * @property fallenCount 落ちたパーツの数（置いたあとに崩れて落ちたものも含む）
+     * @property settled     最後のパーツのあと、塔全体が止まったのを確かめられたか
+     */
+    data class StackResult(val tower: Tower, val usedCount: Int, val fallenCount: Int, val settled: Boolean) {
+        /** 台の上に残ったパーツの数 */
+        val remainingCount: Int get() = tower.parts.size
+
+        /** サーバに送れるか。止まったのを確かめられなかった結果と、パーツが 1 つも残らなかった結果は送らない（空のタワーはサーバが 400 で断る：#58） */
+        val canUpload: Boolean get() = settled && tower.parts.isNotEmpty()
+    }
 
     private var world = StackWorld()
 
@@ -47,7 +72,10 @@ class StackViewModel(
 
     /** 選んだ直後の要求が解決できなかった。別のパーツで勝手に始めず、選び直しを待つ */
     private var waitingForReselect = false
-    private var completedTower: Tower? = null
+
+    /** 置き切ったときに固定した結果（[Phase.Finished] / [Phase.Unresolved] のときだけ入っている） */
+    var result: StackResult? by mutableStateOf(null)
+        private set
 
     var startMessage: String? by mutableStateOf(null)
         private set
@@ -81,8 +109,12 @@ class StackViewModel(
     private var uploadedRunId: Long? by mutableStateOf(null)
 
     /** いま完成しているタワーが送信済みか。送信済みならボタンを押せなくする */
-    val uploaded: Boolean get() = completedTower != null && uploadedRunId == runId
+    val uploaded: Boolean get() = result != null && uploadedRunId == runId
 
+    /** いまの結果をサーバに送れるか（完成して、塔が止まったのを確かめられ、パーツが残っている） */
+    val canUpload: Boolean get() = phase == Phase.Finished && result?.canUpload == true
+
+    /** 落下を待ち始めてから進めた時間 [s]。1 フレームの上限（[MAX_FRAME_SECONDS]）をかけた時間を足すので、物理の進みと合う */
     private var settleTimer = 0.0
 
     val platformWidth: Double get() = world.platformWidth
@@ -152,7 +184,8 @@ class StackViewModel(
         // 前のゲームの送信は打ち切らない（サーバ側の保存と食い違わないように）。
         // 結果は runId で照合するので、次のゲームの表示には混ざらない
         uploading = false
-        completedTower = null
+        result = null
+        settleTimer = 0.0
         startMessage = null
         world = StackWorld()
         sessionParts = parts.toList()
@@ -164,20 +197,29 @@ class StackViewModel(
         nextPart()
     }
 
-    private fun nextPart() {
+    /**
+     * 次のパーツへ進む。もう無ければ、この瞬間の結果を固定して終わる。
+     * @param settled 直前のパーツのあと、塔全体が止まったのを確かめられたか（時間切れなら false）
+     */
+    private fun nextPart(settled: Boolean = true) {
         current = queue.firstOrNull()
         queue = queue.drop(1)
         remaining = queue.size
         ghostX = 0f
         ghostAngleDeg = 0f
         if (current == null) {
-            phase = Phase.Finished
-            completedTower = Tower(
-                parts = world.placedParts,
-                placements = world.placements(),
-                height = height,
-                createdAt = System.currentTimeMillis(),
+            result = StackResult(
+                tower = Tower(
+                    parts = world.placedParts,
+                    placements = world.placements(),
+                    height = height,
+                    createdAt = System.currentTimeMillis(),
+                ),
+                usedCount = sessionParts.size,
+                fallenCount = fallenCount,
+                settled = settled,
             )
+            phase = if (settled) Phase.Finished else Phase.Unresolved
         } else {
             phase = Phase.Placing
         }
@@ -214,28 +256,37 @@ class StackViewModel(
         settleTimer = 0.0
     }
 
-    /** 毎フレーム呼ぶ。 */
+    /**
+     * 毎フレーム呼ぶ。[dtSeconds] は前のフレームからの時間。
+     *
+     * - 1 回に進める時間は [MAX_FRAME_SECONDS] まで。アプリを裏から戻したときなどに長い dt が来ても、
+     *   物理がほとんど進まないまま待ち時間だけが進んで、判定が飛ぶことはない
+     * - 落ちたパーツは、落ちた時点で取り除いて数える（すでに置いたパーツが崩れて落ちた場合も）。
+     *   落ち続けるパーツは止まらないので、残しておくと塔全体が止まったことにならず、上限まで待つことになる
+     * - 置き切ったあと（[Phase.Finished] / [Phase.Unresolved]）は物理を進めない。結果と画面の塔が変わらない
+     */
     fun tick(dtSeconds: Double) {
-        if (phase == Phase.Idle) return
-        world.step(dtSeconds)
+        if (phase == Phase.Idle || phase == Phase.Finished || phase == Phase.Unresolved) return
+        val dt = dtSeconds.coerceIn(0.0, MAX_FRAME_SECONDS)
+        world.step(dt)
+        val fallen = world.removeFallen()
+        if (fallen.isNotEmpty()) fallenCount += fallen.size
 
         if (phase == Phase.Settling) {
-            settleTimer += dtSeconds
-            val settled = settleTimer > MIN_SETTLE_SECONDS && world.isSettled()
-            if (settled || settleTimer > MAX_SETTLE_SECONDS) {
-                val fallen = world.removeFallen()
-                fallenCount += fallen.size
+            settleTimer += dt
+            val settled = settleTimer >= settleTiming.minSeconds && world.isSettled()
+            if (settled || settleTimer >= settleTiming.maxSeconds) {
                 height = world.height().toFloat()
-                nextPart()
+                nextPart(settled)
             }
         }
         shapes = world.renderShapes()
-        if (phase != Phase.Settling) height = world.height().toFloat()
+        if (phase == Phase.Placing) height = world.height().toFloat()
     }
 
     fun upload() {
-        val tower = completedTower ?: return
-        if (phase != Phase.Finished || uploading || uploaded) return
+        val tower = result?.tower ?: return
+        if (!canUpload || uploading || uploaded) return
         val uploadingRunId = runId
         uploading = true
         viewModelScope.launch {
@@ -256,8 +307,11 @@ class StackViewModel(
     }
 
     companion object {
-        private const val MIN_SETTLE_SECONDS = 0.8
-        private const val MAX_SETTLE_SECONDS = 6.0
+        /**
+         * 1 フレームで進める時間の上限 [s]。物理は 1/60 秒刻みで、1 回の呼び出しで 5 歩（約 0.083 秒）までしか進まない。
+         * 0.05 秒（3 歩ぶん）に抑えて、いつも全部進められるようにし、待ち時間と物理の進みがずれないようにする
+         */
+        const val MAX_FRAME_SECONDS = 0.05
 
         const val MESSAGE_SELECTION_MISSING = "選んだパーツはコレクションにありません。パーツを選び直してください。"
         const val MESSAGE_RETRY_MISSING = "このゲームのパーツは、すべてコレクションから削除されています。パーツを選び直してください。"

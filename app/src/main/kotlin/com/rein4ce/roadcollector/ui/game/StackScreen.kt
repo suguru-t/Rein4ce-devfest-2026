@@ -39,8 +39,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.physics.Grip
@@ -90,13 +94,18 @@ fun StackScreen(
         vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest)
     }
 
-    // ゲームループ
-    LaunchedEffect(Unit) {
-        var last = 0L
-        while (isActive) {
-            withFrameNanos { now ->
-                if (last != 0L) vm.tick((now - last) / 1_000_000_000.0)
-                last = now
+    // ゲームループ。画面が見えている間（STARTED 以上）だけ回す。アプリを裏に回すと止まり、戻ったときは
+    // 前のフレームの時刻を捨てて数え直すので、止まっていた時間が一度に入らない。
+    // タブを移ったときは、画面ごと LaunchedEffect が止まり、戻ると同じく数え直す（1 回の時間の上限は VM の tick でもかける）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(vm, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var last = 0L
+            while (isActive) {
+                withFrameNanos { now ->
+                    if (last != 0L) vm.tick((now - last) / 1_000_000_000.0)
+                    last = now
+                }
             }
         }
     }
@@ -207,33 +216,16 @@ fun StackScreen(
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
                     Spacer(Modifier.height(48.dp))
                 }
-                StackViewModel.Phase.Finished -> {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("完成！ 高さ %.2f m".format(vm.height), style = MaterialTheme.typography.titleLarge)
-                            Text(
-                                "残ったパーツ ${vm.sessionParts.size - vm.fallenCount} / ${vm.sessionParts.size}",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PressButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("もう一度") }
-                                // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
-                                PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
-                                    when {
-                                        vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
-                                        vm.uploaded -> Text("送信済み")
-                                        else -> Text("サーバに送信")
-                                    }
-                                }
-                                PressTextButton(onClick = onGoGallery) { Text("みんな") }
-                            }
-                            PressTextButton(onClick = { picking = true }) { Text("パーツを選び直す") }
-                            vm.uploadMessage?.let {
-                                Spacer(Modifier.height(8.dp))
-                                Text(it, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
+                StackViewModel.Phase.Finished, StackViewModel.Phase.Unresolved -> {
+                    vm.result?.let { result ->
+                        ResultCard(
+                            vm = vm,
+                            result = result,
+                            unresolved = vm.phase == StackViewModel.Phase.Unresolved,
+                            onRetry = { vm.restart(repository.arrangedNow()) },
+                            onPick = { picking = true },
+                            onGoGallery = onGoGallery,
+                        )
                     }
                 }
                 StackViewModel.Phase.Idle -> Unit
@@ -275,6 +267,64 @@ private fun SlipperyNote(sky: Sky, label: String) {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
+    }
+}
+
+/**
+ * 置き切ったときの結果のカード。表示も送信も、置き切った瞬間に固定した [StackViewModel.StackResult] を使う
+ * （完成後に物理は止めているので、カードの高さと画面の塔と送る内容がそろう）。
+ * 送れない結果（塔が止まったのを確かめられなかった・パーツが 1 つも残らなかった）は、送信ボタンを出さずに理由を書く。
+ */
+@Composable
+private fun ResultCard(
+    vm: StackViewModel,
+    result: StackViewModel.StackResult,
+    unresolved: Boolean,
+    onRetry: () -> Unit,
+    onPick: () -> Unit,
+    onGoGallery: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        // 列をカードの幅いっぱいにして、中身をカードの真ん中にそろえる（幅が中身なりだと、カードの左に寄る）
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            val title = when {
+                unresolved -> "揺れが止まりませんでした"
+                result.remainingCount == 0 -> "全部落ちました"
+                else -> "完成！ 高さ %.2f m".format(result.tower.height)
+            }
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text("残ったパーツ ${result.remainingCount} / ${result.usedCount}", style = MaterialTheme.typography.bodyMedium)
+            val reason = when {
+                unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
+                result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
+                else -> null
+            }
+            reason?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PressButton(onClick = onRetry) { Text("もう一度") }
+                if (vm.canUpload) {
+                    // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
+                    PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
+                        when {
+                            vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
+                            vm.uploaded -> Text("送信済み")
+                            else -> Text("サーバに送信")
+                        }
+                    }
+                }
+                PressTextButton(onClick = onGoGallery) { Text("みんな") }
+            }
+            // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
+            PressTextButton(onClick = onPick) { Text("パーツを選び直す") }
+            vm.uploadMessage?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 

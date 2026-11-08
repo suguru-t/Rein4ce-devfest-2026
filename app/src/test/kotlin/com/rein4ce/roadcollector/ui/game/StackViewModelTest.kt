@@ -19,6 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -386,8 +387,7 @@ class StackViewModelTest {
                     TowerCreated("ok", "https://example.test/ok")
                 }
                 vm.updateInventory(listOf(a.copy(distanceM = distance)), true, null)
-                vm.rotate(90f) // 寝かせて、台から落ちないように
-                finish(vm)
+                finish(vm) // 寝かせて置く（台から落ちないように。finish の中で 90° 回す）
                 vm.upload()
                 runCurrent()
                 assertEquals(PartSize.of(distance).toFloat(), sent!!.placements.single().scale, 1e-6f)
@@ -397,12 +397,161 @@ class StackViewModelTest {
         }
     }
 
-    private fun finish(vm: StackViewModel) {
+    // ---- #41：落下待ちと完成の判定、完成した結果の固定 ----
+
+    @Test
+    fun `a part that falls off is removed as it falls and the turn does not wait for the time limit`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true, null)
+        placeOffPlatform(vm)
+        val seconds = tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        // 前は、落ち続けるパーツが止まらないので「全部止まった」にならず、上限の 6 秒まで待っていた
+        assertTrue("took $seconds s", seconds < 2.0)
+        assertEquals(StackViewModel.Phase.Finished, vm.phase)
+        assertEquals(1, vm.fallenCount)
+        assertEquals(0, vm.result!!.remainingCount)
+    }
+
+    @Test
+    fun `a tower with no parts left is not uploaded`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var calls = 0
+            val vm = StackViewModel { calls++; TowerCreated("x", "https://example.test/x") }
+            vm.updateInventory(listOf(a), true, null)
+            placeOffPlatform(vm)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+            assertFalse(vm.canUpload)
+            vm.upload()
+            runCurrent()
+            assertEquals(0, calls) // 空のタワーはサーバが 400 で断る（#58）。送らない
+            assertNull(vm.uploadMessage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `a long frame after resuming does not skip the settle judgement`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true, null)
+        placeFlat(vm)
+        vm.tick(10.0) // 10 秒、裏に回していたあとの 1 フレーム
+        assertEquals(StackViewModel.Phase.Settling, vm.phase)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        assertEquals(StackViewModel.Phase.Finished, vm.phase)
+        assertTrue(vm.result!!.settled)
+        assertTrue(vm.canUpload)
+    }
+
+    @Test
+    fun `the result is fixed at completion and later ticks change nothing`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true, null)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        val result = vm.result!!
+        val height = vm.height
+        val shapes = vm.shapes
+        repeat(100) { vm.tick(1.0 / 60) }
+        assertSame(result, vm.result)
+        assertSame(shapes, vm.shapes)
+        assertEquals(height, vm.height)
+        assertEquals(result.tower.height, vm.height)
+        assertEquals(2, result.usedCount)
+        assertEquals(result.remainingCount, result.tower.placements.size)
+    }
+
+    @Test
+    fun `timing out on the last part gives an unresolved result that cannot be uploaded`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var calls = 0
+            // 落ちきる前に時間切れになる短さ
+            val vm = StackViewModel(settleTiming = shortTiming) { calls++; TowerCreated("x", "https://example.test/x") }
+            vm.updateInventory(listOf(a), true, null)
+            placeFlat(vm)
+            tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+            assertEquals(StackViewModel.Phase.Unresolved, vm.phase)
+            assertFalse(vm.result!!.settled)
+            assertFalse(vm.canUpload)
+            vm.upload()
+            runCurrent()
+            assertEquals(0, calls)
+            // 判定できなかった結果も固定する（以後の tick で変わらない）
+            val result = vm.result
+            repeat(30) { vm.tick(1.0 / 60) }
+            assertSame(result, vm.result)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `timing out on a middle part moves on to the next part`() {
+        val vm = StackViewModel(settleTiming = shortTiming)
+        vm.updateInventory(listOf(a, b), true, null)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        // 途中のパーツは止まらなくても次へ進む（最後のパーツの判定で、塔全体が止まったかをもう一度確かめる）
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals("b", vm.current!!.id)
+        assertNull(vm.result)
+    }
+
+    @Test
+    fun `a placed part that falls later is counted once when it falls`() {
+        // 1 個目を台の外に置き、落ちきる前に時間切れにして次へ進む。2 個目を狙っている間に、1 個目が落ちていく
+        val vm = StackViewModel(settleTiming = shortTiming)
+        vm.updateInventory(listOf(a, b), true, null)
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals(0, vm.fallenCount)
+        tickUntil(vm) { vm.fallenCount > 0 }
+        assertEquals(StackViewModel.Phase.Placing, vm.phase) // 狙っている間にも回収して数える
+        repeat(120) { vm.tick(1.0 / 60) }
+        assertEquals(1, vm.fallenCount) // 2 回数えない
+    }
+
+    /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
+    private val shortTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.3)
+
+    /** 1/60 秒ずつ進め、[done] になるまでにかかった時間 [s] を返す */
+    private fun tickUntil(vm: StackViewModel, maxSeconds: Double = 20.0, done: () -> Boolean): Double {
+        var t = 0.0
+        while (t < maxSeconds) {
+            if (done()) return t
+            vm.tick(1.0 / 60)
+            t += 1.0 / 60
+        }
+        error("did not finish within $maxSeconds s (phase=${vm.phase})")
+    }
+
+    /** 棒（縦長）を寝かせて、台の真ん中に置く */
+    private fun placeFlat(vm: StackViewModel) {
+        vm.rotate(90f)
         vm.place()
+    }
+
+    /** 寝かせた棒を右端まで動かして置く。台に当たらずに落ちる */
+    private fun placeOffPlatform(vm: StackViewModel) {
+        vm.dragBy(10f)
+        placeFlat(vm)
+    }
+
+    /**
+     * 1 個だけのゲームを完成させる。棒は縦長なので寝かせて置く
+     * （立てて落とすと倒れて台から落ちることがあり、パーツが残らない結果は送れないため）
+     */
+    private fun finish(vm: StackViewModel) {
+        placeFlat(vm)
         repeat(1000) {
             if (vm.phase == StackViewModel.Phase.Finished) return
             vm.tick(1.0 / 60)
         }
-        error("Single part did not finish")
+        error("Single part did not finish (phase=${vm.phase})")
     }
 }
