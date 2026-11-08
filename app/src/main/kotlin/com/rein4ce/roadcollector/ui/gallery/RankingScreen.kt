@@ -33,7 +33,6 @@ import com.rein4ce.roadcollector.ui.common.PressIconButton
 import androidx.compose.material3.Text
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.pressFeel
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -205,53 +204,46 @@ internal fun RankingScreen(
 }
 
 /**
- * 並びの切り替え。野帳のインデックス（見出しのつまみ）のように、字だけを横に並べ、選んでいるものは測量の青に下線。
- * 読み上げではラジオボタンの組として伝える
+ * 並びの切り替え。選択肢を横に並べ、1 つずつ丸い札で囲む（コレクションの「並び」「天気」の札と同じ、測量の青の細い縁）。
+ * 選んでいる札は青で塗る。字だけの切り替え（下線）より、押せる所と選んでいるものが分かりやすい。
+ * 読み上げではラジオボタンの組として伝える。押し心地（#76）はほかのボタンとそろえ、丸い札の形だけが縮む（波紋は出さない）
  */
 @Composable
 internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit) {
+    val shape = RoundedCornerShape(50)
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEach { s ->
             val selected = s == sort
-            // 押し心地（#76）はほかのボタンとそろえる
             val source = remember { MutableInteractionSource() }
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 44.dp)
                     .pressFeel(source)
                     .selectable(
                         selected = selected,
                         interactionSource = source,
-                        indication = LocalIndication.current,
+                        indication = null,
                         role = Role.RadioButton,
                         onClick = { onSelect(s) },
                     )
-                    .semantics { contentDescription = s.spoken }
-                    .padding(horizontal = 6.dp),
+                    .semantics { contentDescription = s.spoken },
             ) {
                 Text(
                     s.label,
-                    color = if (selected) Fieldbook.Survey else Fieldbook.Muted,
-                    fontSize = 14.sp,
+                    color = if (selected) Color.White else Fieldbook.Survey,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     modifier = Modifier
-                        .paperBand(bleedX = 8.dp, bleedY = 4.dp)
-                        .drawBehind {
-                            if (selected) {
-                                drawRoundRect(
-                                    color = Fieldbook.Survey,
-                                    topLeft = Offset(0f, size.height + 2.dp.toPx()),
-                                    size = Size(size.width, 2.dp.toPx()),
-                                    cornerRadius = CornerRadius(1.dp.toPx()),
-                                )
-                            }
-                        },
+                        .clip(shape)
+                        .background(if (selected) Fieldbook.Survey else Fieldbook.Card, shape)
+                        .border(1.dp, Fieldbook.Survey, shape)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                 )
             }
         }
