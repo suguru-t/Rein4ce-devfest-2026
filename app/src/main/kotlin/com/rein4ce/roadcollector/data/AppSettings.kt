@@ -153,6 +153,29 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _haptics.value = on
     }
 
+    private val _bgmOn = MutableStateFlow(readBoolean(KEY_BGM_ON, true))
+
+    /** BGM を流すか。初めはオン。オフなら、音量（[bgmVolume]）に関係なく流さない（audio/BgmPlayer.kt） */
+    val bgmOn: StateFlow<Boolean> = _bgmOn
+
+    fun setBgmOn(on: Boolean) {
+        store.put(KEY_BGM_ON, on.toString())
+        _bgmOn.value = on
+    }
+
+    private val _bgmVolume = MutableStateFlow(
+        store.get(KEY_BGM_VOLUME)?.toIntOrNull()?.coerceIn(1, MAX_BGM_VOLUME) ?: DEFAULT_BGM_VOLUME,
+    )
+
+    /** BGM の音量（1〜[MAX_BGM_VOLUME]）。端末のメディアの音量に、さらにこの割合を掛ける */
+    val bgmVolume: StateFlow<Int> = _bgmVolume
+
+    fun setBgmVolume(level: Int) {
+        val v = level.coerceIn(1, MAX_BGM_VOLUME)
+        store.put(KEY_BGM_VOLUME, v.toString())
+        _bgmVolume.value = v
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -218,11 +241,17 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         /** ニックネームの長さの上限。「みんな」の一覧の 1 行に収まる長さ */
         const val MAX_NICKNAME_LENGTH = NicknameHints.MAX_NICKNAME_LENGTH
 
+        /** BGM の音量の段階の数と、初めの音量（まん中） */
+        const val MAX_BGM_VOLUME = 10
+        const val DEFAULT_BGM_VOLUME = 5
+
         private const val KEY_THEME = "theme_mode"
         private const val KEY_WEATHER_MOTION = "weather_motion"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_AI_NAMING = "ai_naming"
         private const val KEY_HAPTICS = "haptics"
+        private const val KEY_BGM_ON = "bgm_on"
+        private const val KEY_BGM_VOLUME = "bgm_volume"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"
