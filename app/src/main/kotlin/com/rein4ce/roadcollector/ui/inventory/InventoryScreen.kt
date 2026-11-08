@@ -2,13 +2,13 @@ package com.rein4ce.roadcollector.ui.inventory
 
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -104,13 +104,12 @@ import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
-import androidx.compose.animation.core.animateFloatAsState
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
  *
  * - 普段：カードをタップすると大きく見られて、そこから名前を付けられる（RenameDialog.kt）
- * - 選択中（右上の「選択」か、下の「積むパーツを選ぶ」で入る）：カードの左上に丸が出て、タップか丸で選ぶ（最大 5 本）。
+ * - 選択中（右上の「選択」か、下の「積むパーツを選ぶ」で入る）：図の右下に丸が出て、タップか丸で選ぶ（最大 5 本）。
  *   丸には積む順の数字が入る。下の「選んだ n 本で積む」で積む画面へ。「キャンセル」か戻るで、選択を消して普段に戻る
  * - 並べ替え中（普段の状態で長押し）：カードが小さく揺れ、長押しのまま動かすと並べ替え、左上の「×」で削除（確認あり）。
  *   タップしても何も起きない。「完了」か戻るで普段に戻る
@@ -123,12 +122,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(context).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
-    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    val shown = rememberArrangedParts(repository)
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
     var arranged by remember { mutableStateOf(shown) }
     // ドラッグしているパーツの id と、ドラッグを始めたときの位置
@@ -186,7 +184,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
+        // 見出し：歩いた距離の合計をメーターのように大きく出す（開くたびに 0 から上がり、増えたり減ったりすると、数字が回って新しい値まで動く）。
         // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
         Row(verticalAlignment = Alignment.Top) {
             CollectionMeter(
@@ -306,7 +304,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                                 if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
                                 // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
                                 // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
-                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
+                                arranged = repository.arrangedNow()
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
@@ -405,8 +403,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 
 /**
  * コレクション画面の見出し。小さな「コレクション」の下に、歩いた距離の合計（見本は含めない）を大きく出す。
- * 合計が変わると、メーターのように数字が回って新しい値まで動く（アニメーションを切っている人には動かさない）。
- * 読み込み中は parts が空なので、数字は出さない。
+ * 画面を開くたびに、メーターのように 0 から数字が回って合計まで上がる（「みんな」の見出しと同じ）。
+ * 開いている間に合計が変わったら（記録した・消した）、今の値から新しい値まで動く。アニメーションを切っている人には動かさない。
+ * 読み込み中は parts が空なので、数字は出さない（読み終わってから 0 から上がる）。
  */
 @Composable
 private fun CollectionMeter(
@@ -418,12 +417,17 @@ private fun CollectionMeter(
     reduceMotion: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // メーターの値。合計が変わったら、数字が回って新しい値まで動く
-    val shownM by animateFloatAsState(
-        targetValue = totalM.toFloat(),
-        animationSpec = if (reduceMotion) snap() else tween(durationMillis = 1_100, easing = FastOutSlowInEasing),
-        label = "meter",
-    )
+    // メーターの値。画面に出るたびに 0 から始まり（覚えておかない）、読み終わったら合計まで回って上がる
+    val meter = remember { Animatable(0f) }
+    LaunchedEffect(isLoaded, totalM) {
+        if (!isLoaded) return@LaunchedEffect
+        if (reduceMotion) {
+            meter.snapTo(totalM.toFloat())
+        } else {
+            meter.animateTo(totalM.toFloat(), tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
+        }
+    }
+    val shownM = meter.value
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -607,11 +611,11 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
 /**
  * パーツ 1 本のカード。方眼の上に置いた白い紙片に、図と注記を載せる（選んだときは青い破線の枠）。
  * - タップ（[onClick]）：普段は大きく見る、選択中は選ぶ／外す
- * - 選択中は左上に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
+ * - 選択中は図の右下に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
  * @param order 選んだ順（＝積む順）。選んでいなければ null
  * @param canSelect 選べるか（5 本選んだあとの、まだ選んでいないカードは false）
  * @param editing 並べ替え中なら、揺らして左上に「×」を出す
- * @param selecting 選択中なら、左上に選ぶ丸を出し、選んだカードを青い破線で囲む
+ * @param selecting 選択中なら、図の右下に選ぶ丸を出し、選んだカードを青い破線で囲む
  */
 @Composable
 private fun PartCard(
@@ -700,12 +704,14 @@ private fun PartCard(
                 sky = sky,
             )
             if (selecting && !editing) {
+                // 図の右下に置く（iPhone の写真アプリの選択と同じ位置）。左上は天気のアイコンがあるので、重ねない
                 SelectMark(
                     order = order,
                     enabled = canSelect,
                     name = part.displayName,
                     onToggle = onToggleSelect,
-                    modifier = Modifier.align(Alignment.TopStart),
+                    // 右下の見当の角（「┘」の線）にかからないよう、少し内側に寄せる
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-6).dp, y = (-6).dp),
                 )
             }
             if (editing && !isDragging) {
@@ -786,12 +792,12 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
 }
 
 /**
- * カードの左上の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
  * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
 @Composable
-private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val selected = order != null
     Box(
         contentAlignment = Alignment.Center,

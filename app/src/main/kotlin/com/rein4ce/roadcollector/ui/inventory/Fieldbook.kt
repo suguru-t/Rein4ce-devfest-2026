@@ -27,10 +27,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.ui.common.drawGridClearings
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -102,8 +104,11 @@ object Fieldbook {
  * 見出しの字の下だけ線を消す場所（ui/common/PaperBand）が動くと描き直すので（メーターの数字が回る間は毎コマ）、
  * 線は大きさが変わったときだけ作り（drawWithCache）、描き直しでは作っておいた線を描くだけにする（軽く済む）。
  * 色はダークモードで変わるので、描くときに読む
+ *
+ * @param clearings 見出しの字の下の線を消すか。消す場所はメイン画面の位置で覚えているので、
+ *   下から出る窓など、別の窓に敷くときは false にする（true のままだと、ずれた所の線が消える）
  */
-fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
+fun Modifier.fieldbookGrid(clearings: Boolean = true): Modifier = drawWithCache {
     val step = 8.dp.toPx()
     val minor = Path()
     val major = Path()
@@ -127,7 +132,7 @@ fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
         drawPath(minor, Fieldbook.GridMinor, style = line)
         drawPath(major, Fieldbook.GridMajor, style = line)
         // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
-        drawGridClearings()
+        if (clearings) drawGridClearings()
     }
 }
 
@@ -178,7 +183,8 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 /**
  * パーツを野帳の図として描く：四隅の見当、北、縁取りの道、縮尺。
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
- * @param sky 歩いたときの空のようす。道の色が変わる（[Fieldbook.roadColors]）。分からなければ null（いつもの色）
+ * @param sky 歩いたときの空のようす。道の色が変わり（[Fieldbook.roadColors]）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
+ *   分からなければ null（いつもの色で、アイコンなし）
  */
 @Composable
 fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
@@ -219,19 +225,36 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
         drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = northSize))
 
-        // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
+        // 歩いたときの天気のアイコン。右上の北と対になるよう、左上の見当の内側に（道のあとに描いて、道に隠れないように）
+        if (sky != null) drawWeatherIcon(sky, center = Offset(ox + 20f * u, oy + 20f * u), size = 18f * u)
+
+        // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値。
+        // 左下の見当より右・下の端の近くに置き、字のまん中を目盛りの線の高さにそろえる
+        // （字の大きさは図によらず決まっているので、上に寄せて置くと、小さい図ほど道にかかっていた）。
+        // 高さは、道の形のいちばん下（縁取りを含む）から決める。ふつうは図の下から 9 目盛り。道がそれより下まで来る形
+        // （太いパーツなど）なら、その下に下げる（図からはみ出さない所まで）。
+        // 右下はコレクションの選ぶ丸の場所なので空けておき、字が届きそうなら目盛りを 1 段ずつ短くする
         val len = normalizedLength(part)
         if (part.distanceM > 0 && len > 0f) {
             val metersPerPx = part.distanceM / (len * scalePx)
-            val barM = niceLength(28f * u * metersPerPx)
+            val x0 = ox + 19f * u
+            val rightLimit = ox + s - SCALE_RIGHT_RESERVE.toPx()
+            fun textOf(m: Int) = if (m >= 1000) "${m / 1000} km" else "$m m"
+            var barM = niceLength(28f * u * metersPerPx)
+            var layout = measurer.measure(textOf(barM), label)
+            while (x0 + barM / metersPerPx + 3f * u + layout.size.width > rightLimit) {
+                barM = NICE_LENGTHS.lastOrNull { it < barM } ?: break
+                layout = measurer.measure(textOf(barM), label)
+            }
             val barPx = barM / metersPerPx
-            val x0 = ox + 12f * u
-            val y0 = oy + s - 12f * u
+            val roadBottom = PartGeometry.shapes(part, scalePx.toDouble())
+                .maxOf { poly -> poly.points.maxOf { center.y - it.y.toFloat() } } + edgePx
+            val half = max(layout.size.height / 2f, 3.5f * u)
+            val y0 = max(oy + s - 9f * u, roadBottom + 1f * u + half).coerceAtMost(oy + s - 1f * u - half)
             drawLine(Fieldbook.Ink, Offset(x0, y0), Offset(x0 + barPx, y0), 2f * u)
-            drawLine(Fieldbook.Ink, Offset(x0, y0 - 4f * u), Offset(x0, y0 + 4f * u), markStroke)
-            drawLine(Fieldbook.Ink, Offset(x0 + barPx, y0 - 4f * u), Offset(x0 + barPx, y0 + 4f * u), markStroke)
-            val text = if (barM >= 1000) "${barM / 1000} km" else "$barM m"
-            drawText(measurer, text, topLeft = Offset(x0 + barPx + 3f * u, y0 - 7f * u), style = label)
+            drawLine(Fieldbook.Ink, Offset(x0, y0 - 3.5f * u), Offset(x0, y0 + 3.5f * u), markStroke)
+            drawLine(Fieldbook.Ink, Offset(x0 + barPx, y0 - 3.5f * u), Offset(x0 + barPx, y0 + 3.5f * u), markStroke)
+            drawText(layout, topLeft = Offset(x0 + barPx + 3f * u, y0 - layout.size.height / 2f))
         }
     }
 }
@@ -252,4 +275,10 @@ internal fun normalizedLength(part: Part): Float {
 }
 
 /** 縮尺の目盛りに使う切りのいい長さ [m] */
-internal fun niceLength(m: Float): Int = listOf(10, 20, 50, 100, 200, 500, 1000, 2000).firstOrNull { it >= m } ?: 5000
+internal fun niceLength(m: Float): Int = NICE_LENGTHS.firstOrNull { it >= m } ?: NICE_LENGTHS.last()
+
+/** 縮尺の目盛りの長さの候補 [m] */
+private val NICE_LENGTHS = listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+/** 図の右下で、縮尺の字が入らないように空けておく幅（コレクションの選ぶ丸の場所） */
+private val SCALE_RIGHT_RESERVE = 44.dp

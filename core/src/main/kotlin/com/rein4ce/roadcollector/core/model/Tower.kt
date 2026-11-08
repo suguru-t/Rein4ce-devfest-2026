@@ -12,6 +12,11 @@ data class Placement(
     val x: Float,
     val y: Float,
     val angleRad: Float,
+    /**
+     * パーツの大きさ（長辺 [m]）。歩いた距離で決まる（[com.rein4ce.roadcollector.core.physics.PartSize]）。
+     * 描くときは、パーツの形をこの倍率で大きくしてから置く。大きさを入れる前のタワーには無いので 1
+     */
+    val scale: Float = 1f,
 )
 
 /**

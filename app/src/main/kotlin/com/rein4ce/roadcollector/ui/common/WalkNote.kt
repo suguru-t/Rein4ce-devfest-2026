@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -33,14 +34,15 @@ import java.util.Locale
  *   （空白は等幅の字だと広すぎる）、マークの置き場所を字の 1.2 倍の幅にして、マークを左に寄せた残りを小さなすき間にする。
  *   折り返さないように、幅のない印（U+2060）でつなぐ
  *
- * @param date 日付（[walkDate]）。見本は「見本」
+ * @param date 日付（[walkDate]）。見本は「見本」。出さないときは null（「パーツを選ぶ」の窓）
+ * @param size 積むときの大きさ（[partSizeText]）。長さのすぐあとに出す。出さないときは null
  * @param weather 天気の名前（「晴れ」など）。分からなければ null
  * @param separator つなぎの字。カードの狭い注記は空白なしの「・」
  */
 @Composable
 fun WalkNote(
     distanceM: Int,
-    date: String,
+    date: String?,
     weather: String?,
     modifier: Modifier = Modifier,
     fontSize: TextUnit = 12.sp,
@@ -48,12 +50,13 @@ fun WalkNote(
     minLines: Int = 1,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    size: String? = null,
 ) {
     val color = Fieldbook.Muted
     val text = buildAnnotatedString {
         appendInlineContent(FOOTPRINT, "歩いた長さ")
         append(WORD_JOINER)
-        append(notes(*listOfNotNull("$distanceM m", date, weather).toTypedArray(), separator = separator))
+        append(notes(*listOfNotNull("$distanceM m", size, date, weather).toTypedArray(), separator = separator))
     }
     Text(
         text,
@@ -79,6 +82,12 @@ fun WalkNote(
         modifier = modifier,
     )
 }
+
+/**
+ * 積むときの大きさの言い方（「1.2 倍」。長く歩いた道ほど大きい。[PartSize]）。
+ * 積む画面の上の行と「パーツを選ぶ」の窓で同じ書き方にするため、ここ 1 か所で作る
+ */
+fun partSizeText(distanceM: Int): String = "%.1f 倍".format(Locale.US, PartSize.of(distanceM))
 
 /** パーツの日付（「11/7」）。日時の無いパーツ（古いデータなど）は「—」 */
 fun walkDate(epochMs: Long): String =
