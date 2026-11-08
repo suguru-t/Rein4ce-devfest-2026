@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -40,12 +41,16 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * 開いたときのタイトルの進み具合。アプリ全体で 1 つ（MainActivity・記録画面の題字・使い方の窓から見る）
  *
- * @property splashGone 起動画面（門をくぐる動き）が消えたか。タイトルを見せる時間は、ここから数える
+ * @property splashGone 起動画面が消え始めたか。タイトルの題字は、ここから大きくなり始める
+ * @property splashTitle 起動画面のアイコンの中の題字「ミチツミ」の段のまん中（画面の左上から [px]）。
+ *   タイトルの題字は、ここから同じ大きさで出て、まん中へ大きくなる（起動画面の題字がそのまま大きくなるように見える）。
+ *   起動画面がない（Android 11 以前）・分からないときは null で、はじめからまん中に大きく出す
  * @property anchor 記録画面の見出しの題字の場所（画面の左上から）。タイトルの題字はここへ飛んで収まる
  * @property done タイトルが終わったか（出さないときもすぐ true）。終わるまで、記録画面の題字と使い方の窓は出さない
  */
 internal object TitleIntroState {
     var splashGone by mutableStateOf(false)
+    var splashTitle by mutableStateOf<Offset?>(null)
     var anchor by mutableStateOf<Rect?>(null)
     var done by mutableStateOf(false)
 }
@@ -53,13 +58,15 @@ internal object TitleIntroState {
 /**
  * 開いたときのタイトル。押さなくても進む（押せばすぐ飛ばせる）。
  *
- * 起動画面で門をくぐったあと、方眼の紙のまん中に題字「ミチツミ」を大きく出し、その下に一言を出す。
+ * 起動画面の積み木の塔はそのままうすく消え、その下の題字「ミチツミ」だけが、方眼の紙のまん中へ大きくなりながら移る
+ * （起動画面の題字と同じ位置・大きさから始めるので、起動画面の題字がそのまま大きくなるように見える）。その下に一言を出す。
  * [HOLD_MS] たったら、題字が縮みながら記録画面の見出しの定位置へ飛んで収まり、紙がうすくなって記録画面になる。
  * 記録中や画面の作り直しのとき、端末で動きを減らしているときは出さない（MainActivity が決める）
  */
 @Composable
 internal fun TitleIntro() {
     if (TitleIntroState.done) return
+    val grow = remember { Animatable(0f) } // 0：起動画面の題字の位置と大きさ、1：まん中に大きく
     val fly = remember { Animatable(0f) } // 0：まん中に大きく、1：見出しの定位置
     val tagline = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
@@ -69,6 +76,8 @@ internal fun TitleIntro() {
     LaunchedEffect(Unit) {
         // 起動画面が消えるのを待つ（消えた知らせが来なくても、少し待ったら始める）
         withTimeoutOrNull(SPLASH_WAIT_MS) { snapshotFlow { TitleIntroState.splashGone }.first { it } }
+        // 起動画面の題字の位置から、まん中へ大きくなる（起動画面が無ければ、はじめからまん中）
+        if (TitleIntroState.splashTitle != null) grow.animateTo(1f, tween(GROW_MS, easing = FastOutSlowInEasing)) else grow.snapTo(1f)
         launch { tagline.animateTo(1f, tween(TAGLINE_MS)) }
         delay(HOLD_MS)
         if (!skipping) fly.animateTo(1f, tween(FLY_MS, easing = FastOutSlowInEasing))
@@ -84,6 +93,7 @@ internal fun TitleIntro() {
                     if (skipping) return@detectTapGestures
                     skipping = true
                     scope.launch {
+                        grow.snapTo(1f)
                         fly.animateTo(1f, tween(SKIP_MS, easing = FastOutSlowInEasing))
                         TitleIntroState.done = true
                     }
@@ -109,19 +119,34 @@ internal fun TitleIntro() {
                     // 大きくする前の場所（ここから見出しの定位置までの距離を出す）
                     .onGloballyPositioned { titleBounds = it.boundsInRoot() }
                     .graphicsLayer {
+                        val g = grow.value
                         val f = fly.value
                         val from = titleBounds
                         val to = TitleIntroState.anchor
-                        val s = BIG + (1f - BIG) * f
-                        scaleX = s
-                        scaleY = s
+                        val start = TitleIntroState.splashTitle
                         transformOrigin = TransformOrigin.Center
-                        if (from != null && to != null) {
-                            translationX = (to.center.x - from.center.x) * f
-                            translationY = (to.center.y - from.center.y) * f
+                        if (f <= 0f) {
+                            // 起動画面の題字の位置と大きさ（SPLASH_SCALE）から、まん中の大きな題字（BIG）へ。
+                            // 段のまん中は、題字の枠のまん中より ROW_DROP だけ下にあるので、その分も合わせる
+                            val s = SPLASH_SCALE + (BIG - SPLASH_SCALE) * g
+                            scaleX = s
+                            scaleY = s
+                            if (from != null && start != null) {
+                                val dropPx = ROW_DROP.toPx() * SPLASH_SCALE
+                                translationX = (start.x - from.center.x) * (1f - g)
+                                translationY = (start.y - dropPx - from.center.y) * (1f - g)
+                            }
                         } else {
-                            // 見出しの場所が分からないとき（記録画面が出ていない）は、その場でうすくする
-                            alpha = 1f - f
+                            val s = BIG + (1f - BIG) * f
+                            scaleX = s
+                            scaleY = s
+                            if (from != null && to != null) {
+                                translationX = (to.center.x - from.center.x) * f
+                                translationY = (to.center.y - from.center.y) * f
+                            } else {
+                                // 見出しの場所が分からないとき（記録画面が出ていない）は、その場でうすくする
+                                alpha = 1f - f
+                            }
                         }
                     },
             )
@@ -139,12 +164,24 @@ internal fun TitleIntro() {
 /** 題字の下の一言 */
 private const val TAGLINE = "歩いた道を、積み上げよう"
 
+/**
+ * 起動画面のアイコンの中の題字の大きさ（見出しの題字の何倍か）。起動画面の積み木は 38dp おき、見出しは 36dp おき
+ * （tools/make_splash_icon.py の SIZE・GAP と、TitleBlocks の 32dp・4dp）
+ */
+private const val SPLASH_SCALE = 38f / 36f
+
+/** 題字の枠（上に 10dp の余白がある）のまん中から見た、積み木の段のまん中の下へのずれ（TitleBlocks の作りから） */
+private val ROW_DROP = 5.dp
+
 /** まん中に出すときの題字の大きさ（見出しの何倍か）と、一言までの間（大きくした題字にかからないように） */
 private const val BIG = 2.4f
 private val TAGLINE_GAP = 52.dp
 
-/** 起動画面が消えてから、タイトルを見せておく時間 [ms]。題字が飛ぶ時間と、押して飛ばすときの時間 */
-private const val HOLD_MS = 1000L
+/** 起動画面の題字の位置から、まん中へ大きくなる時間 [ms] */
+private const val GROW_MS = 480
+
+/** まん中に大きくなってから、タイトルを見せておく時間 [ms]。題字が飛ぶ時間と、押して飛ばすときの時間 */
+private const val HOLD_MS = 900L
 private const val FLY_MS = 520
 private const val SKIP_MS = 260
 private const val TAGLINE_MS = 360

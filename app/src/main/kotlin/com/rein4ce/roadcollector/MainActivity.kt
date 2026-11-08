@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
         val animationsOff = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
         val showIntro = savedInstanceState == null && !introShown && !TrackRecorder.isRecording.value && !animationsOff
         introShown = true
+        introThisTime = showIntro
         if (!showIntro) TitleIntroState.done = true
         enableEdgeToEdge()
         val settings = RoadCollectorApp.from(this).settings
@@ -97,8 +98,12 @@ class MainActivity : ComponentActivity() {
         ThemeMode.DARK -> R.style.Theme_RoadCollector_SplashNight
     }
 
+    /** このあと開いたときのタイトルを出すか（出すなら、起動画面は門をくぐらずに、題字をタイトルへ渡して消える） */
+    private var introThisTime = false
+
     /**
      * 起動画面のアイコン（splash_icon）を、積み木の門の形の穴に向かって大きくしながら、起動画面ごとうすくして消す。
+     * 開いたときのタイトルを出すときは、門をくぐらず、アイコンの題字の段の場所をタイトルに渡して、うすくして消す（[handTitleOver]）。
      * 穴をくぐると採集画面が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
      */
     @RequiresApi(Build.VERSION_CODES.S)
@@ -127,6 +132,10 @@ class MainActivity : ComponentActivity() {
             startDelay = 180
             duration = 140
         }
+        if (introThisTime) {
+            handTitleOver(splash, icon)
+            return
+        }
         // 起動画面のアイコンの動き（最後の「ミ」が右の外から落ちてきて、1 回はねて収まる）が終わるまで待ってから、門をくぐる
         val animStart = splash.iconAnimationStart
         val animDuration = splash.iconAnimationDuration
@@ -149,7 +158,50 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * 開いたときのタイトルを出すとき：起動画面の積み木の塔は大きくせず、そのままうすくして消す。
+     * その前に、アイコンの中の題字「ミチツミ」の段のまん中（画面の上の位置）をタイトルに渡す。タイトルの題字は、
+     * そこから同じ大きさで出て、まん中へ大きくなるので、起動画面の題字がそのまま大きくなるように見える（ui/TitleIntro.kt）
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun handTitleOver(splash: SplashScreenView, icon: View) {
+        val fade = ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply { duration = HANDOVER_FADE_MS }
+        val animStart = splash.iconAnimationStart
+        val animDuration = splash.iconAnimationDuration
+        val wait = if (animStart != null && animDuration != null) {
+            (animStart.toEpochMilli() + animDuration.toMillis() + PAUSE_MS - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
+        } else {
+            0L
+        }
+        fade.startDelay = wait
+        fade.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationStart(animation: Animator) {
+                // アイコンのまん中から、題字の段のまん中までのずれ（dp）を足して、画面の上の位置にする
+                val at = IntArray(2)
+                icon.getLocationInWindow(at)
+                val dp = resources.displayMetrics.density
+                TitleIntroState.splashTitle = androidx.compose.ui.geometry.Offset(
+                    at[0] + icon.width / 2f,
+                    at[1] + icon.height / 2f + TITLE_DY_DP * dp,
+                )
+                TitleIntroState.splashGone = true
+            }
+
+            override fun onAnimationEnd(animation: Animator) = splash.remove()
+        })
+        fade.start()
+    }
+
     private companion object {
+        /**
+         * 起動画面のアイコン（288×288dp の絵）のまん中から見た、題字「ミチツミ」の段のまん中 [dp]（絵の中では y 188.2）。
+         * tools/make_splash_icon.py の大きさ・位置で決まるので、作り直したら合わせる
+         */
+        const val TITLE_DY_DP = 44.2f
+
+        /** タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms] */
+        const val HANDOVER_FADE_MS = 220L
+
         /** このプロセスで、開いたときのタイトルをもう出したか（画面を作り直しても、もう一度は出さない） */
         var introShown = false
 
