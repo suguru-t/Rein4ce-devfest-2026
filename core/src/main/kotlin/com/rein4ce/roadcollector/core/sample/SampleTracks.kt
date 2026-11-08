@@ -61,7 +61,7 @@ object SampleTracks {
 
     /**
      * 見本の 7 本。天気は 7 つ全部がそろうように決めてある（[SampleParts.weather]）。
-     * 長さも短い道（160 m）から長い道（1.6 km）まであるので、積むときの大きさの違い（PartSize）も見られる
+     * 長さも短い道（パーツにすると 165 m）から長い道（1,631 m）まであるので、積むときの大きさの違い（PartSize）も見られる
      */
     val all: List<SampleTrack> = listOf(bar, l, u, ring, zigzag, corner, river)
 
