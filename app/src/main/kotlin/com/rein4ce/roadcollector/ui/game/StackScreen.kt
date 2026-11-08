@@ -261,7 +261,7 @@ fun StackScreen(
                     when (vm.phase) {
                         StackViewModel.Phase.Placing -> {
                             Text(
-                                "${vm.current?.displayName ?: ""} ・ 横にドラッグして位置を決める",
+                                "${vm.current?.displayName ?: ""} ・ ドラッグか◀▶で位置を決める（長押しで連続移動）",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = ink,
                             )
@@ -271,6 +271,7 @@ fun StackScreen(
                                 PressButton(onClick = { vm.place(grip) }) { Text("置く") }
                                 PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                             }
+                            MoveButtons(enabled = vm.phase == StackViewModel.Phase.Placing, sessionKey = vm.runId, onMove = vm::dragBy)
                             // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 PressTextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
