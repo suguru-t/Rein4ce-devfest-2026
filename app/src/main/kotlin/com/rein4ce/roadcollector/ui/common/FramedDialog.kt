@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.rein4ce.roadcollector.ui.gallery.Pop
 import com.rein4ce.roadcollector.ui.gallery.popBlock
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
@@ -51,7 +52,8 @@ private val POP_CORNER = 18.dp
  * @param onBack あれば、枠の下の丸いボタンを「×」ではなく「＜」にして、押すとこれを呼ぶ
  *   （設定の中の「画面の明るさ」などから、設定の一覧に戻る。戻るボタンも閉じるボタンと同じ場所にそろえる）
  * @param pop 「みんな」・コレクションと同じポップな見た目にする（ui/gallery/Pop.kt）：枠と下の丸いボタンを、
- *   下に側面がのぞくブロックの面にし、角を大きく丸める。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
+ *   下に側面がのぞくブロックの面にし、角を大きく丸める。見出しは灰色の帯の代わりに、紺の名札のブロックに白い字で載せる
+ *   （「みんな」の断面図の名札の台と同じ考え方）。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
  */
 @Composable
 fun FramedDialog(
@@ -78,18 +80,40 @@ fun FramedDialog(
                         },
                     ),
             ) {
-                Box(modifier = Modifier.fillMaxWidth().background(Fieldbook.Band)) {
-                    Text(
-                        title,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Fieldbook.Ink,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 48.dp, vertical = 14.dp)
-                            .semantics { heading() },
-                    )
+                if (pop) {
+                    // 見出しは名札のブロック。見出し（パーツの名前など）は人や AI が付ける字なので、丸ゴシック（使う字だけの切り出し）
+                    // ではなく端末の字体の極太にする。読みやすいよう、札は傾けない
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 4.dp),
+                    ) {
+                        Text(
+                            title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Pop.Letter,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            modifier = Modifier
+                                .popBlock(face = Pop.Navy, corner = 10.dp, depth = 4.dp)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .semantics { heading() },
+                        )
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxWidth().background(Fieldbook.Band)) {
+                        Text(
+                            title,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Fieldbook.Ink,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 48.dp, vertical = 14.dp)
+                                .semantics { heading() },
+                        )
+                    }
                 }
                 // 見出しが変わったら（設定 → アプリについて など）、いちばん上から見せる
                 val scroll = remember(title) { ScrollState(0) }
