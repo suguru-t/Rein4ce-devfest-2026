@@ -104,12 +104,16 @@ internal fun TowerSection(
         drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(4.dp.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()
-        val bottomPad = BOTTOM_PAD_DP.dp.toPx()
-        val baseY = h - bottomPad
         val slotW = (w - staffW) / max(1, slots.size)
-        // 縮尺：いちばん高いもの（記録線も）が上の余白に収まり、台と張り出しがスロットの幅に収まる、の小さいほう
+        // 縮尺の上限（幅から）：台と張り出しがスロットの幅に収まる
+        val widthBound = slotW / SLOT_WIDTH_M
+        // 下の余白：台の厚み（縮尺の上限で見ておく）と呼び名が入る高さ。枠の外には描かないので、ここに収める
+        val captionH = measurer.measure("あ", caption).size.height
+        val bottomPad = PLATFORM_THICKNESS * widthBound + 4.dp.toPx() + captionH + 2.dp.toPx()
+        val baseY = h - bottomPad
+        // 縮尺：いちばん高いもの（記録線も）が上の余白に収まる、と幅の上限の、小さいほう
         val tallest = max(record, slots.maxOfOrNull { it.tower?.height ?: 0f } ?: 0f).coerceAtLeast(1f)
-        val pxPerM = min((baseY - topPad) / (tallest + 0.3f), slotW / SLOT_WIDTH_M)
+        val pxPerM = min((baseY - topPad) / (tallest + 0.3f), widthBound)
         fun y(m: Float) = baseY - m * pxPerM
 
         // 標尺：目盛りと、右へ伸びる薄い点線（演出中は下から伸びる）。
@@ -230,10 +234,9 @@ internal fun slotAt(x: Float, width: Float, count: Int, staffWidthPx: Float = 0f
     return ((x - staffWidthPx) / slotW).toInt().coerceIn(0, count - 1)
 }
 
-/** 標尺の幅、上の余白（記録線の字のぶん）、下の余白（呼び名のぶん）[dp] */
+/** 標尺の幅と、上の余白（記録線の字のぶん）[dp]。下の余白は台の厚みと呼び名の高さから描くときに決める */
 private const val STAFF_WIDTH_DP = 30f
 private const val TOP_PAD_DP = 16f
-private const val BOTTOM_PAD_DP = 30f
 
 /** これより低い枠には描かない（小さい画面で枠がつぶれたとき。GalleryScreen の断面図） */
 private const val MIN_HEIGHT_DP = 80f
