@@ -116,8 +116,8 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                             lastCenter[1] = p.y + it.size.height / 2f
                         }
                     }
-                    .pointerInput(interactive) {
-                        if (!interactive) return@pointerInput
+                    // 押すと動く（開いたときのタイトルでは押しを受けない）
+                    .then(if (!interactive) Modifier else Modifier.pointerInput(Unit) {
                         detectTapGestures {
                             running[i]?.cancel()
                             running[i] = scope.launch {
@@ -133,7 +133,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                                 }
                             }
                         }
-                    }
+                    })
                     .graphicsLayer {
                         rotationZ = block.tiltDeg + motion.turn.value
                         translationX = motion.dx.value.dp.toPx()

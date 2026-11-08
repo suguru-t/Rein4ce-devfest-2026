@@ -27,6 +27,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,28 +80,36 @@ internal fun TitleIntro() {
     LaunchedEffect(Unit) {
         // 起動画面が消えるのを待つ（消えた知らせが来なくても、少し待ったら始める）
         withTimeoutOrNull(SPLASH_WAIT_MS) { snapshotFlow { TitleIntroState.splashGone }.first { it } }
+        // 知らせが来なかった（起動画面が出ない開き方など）ときも、ここから先は消えたものとして題字を出す（#82 のレビュー）
+        TitleIntroState.splashGone = true
         // 起動画面の題字の位置から、まん中へ大きくなる（起動画面が無ければ、はじめからまん中）
         if (TitleIntroState.splashTitle != null) grow.animateTo(1f, tween(GROW_MS, easing = FastOutSlowInEasing)) else grow.snapTo(1f)
         launch { tagline.animateTo(1f, tween(TAGLINE_MS)) }
         delay(HOLD_MS)
-        if (!skipping) fly.animateTo(1f, tween(FLY_MS, easing = FastOutSlowInEasing))
+        // 待っている間に押して飛ばしていたら、終わらせるのは押した側に任せる（ここで終わらせると、飛ぶ途中で消えるため。#82 のレビュー）
+        if (skipping) return@LaunchedEffect
+        fly.animateTo(1f, tween(FLY_MS, easing = FastOutSlowInEasing))
         TitleIntroState.done = true
     }
 
+    // 押したら、すぐに見出しへ飛ばして終わる
+    fun skip() {
+        if (skipping) return
+        skipping = true
+        scope.launch {
+            grow.snapTo(1f)
+            fly.animateTo(1f, tween(SKIP_MS, easing = FastOutSlowInEasing))
+            TitleIntroState.done = true
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // 押したら、すぐに見出しへ飛ばして終わる
-            .pointerInput(Unit) {
-                detectTapGestures {
-                    if (skipping) return@detectTapGestures
-                    skipping = true
-                    scope.launch {
-                        grow.snapTo(1f)
-                        fly.animateTo(1f, tween(SKIP_MS, easing = FastOutSlowInEasing))
-                        TitleIntroState.done = true
-                    }
-                }
+            .pointerInput(Unit) { detectTapGestures { skip() } }
+            // 読み上げでは、題字の名前と「飛ばす」を伝える（下の記録画面は、タイトルの間は読み上げから外している。MainActivity）
+            .semantics(mergeDescendants = true) {
+                contentDescription = "ミチツミ。$TAGLINE"
+                onClick(label = "飛ばす") { skip(); true }
             },
     ) {
         // 紙（方眼）。題字が飛ぶにつれて、うすくなって記録画面が見えてくる

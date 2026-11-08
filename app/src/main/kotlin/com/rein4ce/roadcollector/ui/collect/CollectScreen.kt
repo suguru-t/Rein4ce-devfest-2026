@@ -166,7 +166,8 @@ fun CollectScreen(
                 modifier = Modifier
                     .zIndex(1f)
                     .padding(start = 4.dp, end = 12.dp)
-                    .onGloballyPositioned { TitleIntroState.anchor = it.boundsInRoot() }
+                    // タイトルが終わったら、もう知らせない（余計な更新をしない）
+                    .onGloballyPositioned { if (!TitleIntroState.done) TitleIntroState.anchor = it.boundsInRoot() }
                     .graphicsLayer { alpha = if (TitleIntroState.done) 1f else 0f },
             )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク

@@ -1,6 +1,5 @@
 package com.rein4ce.roadcollector.ui.inventory
 
-import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -101,6 +100,7 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
@@ -151,9 +151,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     var editing by remember { mutableStateOf(false) }
     BackHandler(enabled = editing) { editing = false }
     // 端末の設定でアニメーションを切っている人には、カードを揺らさない
-    val reduceMotion = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reduceMotion = rememberReduceMotion()
     val sampleCount = parts.count { SampleParts.byId(it.id) != null }
     val selectedIds = remember { mutableStateListOf<String>().apply { addAll(GameSession.startRequest?.partIds.orEmpty()) } }
     // 手持ちに実在する選択だけを数える（前回の選択に、削除済みのパーツが残っていることがあるため）
