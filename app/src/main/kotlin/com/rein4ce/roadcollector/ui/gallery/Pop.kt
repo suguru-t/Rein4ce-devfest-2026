@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -84,8 +85,11 @@ internal object Pop {
     val Yellow = Color(0xFFF2C14E)
     val Navy = Color(0xFF4A4E69)
 
-    /** 白い字を載せる面（紙の上で 4.5:1 を超えるよう、[Orange]・[Teal] を濃くしたもの） */
-    val OrangeDeep = Color(0xFFBF5418)
+    /**
+     * 白い字を載せる面（白い字 [Letter] と 4.5:1 を超えるよう、[Orange]・[Teal] を濃くしたもの）。
+     * OrangeDeep は 4.70:1、TealDeep は 4.73:1（前の #BF5418 は 4.28:1 で届いていなかった。#89 のレビュー）
+     */
+    val OrangeDeep = Color(0xFFB54F16)
     val TealDeep = Color(0xFF1F7A6F)
 
     /** 順位の 2 位・3 位（銀と銅のブロック。墨の字） */
@@ -399,7 +403,11 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
     val lastCenter = remember { FloatArray(2) }
     Row(
         // 落ちてくるブロックが、まわりの部品の下にもぐらないように手前に描く
-        modifier = modifier.zIndex(1f).semantics(mergeDescendants = true) { contentDescription = text },
+        modifier = modifier.zIndex(1f).semantics(mergeDescendants = true) {
+            contentDescription = text
+            // 画面名なので、読み上げの「見出しで移動」で飛べるように
+            heading()
+        },
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
