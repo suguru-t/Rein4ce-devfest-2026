@@ -158,8 +158,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.HAPTICS -> SwitchPage(
                 checked = haptics,
                 onChange = settings::setHaptics,
-                explanation = "ボタンやタブを押したとき、カードの並べ替えを始めたとき、題字や足跡を押したときなどに、端末を軽く振動させます。" +
-                    "オフにすると振動しません。",
+                explanation = "ボタンを押したときなどに、端末を軽く振動させます。",
             )
             Page.BGM -> BgmPage(
                 on = bgmOn,
@@ -174,13 +173,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
-                explanation = "記録している間は、画面を消しません。地図を見ながら歩くときに便利ですが、電池を多く使います。",
+                explanation = "記録中は画面をつけたままにします。電池を多く使います。",
             )
             Page.AI -> SwitchPage(
                 checked = aiNaming,
                 onChange = settings::setAiNaming,
-                explanation = "記録したパーツに、AI が名前を付けます。送るのは形・距離・日時だけで、歩いた場所は送りません。" +
-                    "オフにすると何も送りません。",
+                explanation = "記録したパーツに AI が名前を付けます。送るのは形・距離・日時だけです。",
             )
             Page.SAMPLES -> {
                 Toggle(
@@ -193,8 +191,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     },
                 )
                 Text(
-                    "コレクションに見本のパーツ（${SampleParts.all.size} 本）を出します。見本は、7 つの天気と、短い道から長い道までがそろっています。" +
-                        "オフにすると見本を全部外し、オンにすると全部戻します。記録したパーツには触りません。",
+                    "コレクションに見本（${SampleParts.all.size} 本）を出します。記録したパーツはそのままです。",
                     style = noteStyle,
                     fontSize = 14.sp,
                     color = Fieldbook.Ink,
@@ -203,8 +200,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             }
             Page.DEMO_SKY -> Column(modifier = Modifier.padding(top = 8.dp)) {
                 Text(
-                    "発表のときに、その日の天気に関係なく見せたい天気を選べます。記録とみんなの背景と、デモ散歩でできるパーツの天気が、選んだ天気になります。" +
-                        "ふだんは「本当の天気」にしておいてください。",
+                    "背景とデモ散歩の天気を、選んだ天気にします（発表用）。ふだんは「本当の天気」です。",
                     style = noteStyle,
                     fontSize = 14.sp,
                     color = Fieldbook.Ink,
