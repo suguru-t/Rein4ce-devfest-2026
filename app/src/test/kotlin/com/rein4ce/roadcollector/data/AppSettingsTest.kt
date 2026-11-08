@@ -44,6 +44,20 @@ class AppSettingsTest {
     }
 
     @Test
+    fun `the part filter starts as the usual order and is saved`() {
+        val store = MapStore()
+        assertEquals(PartFilter(), AppSettings(store).partFilter.value)
+        val filter = PartFilter(sort = PartSort.OLDEST, sky = Sky.SNOW, favoritesOnly = true)
+        AppSettings(store).setPartFilter(filter)
+        assertEquals(filter, AppSettings(store).partFilter.value)
+        // 「すべて」の天気に戻したのも覚える。読めない値（前の版など）は、いつもの順・すべての天気
+        AppSettings(store).setPartFilter(filter.copy(sky = null))
+        assertEquals(null, AppSettings(store).partFilter.value.sky)
+        val broken = MapStore().apply { map["part_sort"] = "RANDOM"; map["part_sky"] = "HAIL" }
+        assertEquals(PartFilter(), AppSettings(broken).partFilter.value)
+    }
+
+    @Test
     fun `first it follows the phone`() {
         assertEquals(ThemeMode.SYSTEM, AppSettings(MapStore()).themeMode.value)
     }

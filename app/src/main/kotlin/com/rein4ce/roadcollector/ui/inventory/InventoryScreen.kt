@@ -16,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
@@ -68,6 +69,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
@@ -105,7 +107,6 @@ import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
@@ -132,6 +133,12 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val shown = rememberArrangedParts(repository)
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
     var arranged by remember { mutableStateOf(shown) }
+    // 並びと絞り込み（設定に保存。「パーツを選ぶ」の窓と共通）とお気に入り。画面に出すのは、いつもの順（arranged）を絞り込んで並べ替えたもの
+    val settings = RoadCollectorApp.from(context).settings
+    val filtering = rememberPartFiltering(repository, settings)
+    val filter = filtering.filter
+    val favorites = filtering.favorites
+    val visible = remember(arranged, filtering) { filtering.apply(arranged) }
     // ドラッグしているパーツの id と、ドラッグを始めたときの位置
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragStartIndex by remember { mutableStateOf(-1) }
@@ -212,6 +219,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 when {
                     editing -> notes("長押しのまま動かして並べ替え", "× で削除")
                     selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                    // 並べ替え（長押しのドラッグ）は、いつもの順で絞り込んでいないときだけ（ほかの並びで動かしても意味が分からないため）
+                    !filter.isDefault -> notes("タップで大きく見る", "並べ替えは「いつもの順」のときだけ")
                     else -> notes("タップで大きく見る", "長押しで並べ替え")
                 },
                 style = noteStyle,
@@ -229,17 +238,32 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
+        // 並びと絞り込みの行。並べ替え中は見えなくして押せなくする（並べ替えは、いつもの順で絞り込んでいないときだけなので）。
+        // 行の場所は残す：消すと一覧が上に詰まり、長押しでつかんだカードが指の下からずれるため（#75 のレビュー）
+        if (isLoaded && parts.isNotEmpty()) {
+            PartFilterBar(
+                filter = filter,
+                onChange = settings::setPartFilter,
+                skies = filtering.skies,
+                enabled = !editing,
+                modifier = Modifier
+                    .graphicsLayer { alpha = if (editing) 0f else 1f }
+                    .then(if (editing) Modifier.clearAndSetSemantics {} else Modifier),
+            )
+        }
+
         // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
         // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
         if (selecting && !editing && isLoaded) {
             RandomPickRow(
                 // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
-                enabled = parts.isNotEmpty(),
+                enabled = visible.isNotEmpty(),
                 count = pickCount,
                 onCountChange = { pickCount = it },
                 note = pickNote,
                 onPick = {
-                    val picked = pickRandom(parts.map { it.id }, pickCount)
+                    // 絞り込んでいれば、出ているパーツの中から選ぶ
+                    val picked = pickRandom(visible.map { it.id }, pickCount)
                     selectedIds.clear()
                     selectedIds.addAll(picked)
                     pickNote = randomPickNote(picked.size, pickCount)
@@ -248,12 +272,28 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
 
         val gridState = rememberLazyGridState()
+        // 並びや絞り込みを変えたら、いちばん上から見せる（リストは、それまで上に見えていたカードを上に残そうとするので、
+        // 長い順にしても、いちばん長いパーツが上の見えない所に行ってしまう）。
+        // 変えたときだけ：画面に入った最初の 1 回は動かさない（ほかのタブから戻ったときに、見ていた位置が残るように。#75 のレビュー）
+        ScrollToTopOnChange(filter, gridState)
         val haptics = LocalHapticFeedback.current
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
             // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）
             arranged = arranged.moved(from.index, to.index)
         }
-        LazyVerticalGrid(
+        if (isLoaded && parts.isNotEmpty() && visible.isEmpty()) {
+            // 絞り込んだら何も残らなかった
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted, modifier = Modifier.paperBand())
+                PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
+                    Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+                }
+            }
+        } else LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             state = gridState,
             modifier = Modifier.weight(1f),
@@ -262,7 +302,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(arranged, key = { it.id }) { part ->
+            items(visible, key = { it.id }) { part ->
                 // ReorderableItem が、並びが変わったときにカードを滑らかに動かす（animateItem）
                 ReorderableItem(reorderState, key = part.id) { isDragging ->
                     val order = validSelected.indexOf(part.id).takeIf { it >= 0 }?.plus(1)
@@ -273,6 +313,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         sky = repository.weatherOf(part.id, weathers)?.sky,
                         order = order,
                         isSample = SampleParts.byId(part.id) != null,
+                        favorite = part.id in favorites,
+                        onToggleFavorite = { repository.setFavorite(part.id, part.id !in favorites) },
                         isDragging = isDragging,
                         editing = editing,
                         selecting = selecting,
@@ -292,9 +334,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         },
                         onToggleSelect = { toggleSelect(part.id) },
                         onDeleteClick = { pendingDelete = part },
-                        // 選択中は長押しで並べ替えに入らない（選ぶのと混ざらないように）
+                        // 選択中は長押しで並べ替えに入らない（選ぶのと混ざらないように）。
+                        // いつもの順で絞り込んでいないときだけ（ほかの並びや絞り込みの途中で動かしても、意味が分からないため）
                         dragHandle = Modifier.longPressDraggableHandle(
-                            enabled = !selecting,
+                            enabled = !selecting && filter.isDefault,
                             onDragStarted = {
                                 draggingId = part.id
                                 dragStartIndex = arranged.indexOfFirst { it.id == part.id }
@@ -312,9 +355,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
                         a11yActions = listOfNotNull(
-                            CustomAccessibilityAction("先頭へ") { moveTo(0); true }.takeIf { index > 0 },
-                            CustomAccessibilityAction("前へ") { moveTo(index - 1); true }.takeIf { index > 0 },
-                            CustomAccessibilityAction("後ろへ") { moveTo(index + 1); true }.takeIf { index < arranged.size - 1 },
+                            CustomAccessibilityAction("先頭へ") { moveTo(0); true }.takeIf { filter.isDefault && index > 0 },
+                            CustomAccessibilityAction("前へ") { moveTo(index - 1); true }.takeIf { filter.isDefault && index > 0 },
+                            CustomAccessibilityAction("後ろへ") { moveTo(index + 1); true }.takeIf { filter.isDefault && index < arranged.size - 1 },
                             CustomAccessibilityAction("名前を付ける") { renamingId = part.id; true },
                             CustomAccessibilityAction("削除") { pendingDelete = part; true },
                         ),
@@ -323,6 +366,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             }
         }
 
+        // 選んだパーツのうち、絞り込みで隠れているものがあれば知らせて、外せるようにする
+        // （見えないパーツが数に入ったまま、外せず・ほかも選べなくなるのを防ぐ。#75 のレビュー）
+        if (selecting && !editing) {
+            HiddenSelectionNote(
+                hidden = validSelected.count { id -> visible.none { it.id == id } },
+                onRemove = { selectedIds.removeAll { id -> visible.none { it.id == id } } },
+                onGrid = true,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         PressButton(
             onClick = {
@@ -628,6 +680,8 @@ private fun PartCard(
     sky: Sky?,
     order: Int?,
     isSample: Boolean,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
     isDragging: Boolean,
     editing: Boolean,
     selecting: Boolean,
@@ -741,6 +795,9 @@ private fun PartCard(
         }
         // 名前は 10 文字まで（命名 API・名前を付けるダイアログと同じ）。長い名前は字を少し小さくして 1 行に収める。
         // それでも入らない幅の端末では「…」で切る（タップして大きく見れば全部見られる）
+        // 名前と注記の 2 行。右下に、お気に入りの ☆（押すと黄色の ★）。字は ☆ の分だけ右を空ける
+        Box {
+        Column(modifier = Modifier.padding(end = FavoriteToggleWidth)) {
         BasicText(
             part.displayName,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
@@ -766,8 +823,22 @@ private fun PartCard(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )
+        }
+        FavoriteToggle(
+            favorite = favorite,
+            name = part.displayName,
+            // 並べ替え中は押せない（揺れているカードの上で、間違えて押さないように）
+            enabled = !editing,
+            onToggle = onToggleFavorite,
+            // 見た目は小さいが、押せる範囲は縦 44dp（名前と注記の 2 行の右端ぶん）
+            modifier = Modifier.align(Alignment.CenterEnd).size(width = FavoriteToggleWidth, height = 48.dp),
+        )
+        }
     }
 }
+
+/** カードの右下のお気に入りの幅（名前と注記は、この分だけ右を空ける） */
+private val FavoriteToggleWidth = 44.dp
 
 /** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
 private const val MAP_LOGO_STRIP_DP = 28f
@@ -899,3 +970,8 @@ private fun StepButton(symbol: String, description: String, enabled: Boolean, on
         Text(symbol, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = if (enabled) Fieldbook.Survey else Fieldbook.Mark)
     }
 }
+
+
+/** お気に入りの ★ の色（黄色。ライトでもダークでも、紙の上で見える） */
+internal val FavoriteStar = Color(0xFFE0A100)
+
