@@ -106,7 +106,8 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
     val corner = CornerRadius(1.4f)
     // リングの所（左の端）の位置：閉じているときは表紙の左の端、開くとまん中
     val spine = AppIcons.NOTE_LEFT + (12f - AppIcons.NOTE_LEFT) * t
-    scale(1f - 0.16f * t, pivot = Offset(12f, 12f)) {
+    // 開くと幅が 2 倍になるので、見開きが 23 ほどに収まるまで小さくする
+    scale(1f - (1f - OPEN_SPREAD / (2 * w)) * t, pivot = Offset(12f, 12f)) {
         // 下のページ：紙の色に墨の縁、うすい方眼と、道
         val page = Rect(spine, top, spine + w, top + h)
         drawRect(Fieldbook.Paper, topLeft = page.topLeft, size = page.size)
@@ -118,12 +119,12 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
             while (y < page.bottom - 0.5f) { drawLine(grid, Offset(page.left + 0.8f, y), Offset(page.right - 0.8f, y), strokeWidth = 0.35f); y += 2.6f }
             // 曲がり角のある道（右肩上がりの線だと、グラフに見えるため）
             drawRoad(
-                listOf(Offset(spine + 4f, 6.6f), Offset(spine + 4f, 16.4f), Offset(spine + 9.6f, 16.4f), Offset(spine + 9.6f, 11.6f)),
+                listOf(Offset(spine + 4.4f, 7f), Offset(spine + 4.4f, 16.8f), Offset(spine + 11f, 16.8f), Offset(spine + 11f, 11.2f)),
                 alpha = t,
             )
         }
         drawRoundRect(ink, topLeft = page.topLeft, size = page.size, cornerRadius = corner, style = Stroke(width = 1.3f))
-        // 表紙：リングの所を中心に横に縮んで裏返る（cos で 1 → -1）。表は横線の入った表紙、裏返ったら罫線のページ
+        // 表紙：リングの所を中心に横に縮んで裏返る（cos で 1 → -1）。表は背の線と題名の線の入った表紙、裏返ったら罫線のページ
         val flip = cos(PI.toFloat() * open)
         scale(scaleX = flip, scaleY = 1f, pivot = Offset(spine, 12f)) {
             translate(left = spine - AppIcons.NOTE_LEFT) {
@@ -240,6 +241,9 @@ private val SparkleGold = Color(0xFFE0A100)
 
 /** アイコンの一辺（AppIcons と同じ 24） */
 private const val ICON_UNITS = 24f
+
+/** 開いたノートの見開きの幅（24 の目盛りで） */
+private const val OPEN_SPREAD = 23f
 
 /** 下の積み木（四角と丸）の上の端 */
 private const val BASE_TOP = 12.4f

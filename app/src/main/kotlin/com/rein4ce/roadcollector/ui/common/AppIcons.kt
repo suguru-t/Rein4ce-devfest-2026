@@ -112,7 +112,7 @@ object AppIcons {
 
     // （鞄のアイコンはノートに置き換えたので消した。戻すときは git の履歴から）
 
-    // ---- ノート（コレクション。左の端をリングで綴じた縦長のノート。表紙に文字の行のような横線） ----
+    // ---- ノート（コレクション。左の端をリングで綴じた縦長のノート。表紙に背の縦線と、題名のような短い横線 2 本） ----
 
     /** 表紙（縦長・角の丸い四角）。[inset] は線画のときに内側に寄せる量 */
     private fun PathBuilder.notebookCover(inset: Float = 0f) {
@@ -120,21 +120,27 @@ object AppIcons {
     }
 
     /**
-     * 表紙の横線（文字の行のように 3 本。最後の行は短い）。表紙の上に小さな札を置くと、枕のある寝台を上から見た形に
-     * 見えてしまったので、札はやめた
+     * 表紙の背の縦線（リングのすぐ内側）と、右上の題名のような短い横線 2 本。
+     * 前は上に札（枕のある寝台に見えた）、次は横線 3 本（文書に見えた）だったので、手帳やノートのアイコンでよく使う
+     * 「背の線＋題名の線」にした
      */
-    private fun PathBuilder.notebookLines() {
-        NOTE_LINES.forEachIndexed { i, y ->
-            moveTo(NOTE_LEFT + 3.8f, y)
-            lineTo(NOTE_LEFT + NOTE_WIDTH - (if (i == NOTE_LINES.lastIndex) 5.4f else 2.6f), y)
+    private fun PathBuilder.notebookMarks() {
+        // 表紙の枠の線の内側で止める（枠からはみ出さないように）
+        moveTo(NOTE_SPINE_X, NOTE_TOP + STROKE)
+        lineTo(NOTE_SPINE_X, NOTE_TOP + NOTE_HEIGHT - STROKE)
+        NOTE_TITLE.forEachIndexed { i, y ->
+            moveTo(NOTE_SPINE_X + 2.6f, y)
+            lineTo(NOTE_LEFT + NOTE_WIDTH - (if (i == NOTE_TITLE.lastIndex) 4.2f else 2.6f), y)
         }
     }
 
-    /** 横線を、塗りの表紙からくり抜く細い四角にしたもの */
-    private fun PathBuilder.notebookLineHoles() {
-        NOTE_LINES.forEachIndexed { i, y ->
-            val right = NOTE_LEFT + NOTE_WIDTH - (if (i == NOTE_LINES.lastIndex) 5.4f else 2.6f)
-            roundRect(NOTE_LEFT + 3.2f, y - 0.65f, right - (NOTE_LEFT + 3.2f) + 0.6f, 1.3f, 0.65f)
+    /** 背の縦線と題名の線を、塗りの表紙からくり抜く細い四角にしたもの */
+    private fun PathBuilder.notebookMarkHoles() {
+        roundRect(NOTE_SPINE_X - 0.5f, NOTE_TOP + 0.9f, 1f, NOTE_HEIGHT - 1.8f, 0.5f)
+        NOTE_TITLE.forEachIndexed { i, y ->
+            val left = NOTE_SPINE_X + 2f
+            val right = NOTE_LEFT + NOTE_WIDTH - (if (i == NOTE_TITLE.lastIndex) 3.6f else 2f)
+            roundRect(left, y - 0.6f, right - left, 1.2f, 0.6f)
         }
     }
 
@@ -173,7 +179,7 @@ object AppIcons {
         icon("Notebook") {
             filled(evenOdd = true) {
                 notebookCover()
-                notebookLineHoles()
+                notebookMarkHoles()
                 notebookHoles()
             }
             ring { notebookRings() }
@@ -183,7 +189,7 @@ object AppIcons {
     val NotebookOutline: ImageVector by lazy {
         icon("NotebookOutline") {
             outlined { notebookCover(inset = STROKE / 2) }
-            outlined { notebookLines() }
+            ring { notebookMarks() }
             ring { notebookRings() }
         }
     }
@@ -201,19 +207,21 @@ object AppIcons {
     }
 
     /** ノートの位置と大きさ（閉じたとき。開くと、リングの所（左の端）を中心に表紙がめくれる。ui/TabIcons.kt） */
-    internal const val NOTE_LEFT = 7f
-    internal const val NOTE_TOP = 2.5f
-    internal const val NOTE_WIDTH = 12.5f
-    internal const val NOTE_HEIGHT = 19f
+    // 縦横の比は 1：1.2 ほど（細長いと、ノートに見えにくかった）
+    internal const val NOTE_LEFT = 6f
+    internal const val NOTE_TOP = 3f
+    internal const val NOTE_WIDTH = 15f
+    internal const val NOTE_HEIGHT = 18f
 
     /** リングの高さ（4 つ）と、輪の半分の幅・高さ、線の太さ */
-    internal val NOTE_RINGS = floatArrayOf(5.8f, 9.8f, 13.8f, 17.8f)
+    internal val NOTE_RINGS = floatArrayOf(6.3f, 10.1f, 13.9f, 17.7f)
     internal const val RING_HALF_W = 1.9f
     internal const val RING_HALF_H = 0.95f
     internal const val RING_STROKE = 1.2f
 
-    /** 表紙の横線の高さ（3 本） */
-    private val NOTE_LINES = floatArrayOf(8.6f, 12.2f, 15.8f)
+    /** 背の縦線の x と、題名の線の高さ（2 本） */
+    private const val NOTE_SPINE_X = NOTE_LEFT + 3.4f
+    private val NOTE_TITLE = floatArrayOf(7.6f, 10.6f)
 
     // ---- 積み木（下に 2 つ、上に 1 つ） ----
 
@@ -334,9 +342,9 @@ object AppIcons {
 
     private fun shape(build: PathBuilder.() -> Unit): Path = PathBuilder().apply(build).nodes.toPath()
 
-    /** ノートの表紙（横線とリングの穴をくり抜く。偶奇の塗りで描く） */
+    /** ノートの表紙（背の線・題名の線・リングの穴をくり抜く。偶奇の塗りで描く） */
     internal val notebookCoverPath: Path by lazy {
-        shape { notebookCover(); notebookLineHoles(); notebookHoles() }.apply { fillType = PathFillType.EvenOdd }
+        shape { notebookCover(); notebookMarkHoles(); notebookHoles() }.apply { fillType = PathFillType.EvenOdd }
     }
 
     /** 積み木：下の四角と丸、上の三角 */
