@@ -21,6 +21,11 @@ data class Placement(
 
 /**
  * 完成したタワー（作品）。共有・ギャラリー・ランキングの単位。
+ *
+ * @property author  作者名（アプリの設定のニックネーム）。見た目だけで、誰かを見分けるものではない
+ * @property ownerId 持ち主の印。アプリが端末ごとに作る 64 桁の 16 進（端末の id を塩を付けてハッシュしたもの。元の id は分からない）。
+ *   サーバはこれを保存して「あなたのタワーか」を答えるのに使い、**誰にも返さない**（一覧は [TowerSummary.mine] だけ、
+ *   1 基の JSON では null にして返す）。古いアプリは送らないので null
  */
 @Serializable
 data class Tower(
@@ -31,9 +36,13 @@ data class Tower(
     val height: Float,
     val createdAt: Long,
     val author: String? = null,
+    val ownerId: String? = null,
 )
 
-/** ギャラリー一覧用の軽い形。 */
+/**
+ * ギャラリー一覧用の軽い形。
+ * @property mine 一覧を取ったアプリ（X-Owner-Id ヘッダの持ち主）が送ったタワーなら true。持ち主の印そのものは入れない
+ */
 @Serializable
 data class TowerSummary(
     val id: String,
@@ -41,6 +50,7 @@ data class TowerSummary(
     val partCount: Int,
     val createdAt: Long,
     val author: String? = null,
+    val mine: Boolean = false,
 )
 
 /** POST /towers の応答。 */

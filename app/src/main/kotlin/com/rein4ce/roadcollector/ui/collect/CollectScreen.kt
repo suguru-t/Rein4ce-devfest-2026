@@ -252,8 +252,10 @@ fun CollectScreen(
         // 設定・拡大表示と同じ形：灰色の帯の見出し、枠の中のいちばん下に「コレクションを見る」、枠の下の丸い「×」で閉じる。
         // 見出しは「パーツができました」だと機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
         is CollectViewModel.Outcome.Created -> FramedDialog(title = "道を 1 本集めました", onDismiss = { vm.dismissOutcome() }) {
+            // 天気は記録のあとに取ってくるので、届いたら図（道の色・左上のアイコン）と注記に出す（届くまではいつもの色）
+            val sky = app.partRepository.weatherOf(o.part.id, weathers)?.sky
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(o.part, modifier = Modifier.size(180.dp))
+                FieldbookPart(o.part, modifier = Modifier.size(180.dp), sky = sky)
                 Spacer(Modifier.height(4.dp))
                 PartNameLine(o)
                 o.note?.let { note ->
@@ -266,7 +268,7 @@ fun CollectScreen(
                 WalkNote(
                     distanceM = o.part.distanceM,
                     date = walkDate(o.part.walkedAt),
-                    weather = app.partRepository.weatherOf(o.part.id, weathers)?.sky?.label,
+                    weather = sky?.label,
                 )
                 TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)

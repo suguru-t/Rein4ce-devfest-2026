@@ -31,14 +31,14 @@ class FirestoreTowerStoreTest {
         return FirestoreTowerStore(db, collection)
     }
 
-    // --- F1：一覧は 4 項目だけ取る ---
+    // --- F1：一覧は 5 項目だけ取る ---
 
     @Test
-    fun `一覧のクエリは一覧用の 4 項目だけを要求し、json は要求しない`() {
+    fun `一覧のクエリは一覧用の 5 項目だけを要求し、json は要求しない`() {
         val q = store().summariesQuery().toProto().structuredQuery
 
         val fields = q.select.fieldsList.map { it.fieldPath }
-        assertEquals(listOf("height", "partCount", "createdAt", "author"), fields)
+        assertEquals(listOf("height", "partCount", "createdAt", "author", "ownerId"), fields)
         assertFalse("json" in fields)
     }
 
