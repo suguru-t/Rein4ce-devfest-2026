@@ -63,24 +63,48 @@ object AppIcons {
         close()
     }
 
+    /**
+     * 足跡の形と置き場所（24 の目盛りで）。アイコンと、記録画面の歩く足跡（ui/collect/WalkingFootprints）の両方で使うので、
+     * ここを直せば両方が同じ形になる
+     */
+    internal object Foot {
+        /** 左足・右足の真ん中の x */
+        const val LEFT_X = 7.2f
+        const val RIGHT_X = 16.8f
+
+        /** 上の足跡（左足）と下の足跡（右足）の上端 */
+        const val UPPER_TOP = 2f
+        const val LOWER_TOP = 8.5f
+
+        /** 足裏の楕円（上端からの中心の高さ・横と縦の半径） */
+        const val SOLE_DY = 4.4f
+        const val SOLE_RX = 3.1f
+        const val SOLE_RY = 4.4f
+
+        /** かかとの楕円 */
+        const val HEEL_DY = 11.6f
+        const val HEEL_RX = 2.3f
+        const val HEEL_RY = 1.9f
+    }
+
     /** 足跡 1 つ。[shrink] は線画のときに線の太さぶん内側に寄せる量 */
     private fun PathBuilder.footprint(cx: Float, top: Float, shrink: Float = 0f) {
-        ellipse(cx, top + 4.4f, 3.1f - shrink, 4.4f - shrink) // 足裏
-        ellipse(cx, top + 11.6f, 2.3f - shrink, 1.9f - shrink) // かかと
+        ellipse(cx, top + Foot.SOLE_DY, Foot.SOLE_RX - shrink, Foot.SOLE_RY - shrink) // 足裏
+        ellipse(cx, top + Foot.HEEL_DY, Foot.HEEL_RX - shrink, Foot.HEEL_RY - shrink) // かかと
     }
 
     val Footprints: ImageVector by lazy {
         icon("Footprints") {
-            filled { footprint(7.2f, 2f) } // 左足（上）
-            filled { footprint(16.8f, 8.5f) } // 右足（下）
+            filled { footprint(Foot.LEFT_X, Foot.UPPER_TOP) } // 左足（上）
+            filled { footprint(Foot.RIGHT_X, Foot.LOWER_TOP) } // 右足（下）
         }
     }
 
     val FootprintsOutline: ImageVector by lazy {
         icon("FootprintsOutline") {
             val s = STROKE / 2
-            outlined { footprint(7.2f, 2f + s, s) }
-            outlined { footprint(16.8f, 8.5f + s, s) }
+            outlined { footprint(Foot.LEFT_X, Foot.UPPER_TOP + s, s) }
+            outlined { footprint(Foot.RIGHT_X, Foot.LOWER_TOP + s, s) }
         }
     }
 

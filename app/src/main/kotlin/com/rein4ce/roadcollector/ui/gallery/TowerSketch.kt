@@ -44,19 +44,21 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier) {
         // パーツ：細い墨の縁取りを全部描いてから、種類ごとの色で本体を重ねる（縁取りは細く。太いと輪の穴や棒の細さがつぶれる）
         val partsById = tower.parts.associateBy { it.id }
         val edgePx = max(1f, 0.02f * scale)
+        // パーツの大きさ（歩いた距離で決まる。Placement.scale）を掛けて描く
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
+            val partScale = scale * pl.scale
             drawPart(
-                part.copy(thickness = part.thickness + 2 * edgePx / scale),
+                part.copy(thickness = part.thickness + 2 * edgePx / partScale),
                 center = Offset(sx(pl.x), sy(pl.y)),
-                scalePx = scale,
+                scalePx = partScale,
                 angleRad = pl.angleRad,
                 color = Fieldbook.Ink,
             )
         }
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
-            drawPart(part, center = Offset(sx(pl.x), sy(pl.y)), scalePx = scale, angleRad = pl.angleRad, color = part.kind.color())
+            drawPart(part, center = Offset(sx(pl.x), sy(pl.y)), scalePx = scale * pl.scale, angleRad = pl.angleRad, color = part.kind.color())
         }
     }
 }
@@ -66,7 +68,7 @@ internal const val PLATFORM_WIDTH = StackWorld.PLATFORM_WIDTH.toFloat()
 internal const val PLATFORM_THICKNESS = StackWorld.PLATFORM_THICKNESS.toFloat()
 
 /**
- * 置いた点からパーツが届きうる最大の距離 [m]。
+ * 置いた点からパーツが届きうる最大の距離 [m]（大きさ 1 倍のとき。大きさ [com.rein4ce.roadcollector.core.model.Placement.scale] を掛けて使う）。
  * パーツの点は 1.0×1.0 の箱に正規化されていて回転もするので、角までは最大 √2/2 ≒ 0.71。
  * それに道の太さの半分と縁取りを足して 0.8。共有ページの絵（TowerSvg）は 1.0 で見ているが、小さな絵なのでやや詰める
  */
@@ -89,12 +91,13 @@ internal fun sketchBounds(tower: Tower): SketchBounds {
     var minY = -PLATFORM_THICKNESS - 0.1f
     var maxY = max(tower.height, 1f) + 0.3f
     for (p in tower.placements) {
-        minX = min(minX, p.x - PART_REACH)
-        maxX = max(maxX, p.x + PART_REACH)
-        maxY = max(maxY, p.y + PART_REACH)
+        val reach = PART_REACH * p.scale
+        minX = min(minX, p.x - reach)
+        maxX = max(maxX, p.x + reach)
+        maxY = max(maxY, p.y + reach)
         // 台の上に乗っているパーツは台より下には行けないので、下に広げるのは台の端より外に置かれたものだけ。
         // 全部に広げると、台の下に無駄な余白ができてタワーが小さく描かれる
-        if (abs(p.x) > PLATFORM_WIDTH / 2) minY = min(minY, p.y - PART_REACH)
+        if (abs(p.x) > PLATFORM_WIDTH / 2) minY = min(minY, p.y - reach)
     }
     return SketchBounds(minX, maxX, minY, maxY)
 }

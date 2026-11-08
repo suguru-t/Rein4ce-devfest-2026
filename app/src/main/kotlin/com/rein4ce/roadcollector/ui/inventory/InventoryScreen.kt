@@ -44,11 +44,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +93,8 @@ import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -104,6 +104,9 @@ import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
@@ -122,12 +125,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(context).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
-    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    val shown = rememberArrangedParts(repository)
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
     var arranged by remember { mutableStateOf(shown) }
     // ドラッグしているパーツの id と、ドラッグを始めたときの位置
@@ -221,7 +223,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
             // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
             if (!editing && !selecting && isLoaded && missingSamples > 0) {
-                TextButton(onClick = { repository.restoreMissingSamples() }) {
+                PressTextButton(onClick = { repository.restoreMissingSamples() }) {
                     Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
                 }
             }
@@ -305,7 +307,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                                 if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
                                 // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
                                 // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
-                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
+                                arranged = repository.arrangedNow()
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
@@ -322,7 +324,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         }
 
         Spacer(Modifier.height(8.dp))
-        Button(
+        PressButton(
             onClick = {
                 when {
                     editing -> editing = false
@@ -334,7 +336,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 }
             },
             enabled = editing || !selecting || validSelected.isNotEmpty(),
-            // 角の丸い形（Material の標準）。積む画面の「パーツを選ぶ」の窓の「選んだ n 本で積む」と同じ形
+            // 両端が丸い形（Material の標準）。積む画面の「パーツを選ぶ」の窓の「選んだ n 本で積む」と同じ形
             shape = ButtonDefaults.shape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = Fieldbook.Survey,
@@ -569,7 +571,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
             // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
             if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
             // 名前を付ける（付け直す）。閉じるのは、ほかの窓と同じく枠の下の「×」
-            TextButton(onClick = onRename, modifier = Modifier.padding(top = 8.dp)) {
+            PressTextButton(onClick = onRename, modifier = Modifier.padding(top = 8.dp)) {
                 Icon(Icons.Filled.Edit, contentDescription = null, tint = Fieldbook.Survey, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("名前を付ける", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
@@ -603,10 +605,10 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("削除", color = Fieldbook.Danger, fontWeight = FontWeight.Bold) }
+            PressTextButton(onClick = onConfirm) { Text("削除", color = Fieldbook.Danger, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
+            PressTextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
         },
     )
 }
@@ -719,16 +721,18 @@ private fun PartCard(
             }
             if (editing && !isDragging) {
                 // 左上の「×」：押すと削除の確認（iPhone の並べ替え中と同じ位置）
+                val deleteSource = remember { MutableInteractionSource() }
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .offset(x = (-8).dp, y = (-8).dp)
                         .size(28.dp)
+                        .pressFeel(deleteSource)
                         .clip(CircleShape)
                         .background(Fieldbook.Ink)
                         .border(BorderStroke(2.dp, Fieldbook.Paper), CircleShape)
-                        .clickable(onClickLabel = "削除") { onDeleteClick() }
+                        .clickable(interactionSource = deleteSource, indication = LocalIndication.current, onClickLabel = "削除") { onDeleteClick() }
                         .semantics { contentDescription = "「${part.displayName}」を削除" },
                 ) {
                     Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
@@ -775,11 +779,14 @@ private const val MAP_LOGO_STRIP_DP = 28f
 @Composable
 private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(50)
+    val source = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+            .pressFeel(source)
+            // 押せる範囲（48dp の四角）に波紋は出さず、縮む動きだけで応える（丸い形のものは形だけが応える）
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick),
     ) {
         Text(
             if (selecting) "キャンセル" else "選択",
@@ -800,13 +807,23 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
 @Composable
-private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val selected = order != null
+    val source = remember { MutableInteractionSource() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .size(44.dp)
-            .toggleable(value = selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .pressFeel(source)
+            .toggleable(
+                value = selected,
+                interactionSource = source,
+                // 押せる範囲（44dp の四角）に波紋は出さず、丸が縮む動きだけで応える
+                indication = null,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() },
+            )
             .semantics {
                 contentDescription = "「$name」を積むのに選ぶ"
                 stateDescription = if (order != null) "$order 番目に積む" else if (enabled) "選んでいない" else "${GameSession.MAX_PARTS} 本選んだので選べない"
@@ -844,7 +861,7 @@ private val CardShape = RoundedCornerShape(4.dp)
 private fun RandomPickRow(enabled: Boolean, count: Int, onCountChange: (Int) -> Unit, note: String?, onPick: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onPick, enabled = enabled) {
+            PressTextButton(onClick = onPick, enabled = enabled) {
                 Text("ランダムに選ぶ", color = if (enabled) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.weight(1f))
@@ -873,7 +890,7 @@ private fun RandomPickRow(enabled: Boolean, count: Int, onCountChange: (Int) -> 
 /** 個数を増やす・減らすボタン（押せる大きさは 48dp） */
 @Composable
 private fun StepButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit) {
-    TextButton(
+    PressTextButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.size(48.dp).semantics { contentDescription = description },

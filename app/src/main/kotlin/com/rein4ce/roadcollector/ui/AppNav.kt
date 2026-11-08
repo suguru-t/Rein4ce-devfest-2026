@@ -67,6 +67,7 @@ import com.rein4ce.roadcollector.ui.settings.HowToDialog
 import com.rein4ce.roadcollector.ui.weather.BackdropScreen
 import com.rein4ce.roadcollector.ui.weather.WeatherLayer
 import kotlin.math.roundToInt
+import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
  * 4 画面のタブ。担当分けに合わせて 1 画面 = 1 パッケージ。
@@ -216,18 +217,21 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                             scale.animateTo(1f, spring(stiffness = Spring.StiffnessMedium))
                         }
                     }
+                    // 押した瞬間は、ほかのボタンと同じく縮んで振動を返す（ui/common/PressFeel）。選ばれたあとの弾みは上の scale
+                    val source = remember { MutableInteractionSource() }
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .pressFeel(source)
                             .semantics {
                                 role = Role.Tab
                                 selected = isSelected
                                 contentDescription = dest.label
                             }
                             // 波紋は出さない（Instagram と同じく、アイコンの弾みだけ）
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onGo(dest) },
+                            .clickable(interactionSource = source, indication = null) { onGo(dest) },
                     ) {
                         // 選ばれた瞬間は、タブごとの動き（足跡が歩く・ノートが開く・積み木が積まれる・トロフィーが光る）
                         TabIcon(
