@@ -33,6 +33,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rein4ce.roadcollector.ui.collect.TITLE_BLOCK_DP
+import com.rein4ce.roadcollector.ui.collect.TITLE_GAP_DP
+import com.rein4ce.roadcollector.ui.collect.TITLE_TOP_PAD_DP
 import com.rein4ce.roadcollector.ui.collect.TitleBlocks
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
@@ -178,18 +181,29 @@ internal fun TitleIntro() {
 /** 題字の下の一言 */
 private const val TAGLINE = "歩いた道を、積み上げよう"
 
+/** 見出しの題字の、ブロック 1 つ分の送り [dp]（TitleBlocks の大きさ + 間） */
+private const val TITLE_PITCH_DP = TITLE_BLOCK_DP + TITLE_GAP_DP
+
 /**
- * 起動画面のアイコンの中の題字の大きさ（見出しの題字の何倍か）。起動画面の積み木は 38dp おき、見出しは 36dp おき
- * （tools/make_splash_icon.py の SIZE・GAP と、TitleBlocks の 32dp・4dp）
+ * 起動画面のアイコンの中の題字の大きさ（見出しの題字の何倍か）。起動画面の積み木は 38dp おき
+ * （tools/make_splash_icon.py の SIZE・GAP）、見出しは [TITLE_PITCH_DP] おき
  */
-private const val SPLASH_SCALE = 38f / 36f
+private const val SPLASH_SCALE = 38f / TITLE_PITCH_DP
 
-/** 題字の枠（上に 10dp の余白がある）のまん中から見た、積み木の段のまん中の下へのずれ（TitleBlocks の作りから） */
-private val ROW_DROP = 5.dp
+/** 題字の枠（上に余白がある）のまん中から見た、積み木の段のまん中の下へのずれ（TitleBlocks の作りから） */
+private val ROW_DROP = (TITLE_TOP_PAD_DP / 2f).dp
 
-/** まん中に出すときの題字の大きさ（見出しの何倍か）と、一言までの間（大きくした題字にかからないように） */
-private const val BIG = 2.4f
-private val TAGLINE_GAP = 52.dp
+/**
+ * まん中に出すときの題字の大きさ（見出しの何倍か）。見出しの題字の大きさを変えても、まん中ではいつも同じ大きさ
+ * （ブロック 1 つ分の送り 86.4dp）に見えるようにする
+ */
+private const val BIG = 86.4f / TITLE_PITCH_DP
+
+/** 題字の枠の高さ [dp]（上の余白 + ブロック） */
+private const val TITLE_HEIGHT_DP = TITLE_TOP_PAD_DP + TITLE_BLOCK_DP
+
+/** 一言までの間。大きくした題字が枠からはみ出す分（上下で半分ずつ）に、23dp あける */
+private val TAGLINE_GAP = ((BIG - 1f) * TITLE_HEIGHT_DP / 2f + 23f).dp
 
 /** 起動画面の題字の位置から、まん中へ大きくなる時間 [ms] */
 private const val GROW_MS = 480

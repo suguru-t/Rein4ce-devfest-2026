@@ -5,19 +5,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -220,28 +219,19 @@ private fun PickerCard(
             .clickable(enabled = canSelect, onClickLabel = if (order != null) "選択を外す" else "選ぶ", onClick = onToggle)
             .padding(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 6.dp),
     ) {
-        Box {
-            FieldbookPart(
-                part,
-                modifier = Modifier.fillMaxWidth().aspectRatio(1f).semantics {
-                    if (sky != null) contentDescription = "${sky.label}の日に歩いた道"
-                },
-                sky = sky,
-            )
-            SelectMark(
-                order = order,
-                enabled = canSelect,
-                name = part.displayName,
-                onToggle = onToggle,
-                // 小さい図では、左下の縮尺の字と近くならないよう、丸を角へ少し寄せる
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 6.dp),
-            )
-        }
+        FieldbookPart(
+            part,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).semantics {
+                if (sky != null) contentDescription = "${sky.label}の日に歩いた道"
+            },
+            sky = sky,
+        )
         // 名前と、歩いた長さ（足跡のマークを頭に。コレクションのカードの注記と同じ形。ui/common/WalkNote）。
         // 積むときの大きさは出さない（小さいカードでは字が切れるため。長さで分かり、大きさは積む画面の上の行に出る）
-        // 右に、コレクションのカードと同じお気に入りの ☆（押すと黄色の ★）。押せる範囲は、名前と注記の 2 行の右端ぶん
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Column(modifier = Modifier.weight(1f)) {
+        // 右の列は 2 段：上（名前の横）に選ぶ丸、下（長さの横）にお気に入りの ☆（押すと黄色の ★）。
+        // 選ぶ丸を図の上に置くと、小さい図では道や右下の角の印にかかるため、図の下へ出した
+        Box {
+            Column(modifier = Modifier.fillMaxWidth().padding(end = RIGHT_COLUMN)) {
                 Text(
                     part.displayName,
                     fontSize = 11.sp,
@@ -262,17 +252,33 @@ private fun PickerCard(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
-            FavoriteToggle(
-                favorite = favorite,
-                name = part.displayName,
-                enabled = true,
-                onToggle = onToggleFavorite,
-                // 押せる幅は 32dp（カードを選ぶ所のすぐ隣なので、狭すぎると押し間違えやすい）
-                modifier = Modifier.width(32.dp).fillMaxHeight(),
-                starSize = 16.dp,
-                // 星は下の行（足跡と長さ）の高さに置く
-                alignment = Alignment.BottomCenter,
-            )
+            // 右の列は字の 2 行に高さを合わせ（matchParentSize。カードの高さは字だけで決まる）、1 行ずつに分ける
+            Column(modifier = Modifier.matchParentSize().wrapContentWidth(Alignment.End).width(RIGHT_COLUMN)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    SelectMark(
+                        order = order,
+                        enabled = canSelect,
+                        name = part.displayName,
+                        onToggle = onToggle,
+                        // 丸（26dp）は 1 行より少し大きいので、行からはみ出して置く（requiredSize）。押せる範囲は 30dp
+                        // （窓のカードはどこを押しても選べるので、丸は印として見えればよい。下の ☆ と重なる所は ☆ が勝つ）
+                        modifier = Modifier.requiredSize(30.dp),
+                    )
+                }
+                FavoriteToggle(
+                    favorite = favorite,
+                    name = part.displayName,
+                    enabled = true,
+                    onToggle = onToggleFavorite,
+                    // 行（10sp の注記、16dp ほど）より押せる範囲を上下に広げる。外すとカードを選んでしまうので（#84 のレビュー）。
+                    // 上の丸と重なる所は、あとに置いた ☆ が勝つ
+                    modifier = Modifier.weight(1f).fillMaxWidth().requiredHeight(28.dp),
+                    starSize = 16.dp,
+                )
+            }
         }
     }
 }
+
+/** 窓のカードの、名前と長さの右の列（選ぶ丸とお気に入りの ☆）の幅 */
+private val RIGHT_COLUMN = 32.dp
