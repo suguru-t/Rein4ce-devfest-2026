@@ -13,13 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +35,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlinx.coroutines.isActive
@@ -91,7 +91,7 @@ fun StackScreen(
             } else {
                 Text(vm.startMessage ?: "コレクションにパーツがありません")
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onGoInventory) { Text("コレクションへ") }
+                PressButton(onClick = onGoInventory) { Text("コレクションへ") }
             }
         }
         return
@@ -102,13 +102,13 @@ fun StackScreen(
             onDismissRequest = vm::dismissStartMessage,
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = {
+                PressTextButton(onClick = {
                     vm.dismissStartMessage()
                     onGoInventory()
                 }) { Text("コレクションへ") }
             },
             dismissButton = {
-                TextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
+                PressTextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
             },
         )
     }
@@ -146,11 +146,11 @@ fun StackScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                        Button(onClick = { vm.place() }) { Text("置く") }
-                        OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
+                        PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
+                        PressButton(onClick = { vm.place() }) { Text("置く") }
+                        PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
-                    TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
+                    PressTextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
                 }
                 StackViewModel.Phase.Settling -> {
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
@@ -166,16 +166,16 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
+                                PressButton(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
                                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
-                                OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
+                                PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                                     when {
                                         vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
                                         vm.uploaded -> Text("送信済み")
                                         else -> Text("サーバに送信")
                                     }
                                 }
-                                TextButton(onClick = onGoGallery) { Text("みんな") }
+                                PressTextButton(onClick = onGoGallery) { Text("みんな") }
                             }
                             vm.uploadMessage?.let {
                                 Spacer(Modifier.height(8.dp))

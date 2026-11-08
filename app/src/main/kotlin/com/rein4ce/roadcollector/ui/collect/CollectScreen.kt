@@ -25,17 +25,13 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -83,6 +79,10 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -166,7 +166,7 @@ fun CollectScreen(
             }
             // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
             Spacer(Modifier.width(10.dp))
-            IconButton(onClick = { showSettings = true }) {
+            PressIconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "設定", tint = Fieldbook.Ink)
             }
         }
@@ -270,7 +270,7 @@ fun CollectScreen(
                     date = walkDate(o.part.walkedAt),
                     weather = sky?.label,
                 )
-                TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
+                PressTextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
             }
@@ -346,7 +346,7 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
 /** 手持ちの「積む」ボタンと同じ見た目のボタン */
 @Composable
 private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Button(
+    PressButton(
         onClick = onClick,
         enabled = enabled,
         shape = RoundedCornerShape(6.dp),
@@ -370,7 +370,7 @@ private fun DemoMenuButton(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(
+        PressOutlinedButton(
             onClick = { open = true },
             enabled = enabled,
             shape = RoundedCornerShape(6.dp),
