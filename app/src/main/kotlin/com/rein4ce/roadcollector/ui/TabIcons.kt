@@ -123,7 +123,7 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
             )
         }
         drawRoundRect(ink, topLeft = page.topLeft, size = page.size, cornerRadius = corner, style = Stroke(width = 1.3f))
-        // 表紙：リングの所を中心に横に縮んで裏返る（cos で 1 → -1）。表は題字の札、裏返ったら罫線のページ
+        // 表紙：リングの所を中心に横に縮んで裏返る（cos で 1 → -1）。表は横線の入った表紙、裏返ったら罫線のページ
         val flip = cos(PI.toFloat() * open)
         scale(scaleX = flip, scaleY = 1f, pivot = Offset(spine, 12f)) {
             translate(left = spine - AppIcons.NOTE_LEFT) {
