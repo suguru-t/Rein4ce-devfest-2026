@@ -13,9 +13,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,8 +60,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -101,6 +105,7 @@ import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlin.math.max
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -163,14 +168,20 @@ fun CollectScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // 足跡（と長さ）を押すと、足跡が 1 歩ずつ上へ歩く（遊びの仕掛け。読み上げには出さない）。
-                // 歩いている途中に押しても、始めからやり直さない
+                // 押したら題字と同じ軽い振動を返す。歩いている途中に押しても、始めからやり直さない
+                // （歩き始めるまでのわずかな間も「歩いている」と見るため、動きの isRunning ではなく Job で見る）
                 val footSteps = remember { Animatable(0f) }
                 val footScope = rememberCoroutineScope()
+                val footJob = remember { mutableStateOf<Job?>(null) }
+                val haptics = LocalHapticFeedback.current
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.pointerInput(Unit) {
                         detectTapGestures {
-                            if (!footSteps.isRunning) footScope.launch { footSteps.walkFootprints() }
+                            if (footJob.value?.isActive != true) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                footJob.value = footScope.launch { footSteps.walkFootprints() }
+                            }
                         }
                     },
                 ) {
@@ -187,14 +198,18 @@ fun CollectScreen(
             // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
             Spacer(Modifier.width(10.dp))
             // 押すと歯車がくるっと半回転して止まってから、設定の窓が開く（窓が歯車の半分にかかるので、先に回して見せる）。
-            // 押すたびに同じ向きへ回り足す（歯車の歯は 8 つなので、半回転で止まっても形は同じ）。
+            // 回っている間に押しても回り足さない（続けて押しても、1 回目の 0.4 秒後に開く。#77 のレビュー）。
+            // 次に押したときは同じ向きへ回り足す（歯車の歯は 8 つなので、半回転で止まっても形は同じ）。
             // 端末の設定でアニメーションを切っている人には回さず、すぐ開く（Compose が設定に従う）
             val gearTurn = remember { Animatable(0f) }
             val gearScope = rememberCoroutineScope()
+            val gearJob = remember { mutableStateOf<Job?>(null) }
             IconButton(onClick = {
-                gearScope.launch {
-                    gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
-                    showSettings = true
+                if (gearJob.value?.isActive != true) {
+                    gearJob.value = gearScope.launch {
+                        gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+                        showSettings = true
+                    }
                 }
             }) {
                 Icon(
@@ -253,13 +268,14 @@ fun CollectScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // 操作：手持ちの「積む」ボタンと同じ青・角・高さ
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // 操作：コレクションの「積むパーツを選ぶ」と同じ青・形（両端が丸い）・高さ（48dp）。
+        // 文字を大きくして片方だけ 2 行になっても、並んだ 2 つの高さをそろえる（高い方に合わせる）
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (isRecording) {
                 SurveyButton(
                     text = "停止してパーツ化",
                     onClick = { vm.stopAndConvert() },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             } else {
                 SurveyButton(
@@ -271,12 +287,13 @@ fun CollectScreen(
                             permissionLauncher.launch(LocationRecordingService.requiredPermissions())
                         }
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
                 DemoMenuButton(
                     enabled = !vm.isDemoPlaying,
                     onPick = { vm.playDemo(it) },
                     onPickFile = { fileLauncher.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxHeight(),
                 )
             }
         }
@@ -403,9 +420,10 @@ private fun DemoMenuButton(
     enabled: Boolean,
     onPick: (SampleTracks.SampleTrack) -> Unit,
     onPickFile: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
-    Box {
+    Box(modifier = modifier) {
         OutlinedButton(
             onClick = { open = true },
             enabled = enabled,
@@ -413,7 +431,7 @@ private fun DemoMenuButton(
             shape = ButtonDefaults.outlinedShape,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
             border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
-            modifier = Modifier.heightIn(min = 48.dp),
+            modifier = Modifier.fillMaxHeight().heightIn(min = 48.dp),
         ) {
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import com.rein4ce.roadcollector.ui.common.AppIcons.Foot
 import kotlin.math.floor
 
 /**
@@ -48,12 +49,12 @@ internal suspend fun Animatable<Float, *>.walkFootprints(count: Int = 4) {
     snapTo(0f)
 }
 
-/** 足跡 1 つ（足裏とかかと）。AppIcons の足跡と同じ大きさ */
+/** 足跡 1 つ（足裏とかかと）。形はアイコンと同じ（[Foot]） */
 private fun DrawScope.footprint(cx: Float, top: Float, unit: Float, color: Color) {
     fun oval(x: Float, y: Float, rx: Float, ry: Float) =
         drawOval(color, topLeft = Offset((x - rx) * unit, (y - ry) * unit), size = Size(2 * rx * unit, 2 * ry * unit))
-    oval(cx, top + 4.4f, 3.1f, 4.4f) // 足裏
-    oval(cx, top + 11.6f, 2.3f, 1.9f) // かかと
+    oval(cx, top + Foot.SOLE_DY, Foot.SOLE_RX, Foot.SOLE_RY) // 足裏
+    oval(cx, top + Foot.HEEL_DY, Foot.HEEL_RX, Foot.HEEL_RY) // かかと
 }
 
 /** k 番目の足跡の、止まっているときの上端。0 は右足（下）、1 は左足（上）、2 はその先の右足… */
@@ -62,13 +63,13 @@ private fun restTop(k: Int): Float = LOWER_TOP - STEP * k
 /** アイコンの一辺（AppIcons と同じ 24） */
 private const val ICON_UNITS = 24f
 
-/** 左足・右足の真ん中の x */
-private const val LEFT_X = 7.2f
-private const val RIGHT_X = 16.8f
+/** 左足・右足の真ん中の x（アイコンと同じ） */
+private const val LEFT_X = Foot.LEFT_X
+private const val RIGHT_X = Foot.RIGHT_X
 
-/** 止まっているときの、上の足跡（左足）と下の足跡（右足）の上端 */
-private const val UPPER_TOP = 2f
-private const val LOWER_TOP = 8.5f
+/** 止まっているときの、上の足跡（左足）と下の足跡（右足）の上端（アイコンと同じ） */
+private const val UPPER_TOP = Foot.UPPER_TOP
+private const val LOWER_TOP = Foot.LOWER_TOP
 
 /** 1 歩の長さ（上の足跡と下の足跡の上端の差） */
 private const val STEP = LOWER_TOP - UPPER_TOP
