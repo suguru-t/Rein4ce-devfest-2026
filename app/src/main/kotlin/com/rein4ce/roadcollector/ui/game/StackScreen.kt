@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +53,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
@@ -202,7 +207,7 @@ fun StackScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
+                    Text("模型の高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
                     Column(horizontalAlignment = Alignment.End) {
                         Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
                         // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
@@ -352,10 +357,16 @@ private fun ResultCard(
             val title = when {
                 unresolved -> "揺れが止まりませんでした"
                 result.remainingCount == 0 -> "全部落ちました"
-                else -> "完成！ 高さ %.2f m".format(result.tower.height)
+                else -> "完成！ 模型の高さ %.2f m".format(result.tower.height)
             }
             Text(title, style = MaterialTheme.typography.titleLarge)
             Text("残ったパーツ ${result.remainingCount} / ${result.usedCount}", style = MaterialTheme.typography.bodyMedium)
+            Text("使った道：合計 %.2f km".format(java.util.Locale.JAPAN, result.walked.meters / 1000.0), style = MaterialTheme.typography.bodyMedium)
+            if (result.walked.excluded > 0) Text(
+                "見本・デモ・歩いた記録か確認できないパーツ ${result.walked.excluded} 個は距離に含めていません",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
             val reason = when {
                 unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
                 result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
@@ -434,8 +445,24 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         }
     }
 
+    val textMeasurer = rememberTextMeasurer()
+    val rulerStyle = TextStyle(fontSize = 10.sp, color = MaterialTheme.colorScheme.onBackground)
+    val rulerWidth = with(LocalDensity.current) { textMeasurer.measure("999 m", rulerStyle).size.width.toDp() } + 14.dp
+    Row(modifier = modifier) {
+        Canvas(Modifier.width(rulerWidth).fillMaxHeight().clipToBounds()) {
+            val viewport = StackViewport(canvasWidth, canvasHeight, zoom.value, cameraY.value)
+            val ticks = heightTicks(viewport, 8.dp.toPx(), maxOf(28.dp.toPx(), textMeasurer.measure("0 m", rulerStyle).size.height * 1.5f))
+            for (tick in ticks) {
+                val length = if (tick.label != null) 8.dp.toPx() else 4.dp.toPx()
+                drawLine(rulerStyle.color, Offset(size.width - length, tick.screenY), Offset(size.width, tick.screenY))
+                tick.label?.let { label ->
+                    val text = textMeasurer.measure(label, rulerStyle)
+                    drawText(text, topLeft = Offset(0f, (tick.screenY - text.size.height / 2f).coerceIn(0f, (size.height - text.size.height).coerceAtLeast(0f))))
+                }
+            }
+        }
     Canvas(
-        modifier = modifier
+        modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()
             .onSizeChanged { canvasSize = it }
             .pointerInput(vm) {
                 detectDragGestures { change, drag ->
@@ -491,6 +518,7 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
                 alpha = 0.45f,
             )
         }
+    }
     }
 }
 

@@ -21,6 +21,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.core.weather.WalkWeather
+import com.rein4ce.roadcollector.data.PartOrigin
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,9 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
 
     private var demoJob: Job? = null
 
+    // Kept separately from the UI label: replay may clear that label before the speed-stop event is collected.
+    private var recordingOrigin: PartOrigin? = null
+
     init {
         // 速すぎて TrackRecorder が自動で止めたら、速くなる前までの点列でパーツ化を試す。
         // 画面を閉じている間に止まった場合も、次に開いたときにここで拾う（tooFast は StateFlow なので値が残っている）
@@ -109,18 +113,20 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     fun startRecording() {
         val ctx = getApplication<Application>()
         if (!LocationRecordingService.hasLocationPermission(ctx)) return
+        recordingOrigin = PartOrigin.WALK
         TrackRecorder.start()
         LocationRecordingService.start(ctx)
     }
 
     /** 記録を止めてパーツに変換する。 */
     fun stopAndConvert() {
+        val origin = recordingOrigin
         val ctx = getApplication<Application>()
         demoJob?.cancel()
         playingLabel = null
         LocationRecordingService.stop(ctx)
         val pts = TrackRecorder.stop()
-        convert(pts)
+        convert(pts, origin = origin)
     }
 
     fun playDemo(track: SampleTracks.SampleTrack) = playPoints(DEMO_LABEL) { track.points }
@@ -139,6 +145,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         demoJob?.cancel()
         demoJob = viewModelScope.launch {
             playingLabel = label
+            recordingOrigin = PartOrigin.fromPlayback(label)
             try {
                 val points = try {
                     load()
@@ -152,7 +159,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                 // 速すぎて途中で自動停止したなら、tooFast の購読側（onStoppedForSpeed）が処理する
                 if (!TrackRecorder.isRecording.value) return@launch
                 val pts = TrackRecorder.stop()
-                convert(pts, demoWeather(label))
+                convert(pts, demoWeather(label), PartOrigin.fromPlayback(label))
             } finally {
                 playingLabel = null
             }
@@ -166,8 +173,8 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun demoWeather(label: String?): WalkWeather? = if (label == DEMO_LABEL) settings.demoSky.value.weather else null
 
     /** @param weather 決まっている天気（デモの天気）。null ならあとで本当の天気を聞く */
-    private fun convert(pts: List<TrackPoint>, weather: WalkWeather? = null) {
-        when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT)) {
+    private fun convert(pts: List<TrackPoint>, weather: WalkWeather? = null, origin: PartOrigin? = null) {
+        when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT, id = origin?.newId() ?: java.util.UUID.randomUUID().toString())) {
             is TrackToPart.Result.Success -> {
                 keep(r, weather = weather)
             }
@@ -222,12 +229,13 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun onStoppedForSpeed(stop: TrackRecorder.TooFast) {
         TrackRecorder.consumeTooFast()
         LocationRecordingService.stop(getApplication())
+        val origin = recordingOrigin
         val weather = demoWeather(playingLabel)
         demoJob?.cancel()
         playingLabel = null
         val stopped = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}）"
         val limitNote = "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます"
-        when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
+        when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT, id = origin?.newId() ?: java.util.UUID.randomUUID().toString())) {
             is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました", weather = weather)
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected(

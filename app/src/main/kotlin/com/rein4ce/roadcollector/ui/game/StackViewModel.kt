@@ -12,6 +12,8 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.data.WalkDistance
+import com.rein4ce.roadcollector.data.walkDistance
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
@@ -51,7 +53,7 @@ class StackViewModel(
      * @property fallenCount 落ちたパーツの数（置いたあとに崩れて落ちたものも含む）
      * @property settled     最後のパーツのあと、塔全体が止まったのを確かめられたか
      */
-    data class StackResult(val tower: Tower, val usedCount: Int, val fallenCount: Int, val settled: Boolean) {
+    data class StackResult(val tower: Tower, val usedCount: Int, val fallenCount: Int, val settled: Boolean, val walked: WalkDistance = WalkDistance(0, 0)) {
         /** 台の上に残ったパーツの数 */
         val remainingCount: Int get() = tower.parts.size
 
@@ -231,6 +233,7 @@ class StackViewModel(
                 usedCount = sessionParts.size,
                 fallenCount = fallenCount,
                 settled = settled,
+                walked = walkDistance(sessionParts),
             )
             phase = if (settled) Phase.Finished else Phase.Unresolved
         } else {
