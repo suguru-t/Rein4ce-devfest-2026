@@ -63,7 +63,7 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
-import com.rein4ce.roadcollector.ui.game.StackScreen
+import com.rein4ce.roadcollector.ui.game.StackModes
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
@@ -140,7 +140,7 @@ fun AppNav() {
             ) {
                 composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
                 composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
-                composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
+                composable(Dest.Stack.route) { StackModes(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
                 composable(Dest.Gallery.route) { GalleryScreen() }
             }
         }
