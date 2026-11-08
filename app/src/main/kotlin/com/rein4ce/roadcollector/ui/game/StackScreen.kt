@@ -7,11 +7,13 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,12 +34,15 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -65,10 +70,10 @@ import kotlinx.coroutines.isActive
 import kotlin.math.max
 
 /**
- * D 担当：積み上げゲーム画面。
+ * D 担当：積み上げゲーム画面。上から「情報（高さ・残り・落下）」「キャンバス」「操作（ボタン・完成カード）」の 3 段。
  *
- * ワールド座標（m、y 上向き、台の上面が y=0）をスクリーンに写す：
- *   横 5 m が画面幅になる倍率。台は画面の下から 22% の位置。タワーが高くなるとカメラが上にずれる。
+ * キャンバスでは、ワールド座標（m、y 上向き、台の上面が y=0）をキャンバスに写す：
+ *   横 5 m がキャンバスの幅になる倍率。台はキャンバスの下から 22% の位置。タワーが高くなるとカメラが上にずれる。
  */
 @Composable
 fun StackScreen(
@@ -149,17 +154,33 @@ fun StackScreen(
 
     // 地と字はテーマの色（ダークモードでは、あたたかみのある黒に明るい字）
     val ink = MaterialTheme.colorScheme.onBackground
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        StackCanvas(vm = vm, modifier = Modifier.fillMaxSize())
+    // 操作の段の高さは、1 回のゲームの中では縮めない（狙う → 落下中 → 狙う で段の高さが変わると、
+    // キャンバスの大きさが変わって台と塔がガタつくため）。新しいゲームでは測り直す
+    val density = LocalDensity.current
+    var controlsMinHeight by remember(vm.runId) { mutableStateOf(0.dp) }
+    // 情報の段も同じく、1 回のゲームの中では縮めない（いま置くパーツの大きさの行は狙っている間だけ出るので、
+    // そのままだと置くたびに段の高さが変わり、キャンバスの大きさが変わって台と塔がガタつくため）
+    var infoMinHeight by remember(vm.runId) { mutableStateOf(0.dp) }
 
-        // いま置くパーツのすべりやすさ。雨や雪の日の道は、置くと滑りやすい（摩擦が小さい）。
-        // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
-        val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
-        val grip = Grip.of(sky)
+    // いま置くパーツのすべりやすさ。雨や雪の日の道は、置くと滑りやすい（摩擦が小さい）。
+    // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
+    val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
+    val grip = Grip.of(sky)
 
-        // 上部のスコア。その下に、いま置くパーツの大きさと、すべりやすいならその一言
-        // （下の操作の側に出すと、操作が上に押されて台にかかるため）
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+    // 上から「情報」「キャンバス」「操作」の 3 段に分ける。ボタンや完成カードがキャンバスに重ならないので、
+    // 台と塔の下の方がボタンの裏に隠れない（#42）。キャンバスは残りの高さを全部使う
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 1 段目：情報（高さ・残り・落下）。その下に、いま置くパーツの大きさと、すべりやすいならその一言（置く前に知らせる）
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = infoMinHeight)
+                .onSizeChanged { size ->
+                    val h = with(density) { size.height.toDp() }
+                    if (h > infoMinHeight) infoMinHeight = h
+                }
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -188,10 +209,21 @@ fun StackScreen(
             }
         }
 
-        // 下部の操作
+        // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
+        StackCanvas(vm = vm, modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds())
+
+        // 3 段目：操作（ボタン・完成カード）
         Column(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = controlsMinHeight)
+                .onSizeChanged { size ->
+                    val h = with(density) { size.height.toDp() }
+                    if (h > controlsMinHeight) controlsMinHeight = h
+                }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
             when (vm.phase) {
                 StackViewModel.Phase.Placing -> {
@@ -213,8 +245,8 @@ fun StackScreen(
                     }
                 }
                 StackViewModel.Phase.Settling -> {
+                    // 段の高さは狙っているときのまま（controlsMinHeight）なので、ここでは文字だけ
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
-                    Spacer(Modifier.height(48.dp))
                 }
                 StackViewModel.Phase.Finished, StackViewModel.Phase.Unresolved -> {
                     vm.result?.let { result ->
@@ -304,7 +336,11 @@ private fun ResultCard(
                 Text(it, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 入りきらないボタンは次の行へ回す（文字を大きくしたとき、1 行に並べると「みんな」が画面の外に押し出されていた）
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 PressButton(onClick = onRetry) { Text("もう一度") }
                 if (vm.canUpload) {
                     // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
