@@ -80,7 +80,7 @@ internal fun ColumnScope.HowToContent(firstTime: Boolean = false) {
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Step(Dest.Collect.iconOutline, Dest.Collect.label, "歩いた道が、積み木のパーツになります。「デモ散歩」でも試せます。")
         Step(Dest.Inventory.iconOutline, Dest.Inventory.label, "集めたパーツが並びます。タップで大きく見て、名前を付けられます。")
-        Step(Dest.Stack.iconOutline, Dest.Stack.label, "コレクションで選んだパーツを、動かして回し、「置く」で積みます。")
+        Step(Dest.Stack.iconOutline, Dest.Stack.label, "コレクションで選んだパーツを、動かして回し、「置く」で積みます。長く歩いた道ほど大きく、雨や雪の日の道ほど滑ります。")
         Step(Dest.Gallery.iconOutline, Dest.Gallery.label, "完成したタワーを送ると、みんなの高さの順位表に並びます。")
     }
     Text(

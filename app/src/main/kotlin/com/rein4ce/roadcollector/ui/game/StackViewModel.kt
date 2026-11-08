@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
@@ -192,10 +194,22 @@ class StackViewModel(
         ghostAngleDeg = (ghostAngleDeg + deltaDeg + 360f) % 360f
     }
 
-    fun place() {
+    /**
+     * いまのパーツを置く。大きさは歩いた距離で決まる（[PartSize]。長く歩いた道ほど大きい）。
+     *
+     * @param grip いま置くパーツのすべりやすさ（歩いたときの天気。天気は画面がコレクションから引いて渡す）
+     */
+    fun place(grip: Grip = Grip.NORMAL) {
         val part = current ?: return
         if (phase != Phase.Placing) return
-        world.place(part, ghostX.toDouble(), spawnY().toDouble(), Math.toRadians(ghostAngleDeg.toDouble()))
+        world.place(
+            part,
+            ghostX.toDouble(),
+            spawnY().toDouble(),
+            Math.toRadians(ghostAngleDeg.toDouble()),
+            scale = PartSize.of(part.distanceM),
+            grip = grip,
+        )
         phase = Phase.Settling
         settleTimer = 0.0
     }

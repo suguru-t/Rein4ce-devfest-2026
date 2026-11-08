@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.game
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,20 +31,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import java.util.Locale
 import kotlinx.coroutines.isActive
 import kotlin.math.max
 
@@ -58,6 +70,7 @@ fun StackScreen(
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val inventory by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    val weathers by repository.weather.collectAsStateWithLifecycle()
     val startRequest = GameSession.startRequest
 
     LaunchedEffect(inventory, isLoaded, startRequest) {
@@ -118,16 +131,38 @@ fun StackScreen(
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         StackCanvas(vm = vm, modifier = Modifier.fillMaxSize())
 
-        // 上部のスコア
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
-            Column(horizontalAlignment = Alignment.End) {
-                Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
-                if (vm.fallenCount > 0) {
-                    Text("落下 ${vm.fallenCount} 個", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD64545))
+        // いま置くパーツのすべりやすさ。雨や雪の日の道は、置くと滑りやすい（摩擦が小さい）。
+        // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
+        val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
+        val grip = Grip.of(sky)
+
+        // 上部のスコア。その下に、いま置くパーツの大きさと、すべりやすいならその一言
+        // （下の操作の側に出すと、操作が上に押されて台にかかるため）
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("高さ %.2f m".format(vm.height), style = MaterialTheme.typography.headlineSmall, color = ink)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("残り ${vm.remaining} 個", style = MaterialTheme.typography.bodyMedium, color = ink)
+                    if (vm.fallenCount > 0) {
+                        Text("落下 ${vm.fallenCount} 個", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD64545))
+                    }
+                }
+            }
+            val current = vm.current
+            if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+                // 長く歩いた道ほど大きい（PartSize）。何 m 歩いたから何倍か、を出す
+                Text(
+                    "${current.distanceM} m 歩いた道 ・ 大きさ %.1f 倍".format(Locale.US, PartSize.of(current.distanceM)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ink,
+                )
+                val slippery = grip.label
+                if (sky != null && slippery != null) {
+                    Spacer(Modifier.height(8.dp))
+                    SlipperyNote(sky, slippery)
                 }
             }
         }
@@ -147,7 +182,7 @@ fun StackScreen(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                        Button(onClick = { vm.place() }) { Text("置く") }
+                        Button(onClick = { vm.place(grip) }) { Text("置く") }
                         OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
                     TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
@@ -187,6 +222,31 @@ fun StackScreen(
                 StackViewModel.Phase.Idle -> Unit
             }
         }
+    }
+}
+
+/**
+ * 「雪の日の道 ・ とてもすべりやすい」。頭の丸は、コレクションで道に付く天気の色（雪は水色、雨は青）と同じ。
+ * 字は道の色の縁取りの濃い色で、地の色（ライト・ダーク）の上でも読めるように、うすく色を敷いた札にする
+ */
+@Composable
+private fun SlipperyNote(sky: Sky, label: String) {
+    val (road, casing) = Fieldbook.roadColors(sky)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(road.copy(alpha = 0.22f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(road).border(1.dp, casing, CircleShape))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "${sky.label}の日の道 ・ $label",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -243,10 +303,11 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         // ゴースト（これから置くパーツ）
         val current = vm.current
         if (vm.phase == StackViewModel.Phase.Placing && current != null) {
+            // 置いたときと同じ大きさで見せる（長く歩いた道ほど大きい。PartSize）
             drawPart(
                 part = current,
                 center = Offset(sx(vm.ghostX.toDouble()), sy(vm.spawnY().toDouble())),
-                scalePx = scalePx,
+                scalePx = scalePx * PartSize.of(current.distanceM).toFloat(),
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
                 alpha = 0.45f,
             )
