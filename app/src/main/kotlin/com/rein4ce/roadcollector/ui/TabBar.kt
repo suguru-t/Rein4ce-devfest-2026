@@ -36,10 +36,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -65,7 +63,7 @@ import kotlin.math.min
  * Instagram のタブのように文字なし・アイコンだけで、選択中は「塗り」（選ばれた瞬間にタブごとの動き。ui/TabIcons.kt）、
  * それ以外は「線画」。
  *
- * 選択中の後ろには、iPhone の Liquid Glass のような「ガラスのしずく」を置く：
+ * 選択中の後ろには、iPhone の Liquid Glass のように動く「しずく」を置く（見た目は野帳の紙に合わせて、光沢のないうすい墨色）：
  * - タブを切り替えると、進む側の端が先に、後ろの端が遅れて動くので、しずくが伸びてから縮んで着く（伸びた分だけ少し薄くなる）
  * - 押すと、しずくがふくらんで持ち上がり（影が濃くなる）、指でタブバーをなぞると指に付いてくる。離した所のタブに切り替わる。
  *   しずくの近くのアイコンは、レンズで拡大したように少し大きくなる
@@ -219,9 +217,9 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
 }
 
 /**
- * ガラスのしずく（選択中のタブの後ろ）。[left]・[right] の端の間に描く。
- * 伸びている間は縦に少しつぶれ（水の粒のように体積を保つ）、[lift] で持ち上がる（ふくらんで、影が濃くなる）。
- * ガラスらしさは、上が明るく下が淡い地、白い縁（上は明るく、下は墨色に寄せる）、左上の小さな光で出す
+ * しずく（選択中のタブの後ろ）。[left]・[right] の端の間に描く。
+ * 伸びている間は縦に少しつぶれ（水の粒のように体積を保つ）、[lift] で持ち上がる（ふくらんで、うすい影が出る）。
+ * ガラスのような光沢は、野帳の紙の画面から浮いて見えたので付けない
  */
 @Composable
 private fun GlassLens(
@@ -245,49 +243,20 @@ private fun GlassLens(
                 val width = (r - l) * swell
                 val height = baseHeight * (1f - 0.16f * stretch.coerceAtMost(1f)) * swell
                 val topLeft = Offset(center - width / 2, (size.height - height) / 2)
-                drawGlass(topLeft, Size(width, height), ink, up)
+                drawLens(topLeft, Size(width, height), ink, up)
             },
     )
 }
 
-private fun DrawScope.drawGlass(topLeft: Offset, size: Size, ink: Color, lift: Float) {
+private fun DrawScope.drawLens(topLeft: Offset, size: Size, ink: Color, lift: Float) {
     val radius = CornerRadius(size.height / 2)
-    // 影（持ち上がるほど濃く、少し下へ）
-    val shadowAlpha = 0.07f + 0.08f * lift.coerceIn(0f, 1f)
-    drawRoundRect(ink.copy(alpha = shadowAlpha), topLeft = topLeft + Offset(0f, 1.5.dp.toPx() + 2.dp.toPx() * lift), size = size, cornerRadius = radius)
-    // 地：墨色をうすく敷いてから、上が明るい白のグラデーション
-    drawRoundRect(ink.copy(alpha = 0.06f), topLeft = topLeft, size = size, cornerRadius = radius)
-    drawRoundRect(
-        Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = 0.75f), Color.White.copy(alpha = 0.25f)),
-            startY = topLeft.y,
-            endY = topLeft.y + size.height,
-        ),
-        topLeft = topLeft,
-        size = size,
-        cornerRadius = radius,
-    )
-    // 縁：上は白く光り、下は墨色に寄せる
-    drawRoundRect(
-        Brush.verticalGradient(
-            listOf(Color.White.copy(alpha = 0.95f), ink.copy(alpha = 0.16f)),
-            startY = topLeft.y,
-            endY = topLeft.y + size.height,
-        ),
-        topLeft = topLeft,
-        size = size,
-        cornerRadius = radius,
-        style = Stroke(width = 1.dp.toPx()),
-    )
-    // 左上の小さな光
-    val glintWidth = size.width * 0.34f
-    val glintHeight = size.height * 0.16f
-    drawRoundRect(
-        Color.White.copy(alpha = 0.7f),
-        topLeft = topLeft + Offset(size.height * 0.42f, size.height * 0.14f),
-        size = Size(glintWidth, glintHeight),
-        cornerRadius = CornerRadius(glintHeight / 2),
-    )
+    // 持ち上がっている間だけ、うすい影を少し下に（つや消しのまま、浮いたことが分かるように）
+    val up = lift.coerceIn(0f, 1f)
+    if (up > 0f) {
+        drawRoundRect(ink.copy(alpha = 0.06f * up), topLeft = topLeft + Offset(0f, 2.dp.toPx() * up), size = size, cornerRadius = radius)
+    }
+    // 地：うすい墨色（野帳の紙に合わせて、光沢は付けない）。持ち上がると少しだけ濃く
+    drawRoundRect(ink.copy(alpha = 0.08f + 0.04f * up), topLeft = topLeft, size = size, cornerRadius = radius)
 }
 
 /** 進む側の端のバネ（固い。先に着く）。指でなぞっている間は、さらに固くして指に付いてこさせる */
