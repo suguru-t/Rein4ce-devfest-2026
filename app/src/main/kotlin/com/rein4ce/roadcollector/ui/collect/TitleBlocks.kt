@@ -81,9 +81,11 @@ private class BlockMotion {
  * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。押せる場所はふだんの位置のままなので、
  * 動いている途中に同じ場所を押すと、初めから動き直す。題字は飾りなので、読み上げではボタンにしない。
  * 端末で「動きを減らす」（アニメーションの速度 0）にしていれば、動きは飛ばされてすぐ元の位置に戻る
+ *
+ * @param interactive 押すと動くか。開いたときのタイトル（ui/TitleIntro.kt）では、押すと飛ばすので false
  */
 @Composable
-internal fun TitleBlocks(modifier: Modifier = Modifier) {
+internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = true) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape(7.dp)
     val scope = rememberCoroutineScope()
@@ -114,7 +116,8 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                             lastCenter[1] = p.y + it.size.height / 2f
                         }
                     }
-                    .pointerInput(Unit) {
+                    // 押すと動く（開いたときのタイトルでは押しを受けない）
+                    .then(if (!interactive) Modifier else Modifier.pointerInput(Unit) {
                         detectTapGestures {
                             running[i]?.cancel()
                             running[i] = scope.launch {
@@ -130,7 +133,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                                 }
                             }
                         }
-                    }
+                    })
                     .graphicsLayer {
                         rotationZ = block.tiltDeg + motion.turn.value
                         translationX = motion.dx.value.dp.toPx()

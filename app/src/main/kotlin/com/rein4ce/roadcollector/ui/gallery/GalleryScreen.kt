@@ -1,6 +1,5 @@
 package com.rein4ce.roadcollector.ui.gallery
 
-import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -73,6 +72,7 @@ import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
@@ -244,9 +244,7 @@ private fun GalleryMeter(top: TowerSummary?, total: Int, sort: TowerSort, isLoad
     // 数字はメーターのように 0 から回って上がる（開くたび・並びを変えたとき・取り直して伸びたとき）。
     // アニメーションを切っている人には回さず、すぐ出す
     val context = LocalContext.current
-    val reduceMotion = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reduceMotion = rememberReduceMotion()
     val shown = remember { Animatable(0f) }
     LaunchedEffect(sort, target) {
         if (reduceMotion) {

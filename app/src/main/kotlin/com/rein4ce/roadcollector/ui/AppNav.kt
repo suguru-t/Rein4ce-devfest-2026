@@ -112,7 +112,8 @@ fun AppNav() {
             val settings = RoadCollectorApp.from(context).settings
             val howToSeen by settings.howToSeen.collectAsStateWithLifecycle()
             var howToClosed by rememberSaveable { mutableStateOf(false) }
-            if (!howToSeen && !howToClosed) {
+            // 開いたときのタイトル（TitleIntro）が終わってから出す（タイトルの上に使い方の窓が重ならないように）
+            if (!howToSeen && !howToClosed && TitleIntroState.done) {
                 HowToDialog(onClose = { dontShowAgain ->
                     if (dontShowAgain) settings.setHowToSeen(true)
                     howToClosed = true

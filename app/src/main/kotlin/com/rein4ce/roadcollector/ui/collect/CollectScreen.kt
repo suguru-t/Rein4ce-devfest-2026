@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -89,6 +91,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.TitleIntroState
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
@@ -157,7 +160,16 @@ fun CollectScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
-            TitleBlocks(modifier = Modifier.zIndex(1f).padding(start = 4.dp, end = 12.dp))
+            // 開いたときのタイトル（ui/TitleIntro.kt）が、ここに飛んできて収まる。そのために場所を知らせ、
+            // 収まるまでは隠しておく（飛んでくる題字と、ここの題字が二重に見えないように）
+            TitleBlocks(
+                modifier = Modifier
+                    .zIndex(1f)
+                    .padding(start = 4.dp, end = 12.dp)
+                    // タイトルが終わったら、もう知らせない（余計な更新をしない）
+                    .onGloballyPositioned { if (!TitleIntroState.done) TitleIntroState.anchor = it.boundsInRoot() }
+                    .graphicsLayer { alpha = if (TitleIntroState.done) 1f else 0f },
+            )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
             Row(
