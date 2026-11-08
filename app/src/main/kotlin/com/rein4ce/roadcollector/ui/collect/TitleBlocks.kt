@@ -31,7 +31,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -81,13 +81,15 @@ private class BlockMotion {
  * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。押せる場所はふだんの位置のままなので、
  * 動いている途中に同じ場所を押すと、初めから動き直す。題字は飾りなので、読み上げではボタンにしない。
  * 端末で「動きを減らす」（アニメーションの速度 0）にしていれば、動きは飛ばされてすぐ元の位置に戻る
+ *
+ * @param interactive 押すと動くか。開いたときのタイトル（ui/TitleIntro.kt）では、押すと飛ばすので false
  */
 @Composable
-internal fun TitleBlocks(modifier: Modifier = Modifier) {
+internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = true) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape(7.dp)
     val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     val motions = remember { List(Blocks.size) { BlockMotion() } }
     val running = remember { arrayOfNulls<Job>(Blocks.size) }
     // 最後の「ミ」をカメラの穴のあたりから落とすための、ブロックのまん中（画面の左上から [px]。傾け・持ち上げの前）
@@ -114,7 +116,8 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                             lastCenter[1] = p.y + it.size.height / 2f
                         }
                     }
-                    .pointerInput(Unit) {
+                    // 押すと動く（開いたときのタイトルでは押しを受けない）
+                    .then(if (!interactive) Modifier else Modifier.pointerInput(Unit) {
                         detectTapGestures {
                             running[i]?.cancel()
                             running[i] = scope.launch {
@@ -130,7 +133,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                                 }
                             }
                         }
-                    }
+                    })
                     .graphicsLayer {
                         rotationZ = block.tiltDeg + motion.turn.value
                         translationX = motion.dx.value.dp.toPx()
