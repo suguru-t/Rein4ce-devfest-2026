@@ -76,8 +76,14 @@ internal fun TitleIntro() {
     LaunchedEffect(Unit) {
         // 起動画面が消えるのを待つ（消えた知らせが来なくても、少し待ったら始める）
         withTimeoutOrNull(SPLASH_WAIT_MS) { snapshotFlow { TitleIntroState.splashGone }.first { it } }
-        // 起動画面の題字の位置から、まん中へ大きくなる（起動画面が無ければ、はじめからまん中）
-        if (TitleIntroState.splashTitle != null) grow.animateTo(1f, tween(GROW_MS, easing = FastOutSlowInEasing)) else grow.snapTo(1f)
+        // 起動画面の題字の位置から、まん中へ大きくなる（起動画面が無ければ、はじめからまん中）。
+        // 起動画面の積み木の塔が消えきってから動き出す（消えかけの塔に、大きくなる題字が重ならないように）
+        if (TitleIntroState.splashTitle != null) {
+            delay(SPLASH_FADE_WAIT_MS)
+            grow.animateTo(1f, tween(GROW_MS, easing = FastOutSlowInEasing))
+        } else {
+            grow.snapTo(1f)
+        }
         launch { tagline.animateTo(1f, tween(TAGLINE_MS)) }
         delay(HOLD_MS)
         if (!skipping) fly.animateTo(1f, tween(FLY_MS, easing = FastOutSlowInEasing))
@@ -179,6 +185,9 @@ private val TAGLINE_GAP = 52.dp
 
 /** 起動画面の題字の位置から、まん中へ大きくなる時間 [ms] */
 private const val GROW_MS = 480
+
+/** 起動画面が消えきるまで、題字を動かさずに待つ時間 [ms]（MainActivity の HANDOVER_FADE_MS と同じ） */
+private const val SPLASH_FADE_WAIT_MS = 120L
 
 /** まん中に大きくなってから、タイトルを見せておく時間 [ms]。題字が飛ぶ時間と、押して飛ばすときの時間 */
 private const val HOLD_MS = 900L

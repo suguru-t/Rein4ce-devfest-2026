@@ -199,8 +199,11 @@ class MainActivity : ComponentActivity() {
          */
         const val TITLE_DY_DP = 44.2f
 
-        /** タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms] */
-        const val HANDOVER_FADE_MS = 220L
+        /**
+         * タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms]。
+         * 長いと、大きくなり始めた題字に、消えかけの積み木の塔が重なって見えたので短くした（タイトルはこの間だけ待ってから動き出す）
+         */
+        const val HANDOVER_FADE_MS = 120L
 
         /** このプロセスで、開いたときのタイトルをもう出したか（画面を作り直しても、もう一度は出さない） */
         var introShown = false
