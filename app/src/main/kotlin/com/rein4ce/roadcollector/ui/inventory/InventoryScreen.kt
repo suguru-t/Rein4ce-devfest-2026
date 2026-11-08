@@ -116,7 +116,7 @@ import sh.calvin.reorderable.rememberReorderableLazyGridState
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
  *
  * - 普段：カードをタップすると大きく見られて、そこから名前を付けられる（RenameDialog.kt）
- * - 選択中（右上の「選択」か、下の「積むパーツを選ぶ」で入る）：カードの左上に丸が出て、タップか丸で選ぶ（最大 5 本）。
+ * - 選択中（右上の「選択」か、下の「積むパーツを選ぶ」で入る）：図の右下に丸が出て、タップか丸で選ぶ（最大 5 本）。
  *   丸には積む順の数字が入る。下の「選んだ n 本で積む」で積む画面へ。「キャンセル」か戻るで、選択を消して普段に戻る
  * - 並べ替え中（普段の状態で長押し）：カードが小さく揺れ、長押しのまま動かすと並べ替え、左上の「×」で削除（確認あり）。
  *   タップしても何も起きない。「完了」か戻るで普段に戻る
@@ -653,11 +653,11 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
 /**
  * パーツ 1 本のカード。方眼の上に置いた白い紙片に、図と注記を載せる（選んだときは青い破線の枠）。
  * - タップ（[onClick]）：普段は大きく見る、選択中は選ぶ／外す
- * - 選択中は左上に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
+ * - 選択中は図の右下に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
  * @param order 選んだ順（＝積む順）。選んでいなければ null
  * @param canSelect 選べるか（5 本選んだあとの、まだ選んでいないカードは false）
  * @param editing 並べ替え中なら、揺らして左上に「×」を出す
- * @param selecting 選択中なら、左上に選ぶ丸を出し、選んだカードを青い破線で囲む
+ * @param selecting 選択中なら、図の右下に選ぶ丸を出し、選んだカードを青い破線で囲む
  */
 @Composable
 private fun PartCard(
@@ -748,12 +748,14 @@ private fun PartCard(
                 sky = sky,
             )
             if (selecting && !editing) {
+                // 図の右下に置く（iPhone の写真アプリの選択と同じ位置）。左上は天気のアイコンがあるので、重ねない
                 SelectMark(
                     order = order,
                     enabled = canSelect,
                     name = part.displayName,
                     onToggle = onToggleSelect,
-                    modifier = Modifier.align(Alignment.TopStart),
+                    // 右下の見当の角（「┘」の線）にかからないよう、少し内側に寄せる
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-6).dp, y = (-6).dp),
                 )
             }
             if (editing && !isDragging) {
@@ -851,7 +853,7 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
 }
 
 /**
- * カードの左上の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
  * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
