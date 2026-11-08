@@ -168,10 +168,16 @@ class PartRepository(
      * 採集したパーツを足す。並び順は手持ち画面が [order] と採集日時から決める（InventoryOrder.kt）ので、保存の順番には意味を持たせない。
      * パーツを先に足してから場所を足す（[load] は、場所を残すかを手持ちにあるかで決めるため、この順番に頼っている）。
      * @param place 歩いた場所（TrackToPart の結果）。parts.json とは別のファイルに保存する
+     * @param weather 決まっている天気（デモ散歩で、設定の「デモの天気」を選んでいるとき）。場所より先に入れるので、
+     *   WeatherService は本当の天気を聞きに行かない（場所はあって天気が無いパーツだけを聞くため）。ふつうは null（あとで聞く）
      */
-    fun add(part: Part, place: PartPlace) {
+    fun add(part: Part, place: PartPlace, weather: WalkWeather? = null) {
         _parts.update { it + part }
         persist()
+        if (weather != null) {
+            _weather.update { it + (part.id to weather) }
+            persistWeather()
+        }
         _places.update { it + (part.id to place) }
         persistPlaces()
     }
@@ -221,6 +227,20 @@ class PartRepository(
         val have = _parts.value.mapTo(HashSet()) { it.id }
         _order.value = ids.filter { it in have }.distinct()
         persistOrder()
+    }
+
+    /**
+     * 見本を全部外す（設定の「見本のパーツ」をオフにしたとき）。採集したパーツには触らない。
+     * 見本の場所と天気は保存していない（SampleParts から引く）ので、外すのはパーツと並び順だけ
+     */
+    fun removeSamples() {
+        val ids = SampleParts.all.mapTo(HashSet()) { it.id }
+        _parts.update { list -> list.filterNot { it.id in ids } }
+        persist()
+        if (_order.value.any { it in ids }) {
+            _order.update { order -> order.filterNot { it in ids } }
+            persistOrder()
+        }
     }
 
     /** 削除したサンプルだけを足し戻す。採集したパーツには触らない */

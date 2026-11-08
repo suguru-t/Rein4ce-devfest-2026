@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.ui.game
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.GameSession
 import kotlinx.coroutines.CompletableDeferred
@@ -370,6 +371,27 @@ class StackViewModelTest {
             runCurrent()
             assertEquals(2, calls)
             assertTrue(vm.uploaded)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `a longer walk is placed bigger and the size is sent with the tower`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            for (distance in listOf(120, 1500)) {
+                var sent: Tower? = null
+                val vm = StackViewModel {
+                    sent = it
+                    TowerCreated("ok", "https://example.test/ok")
+                }
+                vm.updateInventory(listOf(a.copy(distanceM = distance)), true, null)
+                finish(vm) // 寝かせて置く（台から落ちないように。finish の中で 90° 回す）
+                vm.upload()
+                runCurrent()
+                assertEquals(PartSize.of(distance).toFloat(), sent!!.placements.single().scale, 1e-6f)
+            }
         } finally {
             Dispatchers.resetMain()
         }
