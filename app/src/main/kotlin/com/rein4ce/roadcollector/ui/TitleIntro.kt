@@ -185,7 +185,7 @@ private const val GROW_MS = 480
 
 
 /** まん中に大きくなってから、タイトルを見せておく時間 [ms]。題字が飛ぶ時間と、押して飛ばすときの時間 */
-private const val HOLD_MS = 900L
+private const val HOLD_MS = 1500L
 private const val FLY_MS = 520
 private const val SKIP_MS = 260
 private const val TAGLINE_MS = 360
