@@ -178,7 +178,8 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 /**
  * パーツを野帳の図として描く：四隅の見当、北、縁取りの道、縮尺。
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
- * @param sky 歩いたときの空のようす。道の色が変わる（[Fieldbook.roadColors]）。分からなければ null（いつもの色）
+ * @param sky 歩いたときの空のようす。道の色が変わり（[Fieldbook.roadColors]）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
+ *   分からなければ null（いつもの色で、アイコンなし）
  */
 @Composable
 fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
@@ -218,6 +219,9 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
         drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = northSize))
+
+        // 歩いたときの天気のアイコン。右上の北と対になるよう、左上の見当の内側に（道のあとに描いて、道に隠れないように）
+        if (sky != null) drawWeatherIcon(sky, center = Offset(ox + 20f * u, oy + 20f * u), size = 18f * u)
 
         // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値
         val len = normalizedLength(part)

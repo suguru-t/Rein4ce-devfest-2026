@@ -15,6 +15,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -41,7 +42,9 @@ object ApiClient {
 
     suspend fun ping(): String = client.get("$baseUrl/").body()
 
-    suspend fun listTowers(): List<TowerSummary> = client.get("$baseUrl/towers").body()
+    /** 一覧。持ち主の印をヘッダで送ると、自分が送ったタワーに mine が付いて返る（サーバの OWNER_HEADER と同じ名前） */
+    suspend fun listTowers(): List<TowerSummary> =
+        client.get("$baseUrl/towers") { ownerId()?.let { header(OWNER_HEADER, it) } }.body()
 
     /**
      * タワー 1 基の中身（パーツと置き方）。
@@ -57,12 +60,24 @@ object ApiClient {
      */
     var authorName: () -> String? = { null }
 
-    /** タワーを送る。作者名がまだ入っていなければ、設定のニックネームを入れて送る */
+    /**
+     * この端末の持ち主の印（data/OwnerId。端末の id を塩を付けてハッシュしたもの）。送るタワーに入れ、一覧を取るときにヘッダで送る。
+     * アプリの起動時に RoadCollectorApp がつなぐ。null なら送らない（サーバは印なしとして扱う）
+     */
+    var ownerId: () -> String? = { null }
+
+    /**
+     * 送信できたタワーの id を受け取る係（自分のタワーの印。data/MyTowers）。
+     * アプリの起動時に RoadCollectorApp がつなぐ
+     */
+    var onPosted: (TowerCreated) -> Unit = {}
+
+    /** タワーを送る。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる */
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
-            setBody(withAuthor(tower, authorName()))
-        }.body()
+            setBody(withOwner(withAuthor(tower, authorName()), ownerId()))
+        }.body<TowerCreated>().also(onPosted)
 
     /**
      * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。
@@ -90,3 +105,10 @@ internal fun namingRequest(part: Part): Part = part.copy(name = null)
 /** 送るタワーに作者名を入れる。もう入っていればそのまま。[author] が空なら入れない（名無し） */
 internal fun withAuthor(tower: Tower, author: String?): Tower =
     if (!tower.author.isNullOrBlank() || author.isNullOrBlank()) tower else tower.copy(author = author)
+
+/** 送るタワーに持ち主の印を入れる。[owner] が無ければ入れない（サーバは印なしとして保存する） */
+internal fun withOwner(tower: Tower, owner: String?): Tower =
+    if (owner.isNullOrBlank()) tower else tower.copy(ownerId = owner)
+
+/** 一覧を取るときに持ち主の印を送るヘッダ（サーバの TowerValidation.kt の OWNER_HEADER と同じ） */
+internal const val OWNER_HEADER = "X-Owner-Id"

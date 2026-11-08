@@ -2,13 +2,13 @@ package com.rein4ce.roadcollector.ui.inventory
 
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -104,7 +104,6 @@ import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
-import androidx.compose.animation.core.animateFloatAsState
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
@@ -186,7 +185,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：歩いた距離の合計をメーターのように大きく出す（増えたり減ったりすると、数字が回って新しい値まで動く）。
+        // 見出し：歩いた距離の合計をメーターのように大きく出す（開くたびに 0 から上がり、増えたり減ったりすると、数字が回って新しい値まで動く）。
         // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
         Row(verticalAlignment = Alignment.Top) {
             CollectionMeter(
@@ -405,8 +404,9 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 
 /**
  * コレクション画面の見出し。小さな「コレクション」の下に、歩いた距離の合計（見本は含めない）を大きく出す。
- * 合計が変わると、メーターのように数字が回って新しい値まで動く（アニメーションを切っている人には動かさない）。
- * 読み込み中は parts が空なので、数字は出さない。
+ * 画面を開くたびに、メーターのように 0 から数字が回って合計まで上がる（「みんな」の見出しと同じ）。
+ * 開いている間に合計が変わったら（記録した・消した）、今の値から新しい値まで動く。アニメーションを切っている人には動かさない。
+ * 読み込み中は parts が空なので、数字は出さない（読み終わってから 0 から上がる）。
  */
 @Composable
 private fun CollectionMeter(
@@ -418,12 +418,17 @@ private fun CollectionMeter(
     reduceMotion: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // メーターの値。合計が変わったら、数字が回って新しい値まで動く
-    val shownM by animateFloatAsState(
-        targetValue = totalM.toFloat(),
-        animationSpec = if (reduceMotion) snap() else tween(durationMillis = 1_100, easing = FastOutSlowInEasing),
-        label = "meter",
-    )
+    // メーターの値。画面に出るたびに 0 から始まり（覚えておかない）、読み終わったら合計まで回って上がる
+    val meter = remember { Animatable(0f) }
+    LaunchedEffect(isLoaded, totalM) {
+        if (!isLoaded) return@LaunchedEffect
+        if (reduceMotion) {
+            meter.snapTo(totalM.toFloat())
+        } else {
+            meter.animateTo(totalM.toFloat(), tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
+        }
+    }
+    val shownM = meter.value
     Column(
         modifier = modifier
             .fillMaxWidth()

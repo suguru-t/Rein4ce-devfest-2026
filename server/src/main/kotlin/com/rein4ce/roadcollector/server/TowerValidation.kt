@@ -20,6 +20,12 @@ const val MAX_AUTHOR_LENGTH = 20
 /** パーツの名前の上限（文字）。アプリは 10 文字までだが、余裕を見る */
 const val MAX_PART_NAME_LENGTH = 30
 
+/** 持ち主の印の形：SHA-256 の 16 進（64 桁、小文字）。アプリの OwnerId が作る形。GET /towers の X-Owner-Id も同じ */
+val OWNER_ID_PATTERN = Regex("^[0-9a-f]{64}$")
+
+/** 一覧を取るときに持ち主の印を送るヘッダ */
+const val OWNER_HEADER = "X-Owner-Id"
+
 /** 座標・高さ・太さの上限。台の幅は 1.4 m、5 本積んでも数 m。これを超える値は壊れたデータ */
 const val MAX_COORDINATE = 100f
 
@@ -51,6 +57,8 @@ internal fun Tower.validationError(): String? {
     if (!inRange(height) || height < 0f) return "height out of range"
     val a = author
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
+    val o = ownerId
+    if (o != null && !OWNER_ID_PATTERN.matches(o)) return "ownerId must be 64 hex chars"
     return null
 }
 
