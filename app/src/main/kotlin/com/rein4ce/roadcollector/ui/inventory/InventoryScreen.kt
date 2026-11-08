@@ -122,12 +122,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     val repository = RoadCollectorApp.from(context).partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    val savedOrder by repository.order.collectAsStateWithLifecycle()
     // 歩いた場所（拡大表示の背景の地図に使う）。見本の場所は SampleParts から
     val places by repository.places.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     // 並びは InventoryOrder.kt のルール。保存の順番には頼らない
-    val shown = remember(parts, savedOrder) { inventoryOrder(parts, savedOrder) }
+    val shown = rememberArrangedParts(repository)
     // 画面に出している並び。ドラッグ中はこれだけを動かし、指を離したときに保存する
     var arranged by remember { mutableStateOf(shown) }
     // ドラッグしているパーツの id と、ドラッグを始めたときの位置
@@ -305,7 +304,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                                 if (now != dragStartIndex) repository.setOrder(arranged.map { it.id })
                                 // ドラッグ中は上の LaunchedEffect(shown) が並びを書き換えないので、その間にコレクションが
                                 // 変わっていても（デモ散歩がちょうど終わった等）画面に出ない。離したときに最新の内容で並べ直す
-                                arranged = inventoryOrder(repository.parts.value, repository.order.value)
+                                arranged = repository.arrangedNow()
                             },
                         ),
                         // ドラッグできない読み上げ（TalkBack）の人のための操作
@@ -798,7 +797,7 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
 @Composable
-private fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val selected = order != null
     Box(
         contentAlignment = Alignment.Center,

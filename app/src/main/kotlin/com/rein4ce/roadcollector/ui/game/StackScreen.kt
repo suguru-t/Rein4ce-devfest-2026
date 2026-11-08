@@ -28,6 +28,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,8 +53,10 @@ import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.partSizeText
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import java.util.Locale
+import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
+import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import kotlinx.coroutines.isActive
 import kotlin.math.max
 
@@ -70,12 +75,19 @@ fun StackScreen(
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val inventory by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
+    // 並び順も見ておき、変わったら開始の判断をし直す（「先頭の 5 本」はコレクションの並びで決めるため。#74 の A のレビュー）
+    val order by repository.order.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
     val startRequest = GameSession.startRequest
+    // 選ばずに始めたときの「先頭の 5 本」は、コレクションに見えている並び（並べ替えた順・新しく歩いた順）の上から 5 本
+    // （保存の順だと、コレクションや「パーツを選ぶ」の窓の上のほうに無いパーツで始まっていた）。並びの求め方はコレクションと同じ（arrangedNow）
 
-    LaunchedEffect(inventory, isLoaded, startRequest) {
+    // 「パーツを選ぶ」の窓を開いているか。選んで始めると、コレクションから選んだときと同じ開始要求が出て、上の LaunchedEffect が始める
+    var picking by remember { mutableStateOf(false) }
+
+    LaunchedEffect(inventory, order, isLoaded, startRequest) {
         // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
-        vm.updateInventory(repository.parts.value, repository.isLoaded.value, startRequest)
+        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest)
     }
 
     // ゲームループ
@@ -155,7 +167,7 @@ fun StackScreen(
             if (vm.phase == StackViewModel.Phase.Placing && current != null) {
                 // 長く歩いた道ほど大きい（PartSize）。何 m 歩いたから何倍か、を出す
                 Text(
-                    "${current.distanceM} m 歩いた道 ・ 大きさ %.1f 倍".format(Locale.US, PartSize.of(current.distanceM)),
+                    "${current.distanceM} m 歩いた道 ・ 大きさ ${partSizeText(current.distanceM)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = ink,
                 )
@@ -185,7 +197,11 @@ fun StackScreen(
                         Button(onClick = { vm.place(grip) }) { Text("置く") }
                         OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
-                    TextButton(onClick = { vm.restart(repository.parts.value) }) { Text("やり直す") }
+                    // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
+                        TextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
+                    }
                 }
                 StackViewModel.Phase.Settling -> {
                     Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
@@ -201,7 +217,7 @@ fun StackScreen(
                             )
                             Spacer(Modifier.height(12.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { vm.restart(repository.parts.value) }) { Text("もう一度") }
+                                Button(onClick = { vm.restart(repository.arrangedNow()) }) { Text("もう一度") }
                                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                                 OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                                     when {
@@ -212,6 +228,7 @@ fun StackScreen(
                                 }
                                 TextButton(onClick = onGoGallery) { Text("みんな") }
                             }
+                            TextButton(onClick = { picking = true }) { Text("パーツを選び直す") }
                             vm.uploadMessage?.let {
                                 Spacer(Modifier.height(8.dp))
                                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -222,6 +239,17 @@ fun StackScreen(
                 StackViewModel.Phase.Idle -> Unit
             }
         }
+    }
+
+    if (picking) {
+        PartPickerSheet(
+            initial = vm.sessionParts.map { it.id },
+            onDismiss = { picking = false },
+            onStart = { ids ->
+                GameSession.requestStart(ids)
+                picking = false
+            },
+        )
     }
 }
 
