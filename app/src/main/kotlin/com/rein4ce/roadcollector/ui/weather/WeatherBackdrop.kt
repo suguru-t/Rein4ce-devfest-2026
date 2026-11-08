@@ -5,7 +5,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.provider.Settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import androidx.compose.ui.graphics.Path
 import kotlin.math.abs
@@ -78,9 +78,7 @@ fun WeatherBackdrop(
 ) {
     val sky = weather?.sky ?: return
     val context = LocalContext.current
-    val reduceMotion = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-    }
+    val reduceMotion = rememberReduceMotion()
     val animate = !reduceMotion && !still
     // 月の形は日によって変わるだけなので、時刻は日の単位で見る（毎回作り直さない）
     val moonPhase = remember(moonTimeMs / DAY_MS) { Moon.phase(moonTimeMs) }

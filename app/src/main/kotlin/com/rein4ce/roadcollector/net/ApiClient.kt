@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.net
 import android.util.Log
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.core.model.AppJson
+import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartNameResponse
 import com.rein4ce.roadcollector.core.model.Tower
@@ -92,6 +93,23 @@ object ApiClient {
         throw e // 画面を閉じて取りやめたときは、失敗として扱わない
     } catch (e: Exception) {
         Log.w("ApiClient", "naming failed", e)
+        null
+    }
+
+    /**
+     * ニックネームを AI（サーバの Gemini）に考えてもらう（POST /nickname）。
+     * 手がかりは、パーツの名前・本数・合計距離だけ（[NicknameHints]。場所は送らない）。
+     * 考えられなかった（サーバが 503 を返した）・通信できなかったときは null。そのときは入力欄をそのままにする
+     */
+    suspend fun suggestNickname(hints: NicknameHints): String? = try {
+        client.post("$baseUrl/nickname") {
+            contentType(ContentType.Application.Json)
+            setBody(hints)
+        }.body<PartNameResponse>().name
+    } catch (e: CancellationException) {
+        throw e // 窓を閉じて取りやめたときは、失敗として扱わない
+    } catch (e: Exception) {
+        Log.w("ApiClient", "nickname failed", e)
         null
     }
 }
