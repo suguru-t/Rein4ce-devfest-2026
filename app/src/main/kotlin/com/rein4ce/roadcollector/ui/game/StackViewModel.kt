@@ -9,12 +9,15 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.math.hypot
+import kotlin.math.max
 
 /**
  * D 担当：積み上げゲームの進行。物理は :core の StackWorld、ここは「ターン」の管理。
@@ -118,6 +121,16 @@ class StackViewModel(
     private var settleTimer = 0.0
 
     val platformWidth: Double get() = world.platformWidth
+
+    /** ゴーストを左右に動かせる範囲 [m]（台の端から [DRAG_MARGIN_M] 外まで） */
+    val dragLimit: Float get() = (platformWidth / 2 + DRAG_MARGIN_M).toFloat()
+
+    /**
+     * カメラの狙い（[CameraTarget]）。パーツが止まったときと始めたときだけ変わる（[nextPart]）。
+     * 狙っている間（ドラッグ・回転）と落下中は変えないので、指で動かしている最中にカメラが動かない
+     */
+    var camera: CameraTarget by mutableStateOf(CameraTarget.Follow(0f))
+        private set
 
     /** ゴーストを出す高さ [m]（タワーの上 1.5 m） */
     fun spawnY(): Float = height + 1.5f
@@ -223,12 +236,45 @@ class StackViewModel(
         } else {
             phase = Phase.Placing
         }
+        camera = computeCamera()
+    }
+
+    /**
+     * カメラの狙いを決める。パーツが止まったとき（と始めたとき）だけ計算し直す（[nextPart] から呼ぶ）。
+     *
+     * - 次のパーツを狙うとき：大きさは変えず、出てくる範囲のいちばん上（出てくる高さ＋どう回しても入る半径）が入るところまで
+     *   カメラを上げる。縮めると、同じ指の動きでパーツが大きく動き、細かく狙いたい高い塔ほど狙いにくくなるため（#70 のレビュー）
+     * - 置き切ったとき：台と、台の上に残っているパーツが全部入るように引く。全体が台の下面より下にあるパーツ
+     *   （落ちている途中のもの）は入れない（落ちていくパーツを入れようとして小さくなりすぎないように）
+     */
+    private fun computeCamera(): CameraTarget {
+        val part = current
+        if (phase == Phase.Placing && part != null) return CameraTarget.Follow(top = spawnY() + reachOf(part))
+        val halfWidth = (world.platformWidth / 2).toFloat()
+        val bottom = -world.platformThickness.toFloat()
+        var focus = WorldRect(-halfWidth, halfWidth, bottom, 0f)
+        world.renderShapes().filter { it.part != null }.groupBy { it.part }.values.forEach { shapesOfPart ->
+            val bounds = shapesOfPart.map { it.bounds() }.reduce(WorldRect::union)
+            if (bounds.maxY >= bottom) focus = focus.union(bounds)
+        }
+        return CameraTarget.Overview(focus)
+    }
+
+    /**
+     * パーツの原点から、形のいちばん遠い点までの距離 [m]。どう回しても、この半径の円の中に収まる。
+     * 置くときと同じ大きさ（[PartSize]。長く歩いた道ほど大きい：#71）で測る
+     */
+    private fun reachOf(part: Part): Float {
+        var reach = 0.0
+        for (poly in PartGeometry.shapes(part, PartSize.of(part.distanceM))) {
+            for (v in poly.points) reach = max(reach, hypot(v.x, v.y))
+        }
+        return reach.toFloat()
     }
 
     fun dragBy(dxMeters: Float) {
         if (phase != Phase.Placing) return
-        val limit = (platformWidth / 2 + 0.8).toFloat()
-        ghostX = (ghostX + dxMeters).coerceIn(-limit, limit)
+        ghostX = (ghostX + dxMeters).coerceIn(-dragLimit, dragLimit)
     }
 
     fun rotate(deltaDeg: Float) {
@@ -313,8 +359,17 @@ class StackViewModel(
          */
         const val MAX_FRAME_SECONDS = 0.05
 
+        /** ゴーストを台の端からどこまで外へ動かせるか [m] */
+        const val DRAG_MARGIN_M = 0.8
+
         const val MESSAGE_SELECTION_MISSING = "選んだパーツはコレクションにありません。パーツを選び直してください。"
         const val MESSAGE_RETRY_MISSING = "このゲームのパーツは、すべてコレクションから削除されています。パーツを選び直してください。"
         const val MESSAGE_COLLECTION_EMPTY = "コレクションにパーツがありません。"
     }
+}
+
+/** 描く図形 1 つを囲む長方形 [m]（ワールド座標） */
+private fun StackWorld.RenderShape.bounds(): WorldRect = when (this) {
+    is StackWorld.RenderShape.Poly -> WorldRect(xs.min().toFloat(), xs.max().toFloat(), ys.min().toFloat(), ys.max().toFloat())
+    is StackWorld.RenderShape.Disc -> WorldRect((cx - r).toFloat(), (cx + r).toFloat(), (cy - r).toFloat(), (cy + r).toFloat())
 }
