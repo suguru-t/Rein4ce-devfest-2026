@@ -10,7 +10,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +25,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.data.AppSettings
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -96,12 +96,12 @@ internal fun NicknameDialog(current: String, onSave: (String) -> Unit, onDismiss
             )
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
+            PressTextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
                 Text("保存", color = if (tooLong) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
+            PressTextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
         },
     )
 }

@@ -18,13 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +52,9 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.partSizeText
@@ -125,7 +125,7 @@ fun StackScreen(
             } else {
                 Text(vm.startMessage ?: "コレクションにパーツがありません")
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onGoInventory) { Text("コレクションへ") }
+                PressButton(onClick = onGoInventory) { Text("コレクションへ") }
             }
         }
         return
@@ -136,13 +136,13 @@ fun StackScreen(
             onDismissRequest = vm::dismissStartMessage,
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = {
+                PressTextButton(onClick = {
                     vm.dismissStartMessage()
                     onGoInventory()
                 }) { Text("コレクションへ") }
             },
             dismissButton = {
-                TextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
+                PressTextButton(onClick = vm::dismissStartMessage) { Text("ゲームに戻る") }
             },
         )
     }
@@ -202,14 +202,14 @@ fun StackScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                        Button(onClick = { vm.place(grip) }) { Text("置く") }
-                        OutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
+                        PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
+                        PressButton(onClick = { vm.place(grip) }) { Text("置く") }
+                        PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
                     }
                     // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
-                        TextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
+                        PressTextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
+                        PressTextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
                     }
                 }
                 StackViewModel.Phase.Settling -> {
@@ -305,10 +305,10 @@ private fun ResultCard(
             }
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRetry) { Text("もう一度") }
+                PressButton(onClick = onRetry) { Text("もう一度") }
                 if (vm.canUpload) {
                     // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
-                    OutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
+                    PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
                         when {
                             vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
                             vm.uploaded -> Text("送信済み")
@@ -316,10 +316,10 @@ private fun ResultCard(
                         }
                     }
                 }
-                TextButton(onClick = onGoGallery) { Text("みんな") }
+                PressTextButton(onClick = onGoGallery) { Text("みんな") }
             }
             // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
-            TextButton(onClick = onPick) { Text("パーツを選び直す") }
+            PressTextButton(onClick = onPick) { Text("パーツを選び直す") }
             vm.uploadMessage?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall)
