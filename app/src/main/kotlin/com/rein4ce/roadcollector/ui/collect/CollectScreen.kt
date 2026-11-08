@@ -2,16 +2,22 @@ package com.rein4ce.roadcollector.ui.collect
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,22 +31,19 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +55,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -83,11 +90,14 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.common.PressButton
+import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
-import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -95,6 +105,8 @@ import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlin.math.max
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * A 担当：GPS 採集画面。見た目は手持ち画面と同じ「測量野帳」（Fieldbook.kt）。
@@ -155,19 +167,58 @@ fun CollectScreen(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(AppIcons.Footprints, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                BasicText(
-                    "$walkedM m",
-                    style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
-                    maxLines = 1,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
-                )
+                // 足跡（と長さ）を押すと、足跡が 1 歩ずつ上へ歩く（遊びの仕掛け。読み上げには出さない）。
+                // 押したら題字と同じ軽い振動を返す。歩いている途中に押しても、始めからやり直さない
+                // （歩き始めるまでのわずかな間も「歩いている」と見るため、動きの isRunning ではなく Job で見る）
+                val footSteps = remember { Animatable(0f) }
+                val footScope = rememberCoroutineScope()
+                val footJob = remember { mutableStateOf<Job?>(null) }
+                val haptics = LocalHapticFeedback.current
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures {
+                            if (footJob.value?.isActive != true) {
+                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                footJob.value = footScope.launch { footSteps.walkFootprints() }
+                            }
+                        }
+                    },
+                ) {
+                    WalkingFootprints(steps = { footSteps.value }, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(4.dp))
+                    BasicText(
+                        "$walkedM m",
+                        style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
+                    )
+                }
             }
             // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
             Spacer(Modifier.width(10.dp))
-            IconButton(onClick = { showSettings = true }) {
-                Icon(Icons.Filled.Settings, contentDescription = "設定", tint = Fieldbook.Ink)
+            // 押すと歯車がくるっと半回転して止まってから、設定の窓が開く（窓が歯車の半分にかかるので、先に回して見せる）。
+            // 回っている間に押しても回り足さない（続けて押しても、1 回目の 0.4 秒後に開く。#77 のレビュー）。
+            // 次に押したときは同じ向きへ回り足す（歯車の歯は 8 つなので、半回転で止まっても形は同じ）。
+            // 端末の設定でアニメーションを切っている人には回さず、すぐ開く（Compose が設定に従う）
+            val gearTurn = remember { Animatable(0f) }
+            val gearScope = rememberCoroutineScope()
+            val gearJob = remember { mutableStateOf<Job?>(null) }
+            // 押したときの縮みと振動（#76 の押し心地）に、回転を重ねる
+            PressIconButton(onClick = {
+                if (gearJob.value?.isActive != true) {
+                    gearJob.value = gearScope.launch {
+                        gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
+                        showSettings = true
+                    }
+                }
+            }) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "設定",
+                    tint = Fieldbook.Ink,
+                    modifier = Modifier.graphicsLayer { rotationZ = gearTurn.value },
+                )
             }
         }
         if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
@@ -218,30 +269,29 @@ fun CollectScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // 操作：手持ちの「積む」ボタンと同じ青・角・高さ
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isRecording) {
-                SurveyButton(
-                    text = "停止してパーツ化",
-                    onClick = { vm.stopAndConvert() },
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                SurveyButton(
-                    text = "記録開始",
-                    onClick = {
-                        if (LocationRecordingService.hasLocationPermission(context)) {
-                            vm.startRecording()
-                        } else {
-                            permissionLauncher.launch(LocationRecordingService.requiredPermissions())
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                )
+        // 操作：コレクションの「積むパーツを選ぶ」と同じ青・形（両端が丸い）・高さ（48dp）。
+        // 文字を大きくして片方だけ 2 行になっても、並んだ 2 つの高さをそろえる（高い方に合わせる）
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 「記録開始」と「停止してパーツ化」は 1 つのボタンで、文字と押したときの動作だけを切り替える。
+            // 別々のボタンにすると、押した瞬間に記録が始まって（止まって）ボタンが入れ替わり、
+            // 離したあとの押し心地（バネで戻る動き。ui/common/PressFeel）が途中で消えてしまう
+            SurveyButton(
+                text = if (isRecording) "停止してパーツ化" else "記録開始",
+                onClick = {
+                    when {
+                        isRecording -> vm.stopAndConvert()
+                        LocationRecordingService.hasLocationPermission(context) -> vm.startRecording()
+                        else -> permissionLauncher.launch(LocationRecordingService.requiredPermissions())
+                    }
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            if (!isRecording) {
                 DemoMenuButton(
                     enabled = !vm.isDemoPlaying,
                     onPick = { vm.playDemo(it) },
                     onPickFile = { fileLauncher.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxHeight(),
                 )
             }
         }
@@ -270,7 +320,7 @@ fun CollectScreen(
                     date = walkDate(o.part.walkedAt),
                     weather = sky?.label,
                 )
-                TextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
+                PressTextButton(onClick = { vm.dismissOutcome(); onGoInventory() }, modifier = Modifier.padding(top = 8.dp)) {
                     Text("コレクションを見る", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                 }
             }
@@ -343,20 +393,21 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
     }
 }
 
-/** 手持ちの「積む」ボタンと同じ見た目のボタン */
+/** コレクションの「積む」ボタンと同じ見た目のボタン（両端が丸い Material の標準の形。「パーツを選ぶ」の窓のボタンとも同じ） */
 @Composable
 private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Button(
+    PressButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(6.dp),
+        shape = ButtonDefaults.shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Fieldbook.Survey,
             contentColor = Color.White,
             disabledContainerColor = Fieldbook.GridMajor,
             disabledContentColor = Fieldbook.Muted,
         ),
-        modifier = modifier.height(52.dp),
+        // 高さは「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
+        modifier = modifier.heightIn(min = 48.dp),
     ) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
@@ -367,16 +418,18 @@ private fun DemoMenuButton(
     enabled: Boolean,
     onPick: (SampleTracks.SampleTrack) -> Unit,
     onPickFile: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(
+    Box(modifier = modifier) {
+        PressOutlinedButton(
             onClick = { open = true },
             enabled = enabled,
-            shape = RoundedCornerShape(6.dp),
+            // 隣の「記録開始」と同じ、両端が丸い形
+            shape = ButtonDefaults.outlinedShape,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Fieldbook.Survey, disabledContentColor = Fieldbook.Muted),
             border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
-            modifier = Modifier.height(52.dp),
+            modifier = Modifier.fillMaxHeight().heightIn(min = 48.dp),
         ) {
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }

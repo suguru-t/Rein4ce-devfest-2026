@@ -30,7 +30,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import com.rein4ce.roadcollector.ui.common.PressButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -170,7 +170,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Button(
+            PressButton(
                 // 窓を閉じる動きが終わってから始める（Material3 の下から出る窓の作法。すぐ消すと、閉じる動き無しに消える）
                 onClick = {
                     val picked = valid

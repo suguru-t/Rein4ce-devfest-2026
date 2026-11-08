@@ -2,7 +2,9 @@ package com.rein4ce.roadcollector.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -99,13 +101,21 @@ fun FramedDialog(
 /** 枠の下に出す、丸いボタン（「×」か「＜」。押せる大きさは 48dp）。暗い幕の上でも見えるよう、紙の色の丸に縁を付ける */
 @Composable
 private fun RoundButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(48.dp)
+            .pressFeel(source)
             .clip(CircleShape)
             .background(Fieldbook.Paper)
             .border(1.dp, Fieldbook.CardEdge, CircleShape)
-            .clickable(onClick = onClick, role = Role.Button, onClickLabel = label),
+            .clickable(
+                interactionSource = source,
+                indication = LocalIndication.current,
+                onClick = onClick,
+                role = Role.Button,
+                onClickLabel = label,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = label, tint = Fieldbook.Ink, modifier = Modifier.size(24.dp))
