@@ -32,9 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,12 +71,17 @@ import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.paperBand
+import com.rein4ce.roadcollector.ui.common.PressIconButton
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.rein4ce.roadcollector.ui.common.pressFeel
 
 /**
  * 見た目は他の画面と同じ「測量野帳」（Fieldbook.kt）。見出しはコレクション（B）と同じ形：
@@ -166,7 +169,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
                     color = Fieldbook.Muted,
                 )
             }
-            IconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
+            PressIconButton(onClick = { gallery.refresh() }, enabled = !gallery.refreshing) {
                 Icon(
                     Icons.Filled.Refresh,
                     contentDescription = "再読み込み",
@@ -397,11 +400,19 @@ private fun SortRow(sort: TowerSort, onSelect: (TowerSort) -> Unit) {
     ) {
         TowerSort.entries.forEach { s ->
             val selected = s == sort
+            val source = remember { MutableInteractionSource() }
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .heightIn(min = 40.dp)
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = { onSelect(s) })
+                    .pressFeel(source)
+                    .selectable(
+                        selected = selected,
+                        interactionSource = source,
+                        indication = LocalIndication.current,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(s) },
+                    )
                     .semantics { contentDescription = s.spoken },
             ) {
                 Text(
@@ -432,7 +443,7 @@ private fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) {
         modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = { onPage(page - 1) }, enabled = page > 0) {
+        PressTextButton(onClick = { onPage(page - 1) }, enabled = page > 0) {
             Text("‹ 前へ", color = if (page > 0) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
         Text(
@@ -447,7 +458,7 @@ private fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) {
                 .paperBand()
                 .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )
-        TextButton(onClick = { onPage(page + 1) }, enabled = page < pages - 1) {
+        PressTextButton(onClick = { onPage(page + 1) }, enabled = page < pages - 1) {
             Text("次へ ›", color = if (page < pages - 1) Fieldbook.Survey else Fieldbook.Mark, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
