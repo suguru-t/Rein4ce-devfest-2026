@@ -24,10 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,12 +80,13 @@ import kotlin.math.roundToInt
  * @property iconOutline それ以外のときに出す「線画」のアイコン
  */
 sealed class Dest(val route: String, val label: String, val icon: ImageVector, val iconOutline: ImageVector) {
-    // 足跡・鞄・積み木は自作のベクター（AppIcons）。「みんな」だけ material-icons の標準セット
+    // 足跡・ノート・積み木・トロフィーは自作のベクター（AppIcons）。選ばれた瞬間の動きは ui/TabIcons.kt
     // 画面の名前は「記録」（「記録開始」のボタンや設定の「記録」とそろえる。前は「採集」。route とコードの名前はそのまま）
     data object Collect : Dest("collect", "記録", AppIcons.Footprints, AppIcons.FootprintsOutline)
-    data object Inventory : Dest("inventory", "コレクション", AppIcons.Bag, AppIcons.BagOutline)
+    data object Inventory : Dest("inventory", "コレクション", AppIcons.Notebook, AppIcons.NotebookOutline)
     data object Stack : Dest("stack", "積む", AppIcons.Blocks, AppIcons.BlocksOutline)
-    data object Gallery : Dest("gallery", "みんな", Icons.Filled.Share, Icons.Outlined.Share)
+    // 「みんな」は、高さを競うランキングなのでトロフィー（前は共有の印）
+    data object Gallery : Dest("gallery", "みんな", AppIcons.Trophy, AppIcons.TrophyOutline)
 
     companion object {
         // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
@@ -232,9 +229,10 @@ private fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                             // 波紋は出さない（Instagram と同じく、アイコンの弾みだけ）
                             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onGo(dest) },
                     ) {
-                        Icon(
-                            imageVector = if (isSelected) dest.icon else dest.iconOutline,
-                            contentDescription = null,
+                        // 選ばれた瞬間は、タブごとの動き（足跡が歩く・ノートが開く・積み木が積まれる・トロフィーが光る）
+                        TabIcon(
+                            dest = dest,
+                            selected = isSelected,
                             tint = Fieldbook.Ink,
                             modifier = Modifier
                                 .size(26.dp)
