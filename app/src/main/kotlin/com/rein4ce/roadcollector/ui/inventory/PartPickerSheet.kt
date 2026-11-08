@@ -261,6 +261,8 @@ private fun PickerCard(
                 onToggle = onToggleFavorite,
                 modifier = Modifier.width(26.dp).fillMaxHeight(),
                 starSize = 16.dp,
+                // 星は下の行（足跡と長さ）の高さに置く
+                alignment = Alignment.BottomCenter,
             )
         }
     }

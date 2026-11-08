@@ -36,7 +36,8 @@ import kotlin.math.sin
 
 /**
  * カードの右下のお気に入り。入っていないときは灰色の ☆、押すと黄色の ★（もう一度押すと外れる）。
- * コレクションのカードと、積む画面の選ぶ窓のカードで使う。押せる範囲の大きさは [modifier] で渡す。
+ * コレクションのカードと、積む画面の選ぶ窓のカードで使う。押せる範囲の大きさは [modifier] で、
+ * その中のどこに星を置くかは [alignment] で渡す。
  * 読み上げではチェックボックスとして伝える。
  * 押したときは、押せる範囲の四角（灰色の波紋）ではなく、星だけが少し縮んで応える。
  * 入れたときだけ、星がぽんと弾み、周りに小さな光が散る（外すときは静かに ☆ に戻す）。
@@ -50,6 +51,7 @@ internal fun FavoriteToggle(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     starSize: Dp = 20.dp,
+    alignment: Alignment = Alignment.Center,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -71,7 +73,7 @@ internal fun FavoriteToggle(
         pop.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = 500f))
     }
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = alignment,
         modifier = modifier
             // 光の広がりも、星の大きさに合わせる
             .drawBehind { drawFavoriteBurst(center, burst.value, scale = starSize / 20.dp) }
