@@ -104,6 +104,10 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     ) {
         when (page) {
             Page.LIST -> {
+                // ニックネーム（「みんな」に出る作者名）を、いちばん上に置く（名前を付ける所なので、最初に目に入るように）
+                Section("みんなのタワー") {
+                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
+                }
                 // 前は「見た目」。振動も入れたので「システム」にした
                 Section("システム") {
                     LinkRow(Page.THEME.title, theme.label) { page = Page.THEME }
@@ -116,9 +120,6 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
                     ItemDivider()
                     LinkRow(Page.AI.title, onOff(aiNaming)) { page = Page.AI }
-                }
-                Section("みんなのタワー") {
-                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
                 }
                 // 発表が終わったら、DEMO_SETTINGS（AppSettings.kt）を false にすれば出なくなる
                 if (DEMO_SETTINGS) {
