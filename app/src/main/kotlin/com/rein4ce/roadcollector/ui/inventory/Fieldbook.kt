@@ -27,10 +27,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.ui.common.drawGridClearings
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -224,21 +226,31 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
         if (sky != null) drawWeatherIcon(sky, center = Offset(ox + 20f * u, oy + 20f * u), size = 18f * u)
 
         // 縮尺：実際に歩いた距離 ÷ 図の上の道の長さ。図は角を間引いた形なので、だいたいの値。
-        // 道は図の下から約 17 目盛りより上にしか届かない（長辺 1 の形を図の 98/150 に描き、太さの半分と縁取りを足した分）。
-        // 縮尺の字が道にかからないよう、左下の見当より右・下の端の近くに置き、字のまん中を目盛りの線の高さにそろえる
-        // （字の大きさは図によらず決まっているので、上に寄せて置くと、小さい図ほど道にかかっていた）
+        // 左下の見当より右・下の端の近くに置き、字のまん中を目盛りの線の高さにそろえる
+        // （字の大きさは図によらず決まっているので、上に寄せて置くと、小さい図ほど道にかかっていた）。
+        // 高さは、道の形のいちばん下（縁取りを含む）から決める。ふつうは図の下から 9 目盛り。道がそれより下まで来る形
+        // （太いパーツなど）なら、その下に下げる（図からはみ出さない所まで）。
+        // 右下はコレクションの選ぶ丸の場所なので空けておき、字が届きそうなら目盛りを 1 段ずつ短くする
         val len = normalizedLength(part)
         if (part.distanceM > 0 && len > 0f) {
             val metersPerPx = part.distanceM / (len * scalePx)
-            val barM = niceLength(28f * u * metersPerPx)
-            val barPx = barM / metersPerPx
             val x0 = ox + 19f * u
-            val y0 = oy + s - 9f * u
+            val rightLimit = ox + s - SCALE_RIGHT_RESERVE.toPx()
+            fun textOf(m: Int) = if (m >= 1000) "${m / 1000} km" else "$m m"
+            var barM = niceLength(28f * u * metersPerPx)
+            var layout = measurer.measure(textOf(barM), label)
+            while (x0 + barM / metersPerPx + 3f * u + layout.size.width > rightLimit) {
+                barM = NICE_LENGTHS.lastOrNull { it < barM } ?: break
+                layout = measurer.measure(textOf(barM), label)
+            }
+            val barPx = barM / metersPerPx
+            val roadBottom = PartGeometry.shapes(part, scalePx.toDouble())
+                .maxOf { poly -> poly.points.maxOf { center.y - it.y.toFloat() } } + edgePx
+            val half = max(layout.size.height / 2f, 3.5f * u)
+            val y0 = max(oy + s - 9f * u, roadBottom + 1f * u + half).coerceAtMost(oy + s - 1f * u - half)
             drawLine(Fieldbook.Ink, Offset(x0, y0), Offset(x0 + barPx, y0), 2f * u)
             drawLine(Fieldbook.Ink, Offset(x0, y0 - 3.5f * u), Offset(x0, y0 + 3.5f * u), markStroke)
             drawLine(Fieldbook.Ink, Offset(x0 + barPx, y0 - 3.5f * u), Offset(x0 + barPx, y0 + 3.5f * u), markStroke)
-            val text = if (barM >= 1000) "${barM / 1000} km" else "$barM m"
-            val layout = measurer.measure(text, label)
             drawText(layout, topLeft = Offset(x0 + barPx + 3f * u, y0 - layout.size.height / 2f))
         }
     }
@@ -260,4 +272,10 @@ internal fun normalizedLength(part: Part): Float {
 }
 
 /** 縮尺の目盛りに使う切りのいい長さ [m] */
-internal fun niceLength(m: Float): Int = listOf(10, 20, 50, 100, 200, 500, 1000, 2000).firstOrNull { it >= m } ?: 5000
+internal fun niceLength(m: Float): Int = NICE_LENGTHS.firstOrNull { it >= m } ?: NICE_LENGTHS.last()
+
+/** 縮尺の目盛りの長さの候補 [m] */
+private val NICE_LENGTHS = listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+/** 図の右下で、縮尺の字が入らないように空けておく幅（コレクションの選ぶ丸の場所） */
+private val SCALE_RIGHT_RESERVE = 44.dp

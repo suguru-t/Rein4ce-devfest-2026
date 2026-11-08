@@ -28,10 +28,10 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.Sky
@@ -41,7 +41,6 @@ import androidx.compose.ui.graphics.Path
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -288,21 +287,12 @@ private class Particles(
         drawImage(image, topLeft = Offset(c.x - image.width / 2f, c.y - image.height / 2f))
     }
 
-    /** 月の絵（[moonImage]）。大きさか形が変わったときだけ描き直す */
-    private var moonImage: ImageBitmap? = null
-    private var moonImageKey = 0
+    /** 月の絵（大きさか形が変わったときだけ描き直す） */
+    private val moonCache = CachedImage()
 
     private fun DrawScope.moonImage(r: Float, full: Boolean): ImageBitmap {
         val side = (r * 2f).toInt() + 4
-        val key = side * 2 + (if (full) 1 else 0)
-        moonImage?.takeIf { moonImageKey == key }?.let { return it }
-        val image = ImageBitmap(side, side)
-        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(image), Size(side.toFloat(), side.toFloat())) {
-            moonFace(r, full)
-        }
-        moonImage = image
-        moonImageKey = key
-        return image
+        return moonCache.get(this, key = side to full, sidePx = side) { moonFace(r, full) }
     }
 
     /**
@@ -447,32 +437,32 @@ private class Particles(
             val d = depth[i]
             val r = lerp(2.0f, 4.4f, d).dp.toPx()
             val speed = h * lerp(0.04f, 0.11f, d)
-            val travel = h + 2 * r
-            val y = (phase[i] * travel + t * speed) % travel - r
+            // 絵は、白い芯（半径 r）のまわりににじみがあるので、芯の FLAKE_SPREAD 倍の大きさで置く。
+            // 上下で折り返す範囲も、にじみの端まで含める（芯の大きさだと、にじみの端が縁で一瞬出たり消えたりする）
+            val half = r * FLAKE_SPREAD
+            val travel = h + 2 * half
+            val y = (phase[i] * travel + t * speed) % travel - half
             val sway = sin(t * lerp(0.5f, 1.0f, d) + phase[i] * 6.28f) * lerp(6f, 16f, d).dp.toPx()
             val x = wrap(x0[i] * w + sway, w)
             val alpha = lerp(0.55f, 1f, d)
-            // 絵は、白い芯（半径 r）のまわりににじみがあるので、芯の FLAKE_SPREAD 倍の大きさで置く
-            val half = r * FLAKE_SPREAD
-            drawImage(
-                image,
-                dstOffset = IntOffset((x - half).roundToInt(), (y - half).roundToInt()),
-                dstSize = IntSize((half * 2).roundToInt(), (half * 2).roundToInt()),
-                alpha = alpha,
-            )
+            // 小数の位置のまま置く（整数の px に丸めると、ゆっくりした横揺れが 1 px ずつの段になり、低い密度の端末ではカクつく）
+            val zoom = half * 2 / image.width
+            withTransform({
+                translate(x - half, y - half)
+                scale(zoom, zoom, pivot = Offset.Zero)
+            }) {
+                drawImage(image, alpha = alpha)
+            }
         }
     }
 
-    /** 雪の粒の絵（[flakeImage]）。ライトとダークでにじみの濃さを変えるので、切り替わったら作り直す */
-    private var flakeImage: ImageBitmap? = null
-    private var flakeImageDark = false
+    /** 雪の粒の絵。ライトとダークでにじみの濃さを変えるので、切り替わったら描き直す */
+    private val flakeCache = CachedImage()
 
     private fun DrawScope.flakeImage(): ImageBitmap {
         val dark = Fieldbook.dark
-        flakeImage?.takeIf { flakeImageDark == dark }?.let { return it }
         val side = FLAKE_IMAGE_PX
-        val image = ImageBitmap(side, side)
-        CanvasDrawScope().draw(this, layoutDirection, androidx.compose.ui.graphics.Canvas(image), Size(side.toFloat(), side.toFloat())) {
+        return flakeCache.get(this, key = dark, sidePx = side) {
             val c = center
             val outer = side / 2f
             // まわりのうすい青灰色のにじみ（明るい紙の上で、白い粒の形が見えるように。暗い地では白がよく見えるので弱く）
@@ -502,9 +492,6 @@ private class Particles(
                 center = c,
             )
         }
-        flakeImage = image
-        flakeImageDark = dark
-        return image
     }
 
     /**
@@ -743,7 +730,6 @@ private class Particles(
         /** 雨粒の色：紙の上で見える、青みのある墨 */
         private val RainInk: Color get() = if (Fieldbook.dark) Color(0xFF8FB4E0) else Color(0xFF4F6F96)
 
-        /** 雪の粒のふちと影 */
         /** 雪の粒のまわりのにじみの色（青灰色） */
         private val SnowShade = Color(0xFF5F86A8)
 
@@ -868,4 +854,24 @@ private fun hash(i: Int, j: Int): Float {
     h = (h xor (h ushr 13)) * 1_274_126_177
     h = h xor (h ushr 16)
     return (h and 0x7fffffff) / Int.MAX_VALUE.toFloat()
+}
+
+
+/**
+ * 一度だけ描いて取っておく絵（月の面・雪の粒）。[get] の key が前と同じなら、取っておいた絵を返し、違えば描き直す。
+ * 細かい絵を毎コマ描かず、毎コマは取っておいた絵を置くだけにするため
+ */
+private class CachedImage {
+    private var image: ImageBitmap? = null
+    private var key: Any? = null
+
+    /** 一辺 [sidePx] の正方形の絵を [draw] で描いて返す。[key] が前と同じなら描き直さない */
+    fun get(scope: DrawScope, key: Any, sidePx: Int, draw: DrawScope.() -> Unit): ImageBitmap {
+        image?.takeIf { this.key == key }?.let { return it }
+        val made = ImageBitmap(sidePx, sidePx)
+        CanvasDrawScope().draw(scope, scope.layoutDirection, androidx.compose.ui.graphics.Canvas(made), Size(sidePx.toFloat(), sidePx.toFloat()), draw)
+        image = made
+        this.key = key
+        return made
+    }
 }

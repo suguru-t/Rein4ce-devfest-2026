@@ -711,7 +711,8 @@ private fun PartCard(
                     enabled = canSelect,
                     name = part.displayName,
                     onToggle = onToggleSelect,
-                    modifier = Modifier.align(Alignment.BottomEnd),
+                    // 右下の見当の角（「┘」の線）にかからないよう、少し内側に寄せる
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-6).dp, y = (-6).dp),
                 )
             }
             if (editing && !isDragging) {
