@@ -62,13 +62,17 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
         }
     }
 
+    val shownId = if (screen == BackdropScreen.COLLECTION) focus ?: latestWalk(parts)?.id else null
     val weather = when (screen) {
         BackdropScreen.COLLECT, BackdropScreen.GALLERY -> current
-        BackdropScreen.COLLECTION -> (focus ?: latestWalk(parts)?.id)?.let { repository.weatherOf(it, saved) }
+        BackdropScreen.COLLECTION -> shownId?.let { repository.weatherOf(it, saved) }
         BackdropScreen.OTHER -> null
     }
+    // 晴れの夜に満月を出すかを決める時刻：記録とみんなは今、コレクションはそのパーツを歩いた時刻
+    val walkedAt = shownId?.let { id -> parts.firstOrNull { it.id == id }?.walkedAt }?.takeIf { it > 0L }
     WeatherBackdrop(
         weather = if (motion == WeatherMotion.OFF) null else weather,
+        moonTimeMs = walkedAt ?: System.currentTimeMillis(),
         modifier = modifier,
         still = recording || motion == WeatherMotion.STILL,
         smooth = motion == WeatherMotion.SMOOTH,

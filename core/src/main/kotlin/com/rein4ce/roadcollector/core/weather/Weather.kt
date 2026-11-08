@@ -53,9 +53,11 @@ enum class Sky(val label: String) {
  *
  * @property code 世界気象機関（WMO）の天気コード
  * @property precipitationMm その 1 時間の降水量 [mm]。雨の強さ（降らせる雨粒の数）に使う
+ * @property isDay 昼か（その場所・その時刻で、日の出から日の入りまで）。夜なら、晴れの背景を太陽ではなく月と星にする。
+ *   これを足す前に保存した天気には無いので、昼として扱う
  */
 @Serializable
-data class WalkWeather(val code: Int, val precipitationMm: Double = 0.0) {
+data class WalkWeather(val code: Int, val precipitationMm: Double = 0.0, val isDay: Boolean = true) {
     val sky: Sky get() = Sky.of(code)
 }
 
@@ -74,21 +76,25 @@ object OpenMeteo {
     /** 送る前に位置を丸める（0.1 度単位） */
     fun round(deg: Double): Double = (deg * 10).roundToInt() / 10.0
 
-    /** 今の天気を聞く URL */
+    /** 今の天気を聞く URL。昼か夜か（`is_day`）も一緒に聞く */
     fun currentUrl(lat: Double, lng: Double): String =
-        "$BASE?latitude=${round(lat)}&longitude=${round(lng)}&current=weather_code,precipitation&timezone=GMT"
+        "$BASE?latitude=${round(lat)}&longitude=${round(lng)}&current=weather_code,precipitation,is_day&timezone=GMT"
 
     /** [timeMs] を含む 1 時間の天気を聞く URL（時刻は世界時でそろえる） */
     fun hourUrl(lat: Double, lng: Double, timeMs: Long): String {
         val hour = HOUR.format(Instant.ofEpochMilli(timeMs))
-        return "$BASE?latitude=${round(lat)}&longitude=${round(lng)}&hourly=weather_code,precipitation" +
+        return "$BASE?latitude=${round(lat)}&longitude=${round(lng)}&hourly=weather_code,precipitation,is_day" +
             "&start_hour=$hour&end_hour=$hour&timezone=GMT"
     }
 
     /** [currentUrl] の返事から、今の天気を読む。読めなければ null */
     fun parseCurrent(json: String): WalkWeather? = runCatching {
         val current = AppJson.parseToJsonElement(json).jsonObject["current"]?.jsonObject ?: return null
-        weather(current["weather_code"]?.jsonPrimitive?.intOrNull, current["precipitation"]?.jsonPrimitive?.doubleOrNull)
+        weather(
+            current["weather_code"]?.jsonPrimitive?.intOrNull,
+            current["precipitation"]?.jsonPrimitive?.doubleOrNull,
+            current["is_day"]?.jsonPrimitive?.intOrNull,
+        )
     }.getOrNull()
 
     /** [hourUrl] の返事から、その 1 時間の天気を読む。読めなければ null */
@@ -96,10 +102,13 @@ object OpenMeteo {
         val hourly: JsonObject = AppJson.parseToJsonElement(json).jsonObject["hourly"]?.jsonObject ?: return null
         val code = hourly["weather_code"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.intOrNull
         val mm = hourly["precipitation"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.doubleOrNull
-        weather(code, mm)
+        val day = hourly["is_day"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.intOrNull
+        weather(code, mm, day)
     }.getOrNull()
 
-    private fun weather(code: Int?, mm: Double?): WalkWeather? = code?.let { WalkWeather(it, mm ?: 0.0) }
+    /** [isDay] は 1 なら昼・0 なら夜。返事に無ければ昼として扱う */
+    private fun weather(code: Int?, mm: Double?, isDay: Int?): WalkWeather? =
+        code?.let { WalkWeather(it, mm ?: 0.0, isDay = isDay != 0) }
 
     private val HOUR: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:00").withZone(ZoneOffset.UTC)
 }
