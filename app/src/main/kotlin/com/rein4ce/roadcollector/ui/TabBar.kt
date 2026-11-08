@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -52,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -108,7 +108,7 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                 .clip(PillShape),
         ) {
             val density = LocalDensity.current
-            val haptics = LocalHapticFeedback.current
+            val haptics = rememberHaptics()
             val count = Dest.all.size
             val barWidthPx = with(density) { maxWidth.toPx() }
             val tabWidthPx = barWidthPx / count

@@ -75,6 +75,7 @@ class AppSettingsTest {
         assertEquals(WeatherMotion.NORMAL, settings.weatherMotion.value)
         assertFalse(settings.keepScreenOn.value)
         assertTrue(settings.aiNaming.value)
+        assertTrue(settings.haptics.value)
         assertEquals("", settings.nickname.value)
     }
 
@@ -85,12 +86,14 @@ class AppSettingsTest {
             setWeatherMotion(WeatherMotion.STILL)
             setKeepScreenOn(true)
             setAiNaming(false)
+            setHaptics(false)
             setNickname("みちつみ太郎")
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
         assertTrue(again.keepScreenOn.value)
         assertFalse(again.aiNaming.value)
+        assertFalse(again.haptics.value)
         assertEquals("みちつみ太郎", again.nickname.value)
     }
 

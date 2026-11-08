@@ -138,6 +138,19 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _aiNaming.value = on
     }
 
+    private val _haptics = MutableStateFlow(readBoolean(KEY_HAPTICS, true))
+
+    /**
+     * 押したときなどに端末を軽く振動させるか。初めはオン。
+     * アプリの振動は、すべて ui/common/Haptics.kt の rememberHaptics() を通して、ここがオフなら鳴らさない
+     */
+    val haptics: StateFlow<Boolean> = _haptics
+
+    fun setHaptics(on: Boolean) {
+        store.put(KEY_HAPTICS, on.toString())
+        _haptics.value = on
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -186,6 +199,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         private const val KEY_WEATHER_MOTION = "weather_motion"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_AI_NAMING = "ai_naming"
+        private const val KEY_HAPTICS = "haptics"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"

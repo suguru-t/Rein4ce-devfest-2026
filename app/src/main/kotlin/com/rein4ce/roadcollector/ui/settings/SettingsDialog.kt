@@ -82,6 +82,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val motion by settings.weatherMotion.collectAsStateWithLifecycle()
     val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
     val aiNaming by settings.aiNaming.collectAsStateWithLifecycle()
+    val haptics by settings.haptics.collectAsStateWithLifecycle()
     val nickname by settings.nickname.collectAsStateWithLifecycle()
     val demoSky by settings.demoSky.collectAsStateWithLifecycle()
     // 見本のパーツがコレクションにあるか（1 本でもあればオン。読み込み中は切り替えさせない）
@@ -103,10 +104,13 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     ) {
         when (page) {
             Page.LIST -> {
-                Section("見た目") {
+                // 前は「見た目」。振動も入れたので「システム」にした
+                Section("システム") {
                     LinkRow(Page.THEME.title, theme.label) { page = Page.THEME }
                     ItemDivider()
                     LinkRow(Page.MOTION.title, motion.label) { page = Page.MOTION }
+                    ItemDivider()
+                    LinkRow(Page.HAPTICS.title, onOff(haptics)) { page = Page.HAPTICS }
                 }
                 Section("記録") {
                     LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
@@ -142,6 +146,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 }
             }
             Page.MOTION -> MotionSlider(motion = motion, onChange = settings::setWeatherMotion)
+            Page.HAPTICS -> SwitchPage(
+                checked = haptics,
+                onChange = settings::setHaptics,
+                explanation = "ボタンやタブを押したとき、カードの並べ替えを始めたとき、題字や足跡を押したときなどに、端末を軽く振動させます。" +
+                    "オフにすると振動しません。",
+            )
             Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
                 onChange = settings::setKeepScreenOn,
@@ -206,6 +216,7 @@ private enum class Page(val title: String) {
     LIST("設定"),
     THEME("画面の明るさ"),
     MOTION("背景の天気の動き"),
+    HAPTICS("振動"),
     KEEP_ON("記録中は画面を消さない"),
     AI("AI に名前を考えてもらう"),
     SAMPLES("見本のパーツ"),

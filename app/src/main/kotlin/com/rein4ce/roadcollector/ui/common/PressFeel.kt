@@ -31,7 +31,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.mutableStateOf
@@ -89,7 +88,7 @@ private class PressMotion {
 @Composable
 private fun rememberPressMotion(interactionSource: InteractionSource): PressMotion {
     val motion = remember { PressMotion() }
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     LaunchedEffect(interactionSource) {
         var pressing: Job? = null
         interactionSource.interactions.collect { interaction ->
