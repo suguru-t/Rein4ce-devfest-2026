@@ -379,10 +379,13 @@ private val PAGE_BOTTOM = 20.dp
 private const val HEADER_SCALE_MAX = 1.8f
 private val HEADER_ROWS_GAP = 22.dp
 
-/** 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ほかの画面の見出しは 26dp。タイトルなので大きく） */
+/**
+ * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ほかの画面の見出しは 26dp。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
+ * はじめは 40dp で画面の幅いっぱいになり、B が大きすぎるとした）
+ */
 private val ART_WIDTH = 176.dp
 private val ART_HEIGHT = 112.dp
-private val TITLE_BLOCK = 40.dp
+private val TITLE_BLOCK = 28.dp
 
 /** 行と行の間 */
 private val ROW_GAP = 14.dp
