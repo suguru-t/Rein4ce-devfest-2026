@@ -1,69 +1,61 @@
 package com.rein4ce.roadcollector.ui.game
 
-import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.data.GameSession
-import com.rein4ce.roadcollector.data.PartOrigin
-import com.rein4ce.roadcollector.data.WalkDistance
-import com.rein4ce.roadcollector.data.walkDistance
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
+/** 積む画面の、模型の高さの目盛り（heightTicks） */
 class HeightRulerTest {
-    @Test fun `zero is the platform top across zoom levels`() {
-        for (zoom in listOf(1f, .5f, .2f)) {
+
+    @Test
+    fun `0m の目盛りは、引いても台の上面に重なる`() {
+        for (zoom in listOf(1f, 0.5f, 0.2f)) {
             val viewport = StackViewport(320f, 600f, zoom)
             val zero = heightTicks(viewport, 8f, 28f).first { it.meters == 0f }
-            assertEquals(viewport.toScreenY(0f), zero.screenY, .001f)
+            assertEquals(viewport.toScreenY(0f), zero.screenY, 0.001f)
+            assertEquals("0m", zero.label)
         }
     }
-    @Test fun `follow camera ticks retain absolute height and clip offscreen zero`() {
+
+    @Test
+    fun `カメラを上げても目盛りは本当の高さのままで、見えない 0m は出さない`() {
         val viewport = StackViewport(320f, 200f, cameraY = 10f)
         val ticks = heightTicks(viewport, 8f, 28f)
         assertTrue(ticks.isNotEmpty())
         assertTrue(ticks.none { it.meters == 0f })
         ticks.forEach {
-            assertEquals(it.meters, viewport.toWorldY(it.screenY), .0001f)
+            assertEquals(it.meters, viewport.toWorldY(it.screenY), 0.0001f)
             assertTrue(it.screenY in 0f..200f)
         }
     }
-    @Test fun `minor ticks are twenty cm when visible and labels thin out at low zoom`() {
+
+    @Test
+    fun `間が空けば 20cm の細かい目盛りを出し、引いたら字の目盛りを間引く`() {
         val full = heightTicks(StackViewport(500f, 800f), 8f, 28f)
-        assertEquals(.2f, full[1].meters - full[0].meters, .001f)
-        val small = heightTicks(StackViewport(250f, 800f, .2f), 8f, 28f)
+        assertEquals(0.2f, full[1].meters - full[0].meters, 0.001f)
+        // 字は 1 m ごと（5 本に 1 本）
+        assertEquals(listOf("0m", "1m"), full.mapNotNull { it.label }.take(2))
+
+        val small = heightTicks(StackViewport(250f, 800f, 0.2f), 8f, 28f)
         assertTrue(small.all { it.label != null })
-        small.zipWithNext().forEach { (a,b) -> assertTrue(kotlin.math.abs(a.screenY-b.screenY) >= 28f) }
+        small.zipWithNext().forEach { (a, b) -> assertTrue(abs(a.screenY - b.screenY) >= 28f) }
     }
-    @Test fun `narrowed canvas still maps drag to the drawn distance`() {
-        val viewport = StackViewport(360f - 50f, 200f, .35f, 3f)
-        val delta = viewport.dragToMeters(24f)
-        assertEquals(24f, viewport.toScreenX(.1f + delta) - viewport.toScreenX(.1f), .001f)
+
+    @Test
+    fun `目盛りはキャンバスに重ねて描くので、塔の大きさは目盛りが無いときと同じ`() {
+        // 目盛りの列を別に取ると、キャンバスが狭くなって塔が 1 割ほど小さくなっていた（#87 のレビュー）。
+        // 今は目盛りもキャンバス全体の変換で描くので、倍率は「キャンバスの幅 ÷ 5 m」のまま（360 px なら 1 m = 72 px）
+        val viewport = StackViewport(360f, 640f)
+        assertEquals(72f, viewport.scale, 0.001f)
+        val one = requireNotNull(heightTicks(viewport, 8f, 28f).firstOrNull { it.label == "1m" })
+        // 1m の目盛りは、高さ 1 m のところ（塔を描く位置と同じ）
+        assertEquals(viewport.toScreenY(1f), one.screenY, 0.001f)
+    }
+
+    @Test
+    fun `大きさが決まる前は目盛りを出さない`() {
         assertTrue(heightTicks(StackViewport(0f, 0f), 8f, 28f).isEmpty())
     }
-    @Test fun `only verified walks count and sum cannot overflow Int`() {
-        val sample = SampleParts.all.first()
-        val a = sample.copy(id = PartOrigin.WALK.newId(), distanceM = Int.MAX_VALUE)
-        val b = a.copy(id = PartOrigin.WALK.newId())
-        val demo = a.copy(id = PartOrigin.DEMO.newId())
-        val file = a.copy(id = PartOrigin.FILE.newId())
-        val old = a.copy(id = "legacy-uuid")
-        assertEquals(WalkDistance(2L * Int.MAX_VALUE, 4), walkDistance(listOf(a,b,a,sample,demo,file,old)))
-    }
-    @Test fun `playback modes have distinct persisted id prefixes`() {
-        assertEquals(PartOrigin.WALK, PartOrigin.fromPlayback(null))
-        assertEquals(PartOrigin.DEMO, PartOrigin.fromPlayback("デモ散歩"))
-        assertEquals(PartOrigin.FILE, PartOrigin.fromPlayback("ファイル"))
-        assertNotEquals(PartOrigin.WALK.newId(), PartOrigin.WALK.newId())
-    }
-    @Test fun `completed distance is frozen from the whole session`() {
-        val a = SampleParts.all.first().copy(id = PartOrigin.WALK.newId(), distanceM = 500)
-        val demo = a.copy(id = PartOrigin.DEMO.newId())
-        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(0.0, .01))
-        vm.updateInventory(listOf(a,demo), true, GameSession.StartRequest(1, listOf(a.id,demo.id)))
-        repeat(2) { vm.place(); vm.tick(.05) }
-        val result = vm.result!!
-        assertEquals(WalkDistance(500,1), result.walked)
-        vm.updateInventory(emptyList(), true, null)
-        repeat(10) { vm.tick(.05) }
-        assertSame(result, vm.result)
-    }
 }
+

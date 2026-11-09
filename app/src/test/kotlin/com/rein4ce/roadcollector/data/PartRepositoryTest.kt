@@ -158,6 +158,35 @@ class PartRepositoryTest {
     }
 
     @Test
+    fun `出どころはパーツとは別に保存し、開き直しても残り、パーツを消すと消える`() = runTest {
+        val f = file()
+        val repo = repository(f)
+        advanceUntilIdle()
+        val demo = walk.copy(id = "demo-1")
+        repo.add(walk, place, origin = PartOrigin.WALK)
+        repo.add(demo, place, origin = PartOrigin.DEMO)
+        advanceUntilIdle()
+        val expected = mapOf(walk.id to PartOrigin.WALK, demo.id to PartOrigin.DEMO)
+        assertEquals(expected, repo.origins.value)
+        assertEquals(expected, repository(f).also { advanceUntilIdle() }.origins.value)
+        // パーツのデータ（サーバに送る形）には出どころを入れない。id もそのまま
+        assertFalse(f.readText().contains("WALK"))
+
+        repo.remove(demo.id)
+        advanceUntilIdle()
+        assertEquals(mapOf(walk.id to PartOrigin.WALK), repository(f).also { advanceUntilIdle() }.origins.value)
+    }
+
+    @Test
+    fun `出どころのファイルに知らない字があっても、そこだけ読み飛ばす`() = runTest {
+        val f = file()
+        repository(f).also { advanceUntilIdle() }.add(walk, place, origin = PartOrigin.WALK)
+        advanceUntilIdle()
+        File(tmp.root, "parts_origins.json").writeText("""{"${walk.id}":"WALK","${SampleParts.all[0].id}":"TELEPORT"}""")
+        assertEquals(mapOf(walk.id to PartOrigin.WALK), repository(f).also { advanceUntilIdle() }.origins.value)
+    }
+
+    @Test
     fun `favorites are saved, survive a restart, and go away with their part`() = runTest {
         val f = file()
         val repo = repository(f)
