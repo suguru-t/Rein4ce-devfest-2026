@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -406,7 +407,8 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
                 .weight(1f)
                 .wrapContentWidth(Alignment.CenterHorizontally)
                 .paperBand()
-                .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
+                // 縁取りの字と本来の字の 2 つが中にあるので、外側で 1 つにまとめて、説明だけを読ませる（#115 のレビュー）
+                .clearAndSetSemantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )
         PopChip(
             "次の $PAGE_SIZE 個 ›",
