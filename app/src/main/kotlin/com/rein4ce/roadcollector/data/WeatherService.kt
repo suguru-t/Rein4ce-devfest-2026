@@ -85,12 +85,17 @@ class WeatherService(
     }
 
     /**
-     * その場所・時刻の天気。1 時間以内なら今の天気、90 日前までならその 1 時間の天気を聞く。それより前は分からない（null）
+     * その場所・時刻の天気。[timeMs] が今と同じ 1 時間（世界時の○時台。1 時間ごとの天気の区切りと同じ）のうちなら今の天気、
+     * 前の時台なら（90 日前まで）その 1 時間の天気を聞く。それより前は分からない（null）。
+     * 歩き始めた時刻で聞くので、1 時間に満たない散歩でも、歩き始めが前の時台なら、歩き始めの 1 時間の天気になる
+     * （前は「1 時間以内なら今の天気」で、ふだんの散歩は歩き終えたときの天気になっていた。#103 の C のレビュー）
      */
     suspend fun weatherAt(lat: Double, lng: Double, timeMs: Long): WalkWeather? {
-        val age = now() - timeMs
+        val nowMs = now()
+        val age = nowMs - timeMs
         return when {
-            age < HOUR_MS -> fetch(OpenMeteo.currentUrl(lat, lng))?.let(OpenMeteo::parseCurrent)
+            // 今の時台のうち（と、端末の時計のずれで少し先の時刻）は、今の天気
+            age < 0 || timeMs / HOUR_MS == nowMs / HOUR_MS -> fetch(OpenMeteo.currentUrl(lat, lng))?.let(OpenMeteo::parseCurrent)
             age < OpenMeteo.MAX_PAST_DAYS * DAY_MS -> fetch(OpenMeteo.hourUrl(lat, lng, timeMs))?.let(OpenMeteo::parseHour)
             else -> null
         }
