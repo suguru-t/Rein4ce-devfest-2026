@@ -15,14 +15,12 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sqrt
 
 /*
- * 記録画面の地図に出す、スタート・歩いているところ・ゴールの印。
+ * 記録画面の地図に出す、スタートとゴールの印（今いる場所の青い点と向きの扇は HeadingBeam.kt）。
  * - スタート：赤い旗（歩き始めた場所）
- * - 記録中・デモ散歩の再生中：今いる場所に足跡。点が増えるたびに左右の足が入れ替わり、一歩ずつ進んで見える。歩いている向きに回す
  * - 止めたあと：最後の点に青い旗（ゴール）
  * どの色の上（地図・オレンジの道）でも見えるよう、旗は白で縁取る。
  * 歩き始めの近くで止めたとき（一周した・同じ道を戻った）は、2 本が重なって 1 本に見えないよう、
@@ -97,35 +95,4 @@ internal fun roughMeters(a: TrackPoint, b: TrackPoint): Double {
     val dx = (b.lng - a.lng) * 111_320.0 * cosLat
     val dy = (b.lat - a.lat) * 110_540.0
     return sqrt(dx * dx + dy * dy)
-}
-
-/** 地図の今いる場所に出す足跡の大きさ */
-internal val WalkerSize = 42.dp
-
-/**
- * 地図の今いる場所に出す足跡（記録画面の歩いた長さの横と同じ足跡。[WalkingFootprints]）。
- * [step] が 1 増えるたびに、左右の足が入れ替わる（偶数はアイコンと同じ並び、奇数は 1 歩進んだ並び）
- */
-@Composable
-internal fun WalkerMarker(step: Int) {
-    WalkingFootprints(steps = { (step % 2).toFloat() }, tint = Fieldbook.Ink, modifier = Modifier.size(WalkerSize))
-}
-
-/**
- * 歩いている向き [度]（北が 0、時計回り）。最後の点と、その少し前の点から求める（GPS の小さなぶれで向きが暴れないように、
- * 最後の点から [minMeters] 以上離れた点まで戻って比べる）。向きが決まらなければ 0（北）
- */
-internal fun walkingBearing(points: List<TrackPoint>, minMeters: Double = 15.0): Float {
-    if (points.size < 2) return 0f
-    val last = points.last()
-    val cosLat = cos(Math.toRadians(last.lat))
-    for (i in points.lastIndex - 1 downTo 0) {
-        val p = points[i]
-        val dx = (last.lng - p.lng) * 111_320.0 * cosLat
-        val dy = (last.lat - p.lat) * 110_540.0
-        if (dx * dx + dy * dy >= minMeters * minMeters) {
-            return Math.toDegrees(atan2(dx, dy)).toFloat()
-        }
-    }
-    return 0f
 }
