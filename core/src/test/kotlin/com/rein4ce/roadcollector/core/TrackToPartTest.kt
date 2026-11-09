@@ -176,6 +176,17 @@ class TrackToPartTest {
     }
 
     @Test
+    fun `the place keeps the time the walk started, and the part the time it ended`() {
+        // パーツの天気は歩き始めた時刻の天気にする（決定 55）ので、歩き始めた時刻を場所と一緒に持つ。歩き終えた時刻はパーツに
+        val points = walk(listOf(0.0 to 0.0, 400.0 to 0.0))
+        val r = TrackToPart.convert(points)
+        require(r is TrackToPart.Result.Success)
+        assertEquals(points.first().timeMs, r.place.startedAt)
+        assertEquals(points.last().timeMs, r.part.walkedAt)
+        assertTrue(r.place.startedAt!! < r.part.walkedAt)
+    }
+
+    @Test
     fun `projection back to lat lng returns the original points`() {
         val points = walk(listOf(0.0 to 0.0, 400.0 to 0.0, 400.0 to 250.0))
         val xy = Projection.toMeters(points)

@@ -100,6 +100,18 @@ class WeatherServiceTest {
     }
 
     @Test
+    fun `a long walk gets the weather of the hour it started, not when it ended`() = runTest {
+        // 2 日前に歩き始めて、5 分前に歩き終えた（途中で天気が変わっていても、歩き始めたときの天気にする。決定 55）
+        val repo = repository()
+        service(repo)
+        repo.add(walk("long", ageMs = 5 * 60_000L), place.copy(startedAt = now - 2 * DAY))
+        advanceUntilIdle()
+
+        assertEquals(WalkWeather(3, 0.0), repo.weatherOf("long"))
+        assertTrue(asked.single().contains("start_hour=2026-11-05T12:00"))
+    }
+
+    @Test
     fun `parts older than 90 days are not asked`() = runTest {
         val repo = repository()
         service(repo)

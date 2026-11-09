@@ -29,8 +29,9 @@ import kotlin.coroutines.resume
 
 /**
  * 天気を取ってくる係（B）。取ってくるのは 2 つ：
- * - **パーツを歩いたときの天気**：場所（PartPlace）が分かっていて天気がまだのパーツを見つけたら、歩いた時刻の天気を聞いて
- *   [PartRepository.setWeather] で保存する。採集した直後のパーツも、前に採集したパーツ（90 日前まで）も同じ流れ
+ * - **パーツを歩いたときの天気**：場所（PartPlace）が分かっていて天気がまだのパーツを見つけたら、歩き始めた時刻（[PartPlace.startedAt]。
+ *   それが無い前のパーツは歩き終えた時刻）の天気を聞いて、[PartRepository.setWeather] で保存する。
+ *   長く歩いて途中で天気が変わっても、歩き始めたときの天気に決める（決定 55）。採集した直後のパーツも、前に採集したパーツ（90 日前まで）も同じ流れ
  * - **今の天気**（[current]）：採集・コレクションの一覧・みんなの背景に使う。スマホの最後の位置（位置の許可があるとき）、無ければ最後に歩いた場所で聞く
  *
  * 天気は Open-Meteo（キー不要・無料）から取る。送る位置は 0.1 度（約 10 km）に丸める（OpenMeteo のコメント）。
@@ -79,7 +80,7 @@ class WeatherService(
         if (!asked.add(id)) return
         val place = repository.places.value[id] ?: return
         val part = repository.parts.value.firstOrNull { it.id == id } ?: return
-        val weather = weatherAt(place.lat, place.lng, part.walkedAt) ?: return
+        val weather = weatherAt(place.lat, place.lng, place.startedAt ?: part.walkedAt) ?: return
         repository.setWeather(id, weather)
     }
 
