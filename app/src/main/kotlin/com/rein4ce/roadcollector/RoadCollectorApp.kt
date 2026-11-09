@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector
 
 import android.app.Application
 import android.content.Context
+import com.rein4ce.roadcollector.audio.BgmPlayer
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.MyTowers
@@ -34,6 +35,9 @@ class RoadCollectorApp : Application() {
      */
     lateinit var gallery: TowerGallery
         private set
+
+    /** BGM（全部の画面で同じ曲）。流すかどうかは MainActivity が、アプリが前に出ているかと設定から決める */
+    val bgm: BgmPlayer by lazy { BgmPlayer(this) }
 
     /** このスマホから送信したタワーの id（「みんな」で「あなた」の札を出す） */
     lateinit var myTowers: MyTowers
