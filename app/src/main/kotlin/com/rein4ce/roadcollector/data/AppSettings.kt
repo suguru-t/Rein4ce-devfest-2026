@@ -67,7 +67,7 @@ enum class WeatherMotion(val label: String, val note: String) {
 const val DEMO_SETTINGS = true
 
 /**
- * 発表（デモ）で見せる天気。本当の天気の代わりに、記録・みんな・コレクションの一覧の背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
+ * 発表（デモ）で見せる天気。本当の天気の代わりに、ホーム・記録・積む・みんな・コレクションの一覧の背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
  * 審査のときに、その日の天気に関係なく、雨・雪・夜の月などを見せるため。ふだんは本当の天気（[REAL]）。保存は名前
  *
  * @property weather 見せる天気。本当の天気なら null
@@ -93,7 +93,7 @@ enum class DemoSky(val label: String, val weather: WalkWeather?, val fullMoon: B
 }
 
 /**
- * アプリの設定。スマホの中だけに保存する。採集画面の右上の歯車から変える。
+ * アプリの設定。スマホの中だけに保存する。ホームの右上の歯車から変える。
  *
  * @param store 保存先。アプリでは SharedPreferences、テストではただの Map
  * @param demoEnabled 設定の「デモ」の欄を使うか（[DEMO_SETTINGS]）。false なら、デモの天気はいつも本当の天気

@@ -102,7 +102,6 @@ import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.walkDate
@@ -274,8 +273,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
                             color = Fieldbook.Muted,
-                            // 字の幅だけ紙の色を敷く（ui/common/PaperBand。見出しの字が方眼の線にかぶって読みにくいため）
-                            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).paperBand(),
+                            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start),
                         )
                         // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
                         // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
@@ -333,7 +331,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted, modifier = Modifier.paperBand())
+                        Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted)
                         PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
                             Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                         }
@@ -410,7 +408,6 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             HiddenSelectionNote(
                 hidden = validSelected.count { id -> visible.none { it.id == id } },
                 onRemove = { selectedIds.removeAll { id -> visible.none { it.id == id } } },
-                onGrid = true,
             )
         }
         Spacer(Modifier.height(8.dp))
@@ -450,7 +447,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
     // 名前を付けている間は、大きく見る画面を閉じておく（付け終わったら、新しい名前で戻る）
     val zoomed = zoomedId?.let { id -> parts.firstOrNull { it.id == id } }
     val renaming = renamingId?.let { id -> parts.firstOrNull { it.id == id } }
-    // 設定（採集画面の歯車）で AI の名前付けをオフにしていたら、名前を付ける窓に「AI に考えてもらう」を出さない
+    // 設定（ホームの歯車）で AI の名前付けをオフにしていたら、名前を付ける窓に「AI に考えてもらう」を出さない
     val aiNaming by RoadCollectorApp.from(context).settings.aiNaming.collectAsStateWithLifecycle()
     if (renaming != null) {
         RenameDialog(
@@ -492,7 +489,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
  * 見出しは一覧といっしょに動く（画面の外に出ると作り直される）ので、値は画面の側で持つ（戻るたびに 0 から回り直さないように）
  */
 @Composable
-private fun rememberMeter(totalM: Int, isLoaded: Boolean, reduceMotion: Boolean): Animatable<Float, AnimationVector1D> {
+internal fun rememberMeter(totalM: Int, isLoaded: Boolean, reduceMotion: Boolean): Animatable<Float, AnimationVector1D> {
     val meter = remember { Animatable(0f) }
     LaunchedEffect(isLoaded, totalM) {
         if (!isLoaded) return@LaunchedEffect
@@ -536,33 +533,39 @@ private const val EMPTY_KEY = "inventory-empty"
  * 画面を開くたびに、メーターのように 0 から数字が回って合計まで上がる（「みんな」の見出しと同じ）。
  * 開いている間に合計が変わったら（記録した・消した）、今の値から新しい値まで動く。アニメーションを切っている人には動かさない。
  * 読み込み中は parts が空なので、数字は出さない（読み終わってから 0 から上がる）。
- * 数字の動きは [rememberMeter] で、画面の側で持つ
+ * 数字の動きは [rememberMeter] で、画面の側で持つ。ホーム（ui/HomeScreen.kt）の見出しでも同じものを出す
+ *
+ * @param showSamples 見本の本数（「・ 見本 7」）も出すか。ホームでは出さない（見本はコレクションの中の話なので）
+ * @param horizontalAlignment 2 行の寄せ方。コレクションは左寄せ、ホームはまん中（題字・一言・ボタンがまん中にそろうので）
  */
 @Composable
-private fun CollectionMeter(
+internal fun CollectionMeter(
     meter: Animatable<Float, AnimationVector1D>,
     totalM: Int,
     walks: Int,
     samples: Int,
     isLoaded: Boolean,
     modifier: Modifier = Modifier,
+    showSamples: Boolean = true,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
 ) {
     val shownM = meter.value
     Column(
+        horizontalAlignment = horizontalAlignment,
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 val total = totalDistance(totalM)
                 // 画面名は、すぐ上の積み木（BlockWord）が見出しとして読むので、ここでは言わない（2 回続かないように。#90 の A のレビュー）
-                contentDescription = if (isLoaded) "これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "読み込み中"
+                val sampleNote = if (showSamples) "。見本 $samples" else ""
+                contentDescription = if (isLoaded) "これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}$sampleNote" else "読み込み中"
             },
     ) {
         Spacer(Modifier.height(4.dp))
         // 1 km 未満は m、1 km からは km で出す（totalDistance）。
         // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
         val shown = totalDistance(shownM.toInt())
-        // 見出しの字は、字の幅だけ紙の色を敷く（方眼の線にかぶって読みにくいため。ui/common/PaperBand）
-        Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 "歩いた合計",
                 fontFamily = Pop.Rounded,
@@ -591,12 +594,15 @@ private fun CollectionMeter(
             )
         }
         Text(
-            if (isLoaded) notes("これまでに集めた道 $walks 本", "見本 $samples") else "読み込み中…",
+            when {
+                !isLoaded -> "読み込み中…"
+                showSamples -> notes("これまでに集めた道 $walks 本", "見本 $samples")
+                else -> "これまでに集めた道 $walks 本"
+            },
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
-            modifier = Modifier.paperBand(),
         )
     }
 }

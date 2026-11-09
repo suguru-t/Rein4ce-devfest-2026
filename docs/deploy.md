@@ -71,10 +71,12 @@ gcloud run deploy road-collector \
 U=https://road-collector-3v3ltz2gla-an.a.run.app
 
 # 起動ログ：保存先と命名の部品が意図どおりか
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="road-collector" AND textPayload=~"TowerStore:|PartNamer:"' \
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="road-collector" AND textPayload=~"TowerStore:|PartNamer:|RateLimit:"' \
   --limit 5 --freshness=10m --format="value(textPayload)"
 #   期待：TowerStore: firestore（project=hackathon-2026-513703, database=(default), collection=towers）
 #         PartNamer: Gemini（project=hackathon-2026-513703, location=global, model=gemini-3.5-flash-lite）
+#         RateLimit: on（1 分あたり 端末ごと / 1 台の合計：投稿 10 / 120、一覧 60 / なし、名前 20 / 120、ニックネーム 10 / 60）
+#   回数制限で困ったとき（発表の直前など）は、--update-env-vars=RATE_LIMIT=off で出し直すと数えなくなる（戻すときは --remove-env-vars=RATE_LIMIT）
 
 # トラフィックが新しい版に 100% 向いているか（D で古い版に固定したままだと、ここで古い版の名前が出る）
 gcloud run services describe road-collector \

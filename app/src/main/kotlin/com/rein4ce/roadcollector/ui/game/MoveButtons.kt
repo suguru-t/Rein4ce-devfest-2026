@@ -24,7 +24,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -37,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** ◀▶ を 1 回押したときに動かす量 [m]。座標は m のまま、ドラッグと同じ動かし方（StackViewModel.dragBy）に渡す */
 internal const val MOVE_STEP_M = 0.05f
@@ -44,10 +48,16 @@ internal const val MOVE_STEP_M = 0.05f
 /** 長押しで続けて動かす間隔 [ms] */
 internal const val MOVE_REPEAT_MS = 80L
 
-/** ◀ と ▶ */
-enum class MoveDirection(val symbol: String, val label: String, val stepM: Float) {
-    LEFT("◀", "左へ 5cm", -MOVE_STEP_M),
-    RIGHT("▶", "右へ 5cm", MOVE_STEP_M),
+/**
+ * ◀ と ▶。読み上げの説明（「左へ 5 cm」）の cm は [MOVE_STEP_M] から作る（動かす量を変えたときに、読み上げだけ古いままにならないように。#88 の A のレビュー）
+ */
+enum class MoveDirection(val symbol: String, private val side: String, val stepM: Float) {
+    LEFT("◀", "左", -MOVE_STEP_M),
+    RIGHT("▶", "右", MOVE_STEP_M),
+    ;
+
+    /** 読み上げの説明。「左へ 5 cm」 */
+    val label: String get() = "${side}へ ${(MOVE_STEP_M * 100).roundToInt()} cm"
 }
 
 /**
@@ -78,8 +88,9 @@ internal class MoveRepeater(private val scope: CoroutineScope) {
  * 動かし方は呼ぶ側の [onMove]（積む画面では、ドラッグと同じ StackViewModel.dragBy。範囲の端で止まる）。
  *
  * - 置く前（狙っている間）だけ出す前提。落下中・完成後は、呼ぶ側が出さず、VM も動かさない
- * - 続けて動かすのは、指を離す・キャンセル・アプリが裏に回る・画面を離れる・次のゲーム（[sessionKey] が変わる）で止める
- * - 読み上げの長押し（指を離す知らせが来ない）は 1 回だけ動かす（押したまま動き続けないように）
+ * - 続けて動かすのは、指を離す・キャンセル・指をボタンの外へずらす・アプリが裏に回る・画面を離れる・次のゲーム（[sessionKey] が変わる）で止める
+ * - 読み上げの長押し（指を離す知らせが来ない）は 1 回だけ動かす（押したまま動き続けないように）。
+ *   そのため長押しの説明も、押したときと同じ「左へ 5 cm」にする（「続けて動かす」と聞こえるのに 1 回しか動かない、とならないように。#88 の A のレビュー）
  * - 見た目は回転のボタン（PressOutlinedButton）と同じ枠と高さ。押し心地も同じ（pressFeel）
  */
 @Composable
@@ -107,7 +118,8 @@ fun MoveButton(
                 if (it is PressInteraction.Release || it is PressInteraction.Cancel) repeater.stop()
             }
         }
-        val ink = MaterialTheme.colorScheme.primary.copy(alpha = if (active) 1f else 0.38f)
+        // 押せないときの色は、Material のボタンの決まり（onSurface の 38%）にそろえる（#88 の A のレビュー）
+        val ink = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
         Surface(
             shape = ButtonDefaults.outlinedShape,
             border = ButtonDefaults.outlinedButtonBorder(active),
@@ -116,13 +128,25 @@ fun MoveButton(
             modifier = modifier
                 .minimumInteractiveComponentSize()
                 .pressFeel(source)
+                // 長押しで続けて動かしている間に、指をボタンの外へずらしたら止める。combinedClickable は長押しのあと外へ出ても
+                // Cancel を出さず、指を上げるまで動き続けるため（#88 の A のレビュー）。知らせを見るだけで、押す・離すの扱いは変えない
+                .pointerInput(repeater) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull() ?: continue
+                            val p = change.position
+                            val outside = p.x < 0f || p.y < 0f || p.x > size.width || p.y > size.height
+                            if (change.pressed && outside) repeater.stop()
+                        }
+                    }
+                }
                 .combinedClickable(
                     enabled = active,
                     role = Role.Button,
                     interactionSource = source,
                     indication = LocalIndication.current,
                     onClickLabel = direction.label,
-                    onLongClickLabel = "${direction.label}ずつ続けて動かす",
+                    onLongClickLabel = direction.label,
                     onClick = { currentMove(direction.stepM) },
                     onLongClick = {
                         // 読み上げの長押しは指を離す知らせが来ないので、1 回だけ動かす
@@ -136,7 +160,8 @@ fun MoveButton(
                     .semantics { contentDescription = direction.label },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(direction.symbol)
+                // 字（◀▶）は読み上げない。説明（「左へ 5 cm」）だけを読む（#88 の C のレビュー）
+                Text(direction.symbol, modifier = Modifier.clearAndSetSemantics {})
             }
         }
     }

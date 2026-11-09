@@ -13,7 +13,8 @@ import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
 
 /**
- * 下のタブのアイコン。Material の標準セットに「足跡」「ノート」「積み木」「トロフィー」が無いので、24×24 で自作。
+ * 下のタブのアイコン。Material の標準セットに「足跡」「ノート」「積み木」「トロフィー」が無いので、24×24 で自作
+ * （タブバーの左の、ホームへ戻るボタンの「家」も、線の太さをそろえるためここで作る）。
  * 選ばれていないタブは「線画」。選ばれたタブの「塗り」は、部品ごとに動かすので ui/TabIcons.kt が下の形（〜Path）から描く
  * （足跡の塗りは、注記の足跡のマーク（WalkNote）にも使う）。
  * 色は呼び出し側（タブバー）が tint で付けるので、ここでは黒で描く。
@@ -299,6 +300,30 @@ object AppIcons {
     }
 
 
+    // ---- 家（タブバーの左の、ホームへ戻るボタン。ui/TabBar.kt） ----
+
+    /** 家の線画：三角の屋根と、四角い壁、まん中の戸。ほかのタブの線画と同じ太さ */
+    val HomeOutline: ImageVector by lazy {
+        icon("HomeOutline") {
+            outlined {
+                // 屋根（軒を壁より少し外へ出す）
+                moveTo(3.2f, 11.2f)
+                lineTo(12f, 3.8f)
+                lineTo(20.8f, 11.2f)
+                // 壁
+                moveTo(5.8f, 9.4f)
+                lineTo(5.8f, 20.2f)
+                lineTo(18.2f, 20.2f)
+                lineTo(18.2f, 9.4f)
+                // 戸
+                moveTo(10f, 20.2f)
+                lineTo(10f, 14.6f)
+                lineTo(14f, 14.6f)
+                lineTo(14f, 20.2f)
+            }
+        }
+    }
+
     val TrophyOutline: ImageVector by lazy {
         icon("TrophyOutline") {
             val i = STROKE / 2
@@ -310,6 +335,58 @@ object AppIcons {
                 moveTo(8.6f + i, 17.4f + i); lineTo(15.4f - i, 17.4f + i)
                 lineTo(15.4f - i, 21.6f - i); lineTo(8.6f + i, 21.6f - i); close()
             }
+        }
+    }
+
+    // ---- 積む画面のモード（モードを選ぶ画面の積み木に載せる塗りのアイコン。ui/game/ModeSelect.kt） ----
+
+    /** ストップウォッチ（3 分チャレンジ）：丸い文字盤に針をくり抜き、上に押すつまみ、右上に小さなボタン */
+    val Stopwatch: ImageVector by lazy {
+        icon("Stopwatch") {
+            // 文字盤と、くり抜いた針（12 時から少し右へ。偶奇の塗りで穴にする）
+            filled(evenOdd = true) {
+                ellipse(12f, 13.6f, 8.2f, 8.2f)
+                moveTo(11.1f, 8.4f)
+                lineTo(12.9f, 8.4f)
+                lineTo(12.9f, 13.1f)
+                lineTo(15.6f, 15.8f)
+                lineTo(14.3f, 17.1f)
+                lineTo(11.1f, 13.9f)
+                close()
+            }
+            // 上のつまみ（横長の頭と、文字盤へつながる軸）
+            filled { roundRect(9.4f, 1.6f, 5.2f, 2.3f, 1f) }
+            filled { roundRect(11.1f, 3.4f, 1.8f, 2.5f, 0.4f) }
+            // 右上の小さなボタン（斜め）
+            filled {
+                moveTo(17.3f, 6.1f)
+                lineTo(18.7f, 4.7f)
+                lineTo(20.5f, 6.5f)
+                lineTo(19.1f, 7.9f)
+                close()
+            }
+        }
+    }
+
+    /** カレンダー（毎日 1 つずつ積む）：上に 2 つのリング、見出しの線と日のます目をくり抜く */
+    val Calendar: ImageVector by lazy {
+        icon("Calendar") {
+            filled(evenOdd = true) {
+                roundRect(2.8f, 4.4f, 18.4f, 17f, 2.4f)
+                // 見出しと日付のあいだの線
+                roundRect(2.8f, 8.9f, 18.4f, 1.2f, 0f)
+                // 日のます目（2 段 × 3 列）
+                for (row in 0..1) {
+                    for (col in 0..2) {
+                        val l = 5.6f + col * 4.7f
+                        val t = 12.3f + row * 4.5f
+                        roundRect(l, t, 3.4f, 2.9f, 0.6f)
+                    }
+                }
+            }
+            // リング
+            filled { roundRect(6.6f, 2.0f, 2.4f, 4.6f, 1.2f) }
+            filled { roundRect(15.0f, 2.0f, 2.4f, 4.6f, 1.2f) }
         }
     }
 

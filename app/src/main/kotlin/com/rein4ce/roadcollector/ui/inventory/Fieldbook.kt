@@ -33,12 +33,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
-import com.rein4ce.roadcollector.ui.collect.FLAG_SPREAD_DEGREES
-import com.rein4ce.roadcollector.ui.collect.FlagWidth
-import com.rein4ce.roadcollector.ui.common.drawGridClearings
-import com.rein4ce.roadcollector.ui.collect.GoalFlagColor
-import com.rein4ce.roadcollector.ui.collect.StartFlagColor
-import com.rein4ce.roadcollector.ui.collect.drawFlag
+import com.rein4ce.roadcollector.ui.collect.drawStartGoalFlags
 import com.rein4ce.roadcollector.ui.collect.drawWalkingFootprints
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
@@ -57,7 +52,7 @@ import kotlin.math.min
  */
 object Fieldbook {
     /**
-     * いまダークモードか。設定（採集画面の歯車）と端末のダークテーマから、MainActivity が決めて入れる。
+     * いまダークモードか。設定（ホームの歯車）と端末のダークテーマから、MainActivity が決めて入れる。
      * 色はどれもこれを見て値を返すので、読んだ画面の部品や絵は、切り替えると描き直される
      */
     var dark: Boolean by mutableStateOf(false)
@@ -124,14 +119,10 @@ object Fieldbook {
 
 /**
  * 方眼紙の地。細い線は 8dp ごと、太い線は 40dp ごと。
- * 見出しの字の下だけ線を消す場所（ui/common/PaperBand）が動くと描き直すので（メーターの数字が回る間は毎コマ）、
  * 線は大きさが変わったときだけ作り（drawWithCache）、描き直しでは作っておいた線を描くだけにする（軽く済む）。
  * 色はダークモードで変わるので、描くときに読む
- *
- * @param clearings 見出しの字の下の線を消すか。消す場所はメイン画面の位置で覚えているので、
- *   下から出る窓など、別の窓に敷くときは false にする（true のままだと、ずれた所の線が消える）
  */
-fun Modifier.fieldbookGrid(clearings: Boolean = true): Modifier = drawWithCache {
+fun Modifier.fieldbookGrid(): Modifier = drawWithCache {
     val step = 8.dp.toPx()
     val minor = Path()
     val major = Path()
@@ -154,8 +145,6 @@ fun Modifier.fieldbookGrid(clearings: Boolean = true): Modifier = drawWithCache 
         drawRect(Fieldbook.Paper)
         drawPath(minor, Fieldbook.GridMinor, style = line)
         drawPath(major, Fieldbook.GridMajor, style = line)
-        // 見出しの字の下だけ、線を消す（ui/common/PaperBand）。天気はこの上に重なるので、紙の色が浮いて見えない
-        if (clearings) drawGridClearings()
     }
 }
 
@@ -266,7 +255,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, t
                 val start = onFigure(part.points.first())
                 // 輪は歩き始めの所に戻ってくる（最後の点から始めの点へつながる）ので、ゴールもスタートと同じ所
                 val goal = if (part.closed) start else onFigure(part.points.last())
-                drawStartGoalFlags(start, goal)
+                drawStartGoalFlags(start, goal) // 記録画面と同じ立て方（ui/collect/StartGoalMarks.kt）
             }
             // いま歩いているところに、歩いている向きに回した足跡（記録画面の見出しの足跡と同じ絵）
             val head = onFigure(now.head)
@@ -336,18 +325,6 @@ internal fun niceLength(m: Float): Int = NICE_LENGTHS.firstOrNull { it >= m } ?:
 
 /** 縮尺の目盛りの長さの候補 [m] */
 private val NICE_LENGTHS = listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
-
-/**
- * スタートの赤い旗とゴールの青い旗を立てる。同じ所（輪、歩き始めの近くに戻ってきた道）では、そのまま立てると
- * 後の旗に隠れて 1 本に見えるので、赤い旗は右へ、青い旗は左向きにして左へ、根もとから開いて 2 本とも見えるようにする。
- * 開き方と、開くかどうかの決め方（旗の幅より近いか）は、記録画面の地図なしの軌跡（ui/collect/CollectScreen の TrackCanvas、#85）と同じ
- */
-private fun DrawScope.drawStartGoalFlags(start: Offset, goal: Offset) {
-    val spread = (goal - start).getDistance() < FlagWidth.toPx()
-    val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
-    drawFlag(goal, GoalFlagColor, mirrored = spread, tilt = -tilt)
-    drawFlag(start, StartFlagColor, tilt = tilt)
-}
 
 /** なぞっている間の、まだ歩いていない道の濃さ */
 private const val TRACE_AHEAD_ALPHA = 0.28f

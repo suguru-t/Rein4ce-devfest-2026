@@ -62,7 +62,6 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -74,6 +73,7 @@ import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
+import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
@@ -267,7 +267,6 @@ private fun Overview(
                                 .weight(1f, fill = false)
                                 .heightIn(max = SECTION_HEIGHT)
                                 .fillMaxHeight()
-                                .paperBand(bleedX = 8.dp, bleedY = 6.dp)
                                 // ブロックの面（下に側面がのぞく）。中身は TowerSection が同じ角の丸さで描く
                                 .popBlock(face = Fieldbook.Paper, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge),
                         )
@@ -287,7 +286,6 @@ private fun Overview(
                                     fontWeight = FontWeight.Black,
                                     color = Pop.TealLine,
                                     fontSize = 12.sp,
-                                    modifier = Modifier.paperBand(bleedX = 6.dp, bleedY = 2.dp),
                                 )
                             }
                         }
@@ -366,48 +364,42 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         },
     ) {
         Spacer(Modifier.height(4.dp))
-        Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
-            Text(
+        Row(verticalAlignment = Alignment.Bottom) {
+            SkyText(
                 label,
-                fontFamily = Pop.Rounded,
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
                 color = Fieldbook.Ink,
+                fontSize = 15.sp,
                 modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 8.dp),
             )
             if (!none) {
-                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色
-                Text(
+                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色。
+                // 天気の雲や光の上に直接書くので、紙の色の縁取りを付ける（SkyText）
+                SkyText(
                     if (myValue != null) sort.format(meter.value) else "—",
-                    fontFamily = Pop.Rounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 40.sp,
                     color = sortInk(sort),
+                    fontSize = 40.sp,
                     maxLines = 1,
                     softWrap = false,
                 )
-                Text(
+                SkyText(
                     sort.unit,
-                    fontFamily = Pop.Rounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
                     color = sortInk(sort),
+                    fontSize = 18.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
                 )
             }
         }
         Spacer(Modifier.height(4.dp))
         when {
-            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札
-            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter, tiltDeg = -2f)
-            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow, tiltDeg = -2f)
+            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札。数字の下にそろえて、傾けずに水平に置く
+            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter)
+            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow)
             else -> Text(
                 sub,
                 fontFamily = Pop.Rounded,
                 fontWeight = FontWeight.Black,
                 fontSize = 13.sp,
                 color = if (isError) Fieldbook.Danger else Fieldbook.Muted,
-                modifier = Modifier.paperBand(),
             )
         }
     }
@@ -431,7 +423,6 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
                 contentDescription = "$label。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
             }
             .drawBehind { drawLine(Fieldbook.GridMajor, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
-            .paperBand(bleedX = 4.dp, bleedY = 0.dp)
             .padding(horizontal = 4.dp),
     ) {
         // 左の小さな積み木：自分のは道の色（オレンジ）、ほかの人のは紺

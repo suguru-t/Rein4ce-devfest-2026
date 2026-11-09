@@ -1,5 +1,9 @@
 package com.rein4ce.roadcollector.ui.settings
 
+import androidx.compose.ui.graphics.Color
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.PopCheck
+import com.rein4ce.roadcollector.ui.common.popBlock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,8 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,7 +50,8 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 @Composable
 fun HowToDialog(onClose: (dontShowAgain: Boolean) -> Unit) {
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
-    FramedDialog(title = "使い方", onDismiss = { onClose(dontShowAgain) }) {
+    // 設定の窓と同じポップな枠（決定 56）
+    FramedDialog(title = "使い方", onDismiss = { onClose(dontShowAgain) }, pop = true, nameTag = false) {
         HowToContent(firstTime = true)
         Row(
             modifier = Modifier
@@ -58,13 +61,10 @@ fun HowToDialog(onClose: (dontShowAgain: Boolean) -> Unit) {
                 .toggleable(value = dontShowAgain, onValueChange = { dontShowAgain = it }, role = Role.Checkbox),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Checkbox(
-                checked = dontShowAgain,
-                onCheckedChange = null, // 行ごと押せる（toggleable）
-                colors = CheckboxDefaults.colors(checkedColor = Fieldbook.Survey, uncheckedColor = Fieldbook.Muted),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("次回から表示しない", fontSize = 15.sp, color = Fieldbook.Ink)
+            // 行ごと押せる（toggleable）。印はブロックのチェック
+            PopCheck(checked = dontShowAgain)
+            Spacer(Modifier.width(12.dp))
+            Text("次回から表示しない", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink)
         }
     }
 }
@@ -78,41 +78,43 @@ fun HowToDialog(onClose: (dontShowAgain: Boolean) -> Unit) {
 @Composable
 internal fun ColumnScope.HowToContent(firstTime: Boolean = false) {
     Column(modifier = Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Step(Dest.Collect.iconOutline, Dest.Collect.label, "歩いた道が、積み木のパーツになります。「デモ散歩」でも試せます。")
-        Step(Dest.Inventory.iconOutline, Dest.Inventory.label, "集めたパーツが並びます。タップで大きく見て、名前を付けられます。")
-        Step(Dest.Stack.iconOutline, Dest.Stack.label, "コレクションで選んだパーツを、動かして回し、「置く」で積みます。長く歩いた道ほど大きく、雨や雪の日の道ほど滑ります。")
-        Step(Dest.Gallery.iconOutline, Dest.Gallery.label, "完成したタワーを送ると、みんなの高さの順位表に並びます。")
+        Step(Dest.Collect.iconOutline, Pop.Orange, Pop.Letter, Dest.Collect.label, "歩いた道が、積み木のパーツになります。「デモ散歩」でも試せます。")
+        Step(Dest.Inventory.iconOutline, Pop.Teal, Pop.Letter, Dest.Inventory.label, "集めたパーツが並びます。タップで大きく見て、名前を付けられます。")
+        Step(Dest.Stack.iconOutline, Pop.Yellow, Pop.InkOnYellow, Dest.Stack.label, "コレクションで選んだパーツを、動かして回し、「置く」で積みます。長く歩いた道ほど大きく、雨や雪の日の道ほど滑ります。")
+        Step(Dest.Gallery.iconOutline, Pop.Navy, Pop.Letter, Dest.Gallery.label, "完成したタワーを送ると、みんなの高さの順位表に並びます。")
     }
     Text(
         "ひとこと",
+        fontFamily = Pop.Rounded,
+        fontWeight = FontWeight.Black,
         fontSize = 13.sp,
-        fontWeight = FontWeight.Bold,
         color = Fieldbook.Muted,
         modifier = Modifier.padding(top = 18.dp, bottom = 2.dp).semantics { heading() },
     )
     Tip("パーツになるのは歩きとジョギングだけです。乗り物で動いた道は入りません。")
     Tip("歩いた場所はスマホの中だけに残り、サーバには送りません。")
     if (firstTime) {
-        Tip("この説明は、設定（右上の歯車）の「使い方」でいつでも見られます。")
+        Tip("この説明は、設定（ホームの右上の歯車）の「使い方」でいつでも見られます。")
     }
 }
 
-/** 1 つの画面の説明：左にタブと同じアイコン、右に画面の名前と説明 */
+/**
+ * 1 つの画面の説明：左に、ホームのボタンと同じ色の積み木に載せたタブのアイコン（[face] の面に [tint] の線）、右に画面の名前と説明
+ */
 @Composable
-private fun Step(icon: ImageVector, name: String, detail: String) {
+private fun Step(icon: ImageVector, face: Color, tint: Color, name: String, detail: String) {
     Row(modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.Top) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Fieldbook.Card),
+                .size(width = 38.dp, height = 41.dp)
+                .popBlock(face = face, corner = 10.dp, depth = 3.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink, modifier = Modifier.semantics { heading() })
+            Text(name, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.semantics { heading() })
             Text(detail, style = noteStyle, fontSize = 13.sp, color = Fieldbook.Ink)
         }
     }

@@ -3,7 +3,6 @@ package com.rein4ce.roadcollector.ui.collect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -28,14 +27,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,11 +56,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -103,11 +96,9 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
-import com.rein4ce.roadcollector.ui.TitleIntroState
 import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
 import com.rein4ce.roadcollector.ui.common.MenuHeading
 import com.rein4ce.roadcollector.ui.common.PressButton
-import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
@@ -116,6 +107,7 @@ import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.drawPart
@@ -123,7 +115,6 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.niceLength
-import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlinx.coroutines.Job
@@ -171,24 +162,22 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さと設定の歯車。
-        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
-        // 歯車がはみ出さないよう、長さの字は残りの幅に入れ、入りきらないときだけ小さくする
-        var showSettings by remember { mutableStateOf(false) }
+        // 見出し：左に画面名「みちのきろく」（ほかの画面の名前と同じ積み木。ui/common/Pop.kt の BlockWord）、右に歩いた長さ。
+        // 画面名の積み木は文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
+        // 長さの字は残りの幅に入れ、入りきらないときだけ小さくする
+        // （設定の歯車は、ホームの右上へ移した。決定 52。ui/settings/SettingsGearButton.kt）
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
-            // 開いたときのタイトル（ui/TitleIntro.kt）が、ここに飛んできて収まる。そのために場所を知らせ、
-            // 収まるまでは隠しておく（飛んでくる題字と、ここの題字が二重に見えないように）
-            TitleBlocks(
+            // 画面名は押すと動く（BlockWord）。落ちてくる最後の積み木が歩いた長さの上を通るよう、手前に描く
+            // （開いたときのタイトルは、ここではなくホームの題字に収まる。ui/HomeScreen.kt）
+            BlockWord(
+                "みちのきろく",
                 modifier = Modifier
                     .zIndex(1f)
-                    .padding(start = 4.dp, end = 12.dp)
-                    // タイトルが終わったら、もう知らせない（余計な更新をしない）
-                    .onGloballyPositioned { if (!TitleIntroState.done) TitleIntroState.anchor = it.boundsInRoot() }
-                    .graphicsLayer { alpha = if (TitleIntroState.done) 1f else 0f },
+                    // 左の端は、ほかの画面の名前と同じ所にそろえる
+                    .padding(end = 12.dp),
             )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
@@ -238,33 +227,7 @@ fun CollectScreen(
                     )
                 }
             }
-            // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
-            Spacer(Modifier.width(10.dp))
-            // 押すと歯車がくるっと半回転して止まってから、設定の窓が開く（窓が歯車の半分にかかるので、先に回して見せる）。
-            // 回っている間に押しても回り足さない（続けて押しても、1 回目の 0.4 秒後に開く。#77 のレビュー）。
-            // 次に押したときは同じ向きへ回り足す（歯車の歯は 8 つなので、半回転で止まっても形は同じ）。
-            // 端末の設定でアニメーションを切っている人には回さず、すぐ開く（Compose が設定に従う）
-            val gearTurn = remember { Animatable(0f) }
-            val gearScope = rememberCoroutineScope()
-            val gearJob = remember { mutableStateOf<Job?>(null) }
-            // 押したときの縮みと振動（#76 の押し心地）に、回転を重ねる
-            PressIconButton(onClick = {
-                if (gearJob.value?.isActive != true) {
-                    gearJob.value = gearScope.launch {
-                        gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
-                        showSettings = true
-                    }
-                }
-            }) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = "設定",
-                    tint = Fieldbook.Ink,
-                    modifier = Modifier.graphicsLayer { rotationZ = gearTurn.value },
-                )
-            }
         }
-        if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
 
         // 状態：記録中・再生中のときだけ、地図の左上に札（丸と文）を重ねる。停止中は何も出さない。
         // 地図の上に重ねるので、出たり消えたりしても地図は動かず、停止中に題字と地図のあいだが空かない
@@ -584,8 +547,15 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         position = CameraPosition.fromLatLngZoom(start, 16f)
     }
     val last = points.lastOrNull()
+    // 新しい点へ地図を動かす。なめらかに動かすのは、点が画面の中にあって、次の点まで時間があるときだけ。
+    // - デモ散歩の再生中は、3 秒で道を流しきるので点が数十ミリ秒ごとに来る。なめらかに動かすと、動き出すたびに次の点で
+    //   止められてほとんど進まず、指で地図をずらしていると歩く人が画面の外のままになる。そのため、すぐ移す
+    // - 点が画面の外（指で地図をずらした、記録の最初の点が遠い）なら、すぐ移して、今いる場所をすぐ見せる
     LaunchedEffect(last) {
-        if (last != null) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(last.lat, last.lng)))
+        if (last == null) return@LaunchedEffect
+        val target = CameraUpdateFactory.newLatLng(LatLng(last.lat, last.lng))
+        val onScreen = cameraPositionState.projection?.visibleRegion?.latLngBounds?.contains(LatLng(last.lat, last.lng)) == true
+        if (playingDemo || !onScreen) cameraPositionState.move(target) else cameraPositionState.animate(target)
     }
     // 記録していない間（と、記録を始めて最初の点が届くまで）の今いる場所。デモ散歩の再生中は、本当の場所を混ぜない
     val idleState = rememberIdleFix(enabled = !playingDemo && (!recording || last == null))
@@ -644,10 +614,16 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         if (last != null) {
             if (recording) {
                 // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
-                // 位置は、点から点へ飛ばさず、なめらかに動かす
+                // 位置は、点から点へ飛ばさず、なめらかに動かす。
+                // ただしデモ散歩の再生中は、地図と同じく、すぐ新しい点へ移す（点が数十ミリ秒ごとに来るので、なめらかに動かすと
+                // 動き出すたびに次の点で止められて十数点ぶん遅れ、地図を拡大していると人が画面の外に置いていかれる）
                 val target = LatLng(last.lat, last.lng)
                 var shown by remember { mutableStateOf(target) }
                 LaunchedEffect(target) {
+                    if (playingDemo) {
+                        shown = target
+                        return@LaunchedEffect
+                    }
                     val from = shown
                     animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
                         shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
@@ -822,11 +798,8 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier, recordi
         val lastPt = xy.last()
         val startAt = Offset(sx(first.x), sy(first.y))
         val goalAt = Offset(sx(lastPt.x), sy(lastPt.y))
-        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く
-        val spread = !recording && (goalAt - startAt).getDistance() < FlagWidth.toPx()
-        val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
-        if (!recording) drawFlag(goalAt, GoalFlagColor, mirrored = spread, tilt = -tilt)
-        drawFlag(startAt, StartFlagColor, tilt = tilt)
+        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く（StartGoalMarks.kt）
+        drawStartGoalFlags(startAt, goal = if (recording) null else goalAt)
         if (recording) {
             drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
             drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))

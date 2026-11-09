@@ -88,11 +88,13 @@ object ApiClient {
 
     /**
      * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。
-     * 名前が付かなかった（サーバが 503 を返した）・通信できなかったときは null。そのときは今の表示のままにする（decisions.md の 7）
+     * 名前が付かなかった（サーバが 503 を返した）・通信できなかったときは null。回数の上限を超えた（429）ときも同じ。そのときは今の表示のままにする（decisions.md の 7）
      */
     suspend fun namePart(part: Part): String? = try {
         client.post("$baseUrl/parts/name") {
             contentType(ContentType.Application.Json)
+            // 持ち主の印は、サーバが回数を数えるのにだけ使う（会場の Wi-Fi で全員が同じ IP に見えても、ほかの人のぶんまで止められないように。決定 57）
+            ownerId()?.let { header(OWNER_HEADER, it) }
             setBody(namingRequest(part))
         }.body<PartNameResponse>().name
     } catch (e: CancellationException) {
@@ -110,6 +112,7 @@ object ApiClient {
     suspend fun suggestNickname(hints: NicknameHints): String? = try {
         client.post("$baseUrl/nickname") {
             contentType(ContentType.Application.Json)
+            ownerId()?.let { header(OWNER_HEADER, it) } // 回数を数えるのにだけ使う（上と同じ）
             setBody(hints)
         }.body<PartNameResponse>().name
     } catch (e: CancellationException) {

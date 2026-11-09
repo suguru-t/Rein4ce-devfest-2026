@@ -1,6 +1,6 @@
 """
 起動画面（Android 12 以降）のアイコン app/src/main/res/drawable/splash_icon.xml を作る。
-上に積み木のアイコン（ic_launcher_foreground と同じ形）、すぐ下に題字「ミチツミ」（採集画面の題字と同じ積み木）。
+上に積み木のアイコン（ic_launcher_foreground と同じ形）、すぐ下に題字「ミチツミ」（ホームの題字と同じ積み木）。
 起動画面のアイコンで見えるのは、288dp の絵のまん中の直径 192dp の円の中だけなので、その中に収める。
 
 使い方（fonttools が要る。pip install fonttools）:
