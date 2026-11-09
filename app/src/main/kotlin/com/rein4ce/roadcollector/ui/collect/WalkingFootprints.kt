@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.rein4ce.roadcollector.ui.common.AppIcons.Foot
 import kotlin.math.floor
+import kotlinx.coroutines.delay
 
 /**
  * 歩いた長さの横の足跡（[com.rein4ce.roadcollector.ui.common.AppIcons.Footprints] と同じ形）。
@@ -55,6 +56,25 @@ internal suspend fun Animatable<Float, *>.walkFootprints(count: Int = 4) {
     for (i in 1..count) animateTo(i.toFloat(), tween(durationMillis = 260, easing = FastOutSlowInEasing))
     snapTo(0f)
 }
+
+/**
+ * 足跡を歩かせ続ける（記録中）。1 歩踏み出して少し止まる、をくり返す（[walkFootprints] と同じ 1 歩）。
+ * 止めるときは呼んだ側で取り消して、0 に戻す
+ */
+internal suspend fun Animatable<Float, *>.keepWalking() {
+    snapTo(0f)
+    var i = 0
+    while (true) {
+        // 値が大きくなりすぎないよう、偶数歩（見た目はアイコンと同じ並び）で 0 に戻す
+        if (i >= 1_000) { snapTo(0f); i = 0 }
+        i++
+        animateTo(i.toFloat(), tween(durationMillis = 260, easing = FastOutSlowInEasing))
+        delay(KEEP_WALKING_PAUSE_MS)
+    }
+}
+
+/** 記録中に歩き続けるときの、1 歩と次の 1 歩のあいだの止まっている時間 [ms]（1 歩 0.5 秒ほど。ゆっくり歩く速さ） */
+private const val KEEP_WALKING_PAUSE_MS = 240L
 
 /** 足跡 1 つ（足裏とかかと）。形はアイコンと同じ（[Foot]） */
 private fun DrawScope.footprint(cx: Float, top: Float, unit: Float, color: Color) {
