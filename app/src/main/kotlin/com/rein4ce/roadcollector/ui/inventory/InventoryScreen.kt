@@ -834,15 +834,16 @@ private const val MAP_LOGO_STRIP_DP = 28f
 /**
  * 見出しの右上の「選択」ボタン（選択中は「キャンセル」）。写真アプリと同じ位置・言葉。
  * 「みんな」の札と同じ丸いブロック。選ぶ印（図の右下の丸・選んだカードの破線）と同じ測量の青で、選択中は塗る。
+ * 塗った面は白い字が読める濃さの [Fieldbook.SurveyFace]、カードの面に書く字と縁は [Fieldbook.SurveyInk]（ダークでも 4.5:1 を超える）。
  * 押せる範囲は高さ 48dp
  */
 @Composable
 private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     PopChip(
         if (selecting) "キャンセル" else "選択",
-        face = if (selecting) Fieldbook.Survey else Fieldbook.Card,
-        text = if (selecting) Pop.Letter else Fieldbook.Survey,
-        edge = if (selecting) null else Fieldbook.Survey,
+        face = if (selecting) Fieldbook.SurveyFace else Fieldbook.Card,
+        text = if (selecting) Pop.Letter else Fieldbook.SurveyInk,
+        edge = if (selecting) null else Fieldbook.SurveyInk,
         depth = if (selecting) 4.dp else 2.dp,
         tiltDeg = if (selecting) 2f else 0f,
         modifier = modifier.heightIn(min = 48.dp),
@@ -851,7 +852,7 @@ private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modi
 }
 
 /**
- * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青（白い数字が読める濃さの [Fieldbook.SurveyFace]）で塗って積む順の数字を入れる。
  * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
@@ -883,7 +884,7 @@ internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: (
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(if (selected) Fieldbook.Survey else Fieldbook.Card.copy(alpha = 0.92f))
+                .background(if (selected) Fieldbook.SurveyFace else Fieldbook.Card.copy(alpha = 0.92f))
                 .border(
                     BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
                     CircleShape,
