@@ -84,7 +84,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * - 毎日 1 つずつ積む：#106 で中身を決める
  */
 enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
-    NORMAL("通常", "5 本のパーツを積んで、高さを測る", ready = true),
+    NORMAL("通常", "パーツを 5 本まで積んで、高さを測る", ready = true),
     CHALLENGE("3 分チャレンジ", "3 分のあいだに、ピースを高く積む", ready = false),
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = false),
 }
@@ -94,7 +94,8 @@ enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
  *
  * コレクションで選んだパーツの「積む」と、積む画面の「パーツを選ぶ」は、新しい開始要求（[GameSession.StartRequest]）を出す。
  * まだ始めていない要求が来たら、選ぶ画面を飛ばして通常で始める（選んだパーツで積みたいのが分かっているので）。
- * 1 つの要求で飛ぶのは 1 回だけ（[jumpedFor]）。そのあと「戻る」で選ぶ画面に戻れる（要求のパーツが消えていて始められないときも）
+ * 1 つの要求で飛ぶのは 1 回だけ（[jumpedFor]。[StackTabState.jumpedFor] に覚える）。そのあと「戻る」で選ぶ画面に戻れる
+ * （要求のパーツが消えていて始められないときも）
  *
  * @param chosen    選ぶ画面で選んだモード（戻ると null）
  * @param jumpedFor 通常へ飛んだ開始要求の id
@@ -108,6 +109,13 @@ internal fun shownMode(chosen: PlayMode?, request: GameSession.StartRequest?, ju
  */
 internal object StackTabState {
     var selecting by mutableStateOf(false)
+
+    /**
+     * 選ぶ画面を飛ばして通常へ移った開始要求の id（[shownMode]）。開始要求（[GameSession]）と同じく、アプリのプロセスの中だけで覚える。
+     * 要求の番号はプロセスごとに 1 から数え直すので、画面の保存（rememberSaveable）に残すと、裏でプロセスが終わって復元されたあとの
+     * 新しい要求と番号が重なり、飛ばずに選ぶ画面が出ることがある（#117 の C のレビュー）。タブを移っても、画面を作り直しても残る
+     */
+    var jumpedFor by mutableStateOf<Long?>(null)
 }
 
 /**
@@ -120,14 +128,13 @@ internal object StackTabState {
 @Composable
 fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
-    var jumpedFor by rememberSaveable { mutableStateOf<Long?>(null) }
     val request = GameSession.startRequest
     // 最初のコマから通常を出す（選ぶ画面が一瞬見えないように）。覚えるのは次の LaunchedEffect
-    val mode = shownMode(chosen, request, jumpedFor)
+    val mode = shownMode(chosen, request, StackTabState.jumpedFor)
     LaunchedEffect(request) {
-        if (request != null && !request.started && request.id != jumpedFor) {
+        if (request != null && !request.started && request.id != StackTabState.jumpedFor) {
             chosen = PlayMode.NORMAL
-            jumpedFor = request.id
+            StackTabState.jumpedFor = request.id
         }
     }
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
