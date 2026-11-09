@@ -390,6 +390,29 @@ object AppIcons {
         }
     }
 
+    /**
+     * 入れ替え（積む画面の通常モードの「チェンジ」）：上は右向き、下は左向きの矢印（トランプのリバースのように、向きが逆の 2 本）。
+     * 積み木の上で読めるよう、ほかの線画より太い線で描く
+     */
+    val Swap: ImageVector by lazy {
+        icon("Swap") {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.6f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                // 上の矢印（左から右へ）
+                moveTo(4f, 8f); lineTo(19f, 8f)
+                moveTo(15f, 4f); lineTo(19f, 8f); lineTo(15f, 12f)
+                // 下の矢印（右から左へ）
+                moveTo(20f, 16f); lineTo(5f, 16f)
+                moveTo(9f, 12f); lineTo(5f, 16f); lineTo(9f, 20f)
+            }
+        }
+    }
+
     // ---- 動かすアイコン用の形（下のタブで、選ばれたときに部品ごとに動かす。ui/TabIcons.kt） ----
 
     private fun shape(build: PathBuilder.() -> Unit): Path = PathBuilder().apply(build).nodes.toPath()
