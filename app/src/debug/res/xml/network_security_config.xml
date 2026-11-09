@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通信の決まり（開発用：debug ビルドだけ）。手元で動かすサーバ（エミュレータからは http://10.0.2.2:8080、
+  実機からは同じ Wi-Fi のパソコンの http://192.168.…:8080）に http でつなげるよう、暗号化しない通信も許す。
+  本番（release）は src/main/res/xml の同じ名前のファイルで、http は許さない（決定 47・docs/security.md）
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
