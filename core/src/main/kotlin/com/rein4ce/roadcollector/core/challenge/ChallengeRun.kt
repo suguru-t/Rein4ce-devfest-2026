@@ -19,9 +19,11 @@ import kotlin.math.min
  * - v2：途中の揺れ待ちは 6 秒まで
  * - v3：途中の揺れ待ちを 3 秒までにした（塔が揺れていても、すぐ次の形を積めるように。#78 のユーザーの依頼）
  * - v4：パーツの回転の減衰を 0.3 から 3.0 にした（着地で跳ねすぎないように。#110・決定 63）。積み方が変わるので、v3 までの記録とは混ぜない
+ * - v5：台を通常と同じ 2.8 m にした（[PLATFORM_WIDTH_M]。決定 69）。画面で遊べるのは自分で落とすだけ（自動で落ちるの決まりは core に残す）
+ * - v6：回転の 15° のきざみをやめた（「回す」を押している間なめらかに回る。決定 71）。狙える向きが変わるので、v5 までの記録とは混ぜない
  */
 object ChallengeRules {
-    const val ID = "manual-180-v4"
+    const val ID = "manual-180-v6"
     const val DURATION_NS = 180_000_000_000L
 
     /** 置いてから、止まっていても次へ進まない時間 [s]（置いた直後の一瞬の静止を拾わないため） */
@@ -33,8 +35,19 @@ object ChallengeRules {
     /** 締切のあと、塔が止まるのを待つ上限 [s]。止まらなければ記録に残さない（浮いている高さを記録しない。#41） */
     const val FINAL_WAIT_S = 6.0
 
-    /** 「自動で落ちる」（A 案）の決まりの ID。自分で落とす（[ID]）とは記録を混ぜない（#45・決定 65） */
-    const val AUTO_ID = "auto-180-v1"
+    /**
+     * 「自動で落ちる」（A 案）の決まりの ID。自分で落とす（[ID]）とは記録を混ぜない（#45・決定 65）。
+     * v2：「置く」のボタンをやめ、下がるのを待たずにすぐ落とすことができなくなった（3 分で積める数が変わる。決定 67）。
+     * v3：台を通常と同じ 2.8 m にした（決定 69）。
+     * v4：回転の 15° のきざみをやめた（決定 71）
+     */
+    const val AUTO_ID = "auto-180-v4"
+
+    /**
+     * 台の幅 [m]。通常（積む画面の StackViewModel.PLATFORM_WIDTH_M）と同じ 2.8 m（決定 69。共通の台の長さにそろえる）。
+     * 前は StackWorld の既定（1.4 m）だった
+     */
+    const val PLATFORM_WIDTH_M = 2.8
 
     /** 「自動で落ちる」で、狙っている形が下がる速さ [m/s]。出てくる高さ（塔の上 1.3 m）から塔に着くまで 2〜3 秒 */
     const val AUTO_FALL_SPEED_M_S = 0.4
@@ -52,7 +65,7 @@ object ChallengeRules {
  * 3分チャレンジの遊び方（#45）。決まりが違うので、記録は [ruleId] で分けて混ぜない
  */
 enum class ChallengeStyle(val ruleId: String) {
-    /** B 案：狙っている間、形は出てきた高さで止まっていて、「置く」で落とす */
+    /** B 案：狙っている間、形は出てきた高さで止まっていて、「置く」（[ChallengeRun.place]。画面では指を離したとき。決定 67）で落とす */
     MANUAL(ChallengeRules.ID),
 
     /**
@@ -104,7 +117,7 @@ class ChallengeRun(
     val runId: String = UUID.randomUUID().toString(),
     private val clock: () -> Long = System::nanoTime,
     private val wallClock: () -> Long = System::currentTimeMillis,
-    private val world: StackWorld = StackWorld(),
+    private val world: StackWorld = StackWorld(platformWidth = ChallengeRules.PLATFORM_WIDTH_M),
 ) {
     enum class Phase { AIMING, FALLING, FINALIZING, FINISHED, UNRESOLVED }
 
@@ -285,8 +298,8 @@ class ChallengeRun(
         /** 自動で落ちる形が、塔にも台にも触れずにここまで下がったら（台の外を下がった）、そこで落とす [m] */
         const val LOST_BELOW_M = -1.0
 
-        /** 左右に動かせる範囲 [m] */
-        const val MOVE_LIMIT_M = 1.5
+        /** 左右に動かせる範囲 [m]。台（2.8 m）の端から 0.8 m 外まで（通常と同じ。決定 69。台が 1.4 m のころは 1.5） */
+        const val MOVE_LIMIT_M = ChallengeRules.PLATFORM_WIDTH_M / 2 + 0.8
 
         /** 形の原点から、いちばん遠い点までの距離 [m]。どう回しても、この半径の円に収まる（チャレンジの形は大きさ 1 倍） */
         fun reachOf(part: Part): Double {

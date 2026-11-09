@@ -12,6 +12,8 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.core.physics.WeatherBonus
+import com.rein4ce.roadcollector.core.physics.enlarged
 import com.rein4ce.roadcollector.data.PartOrigin
 import com.rein4ce.roadcollector.data.WalkDistance
 import com.rein4ce.roadcollector.data.walkDistance
@@ -28,7 +30,10 @@ import kotlin.random.Random
  * 通常モード（決定 62・#108）：コレクションの全部のパーツから、ランダムに 1 つずつ出す（同じパーツが何度出てもよい）。
  * 置いたら次が出て、終わりなく続く。パーツが 1 つでも台から落ちたら終わりで、塔が落ち着くのを待ってから、そのときの高さで結果を固定する。
  *
- * Placing    … 出てきた 1 個をドラッグ・回転して「置く」
+ * 終わったときに台の上に残っていたパーツの天気（すべりやすさ）で、模型を大きくする（天気のボーナス。[WeatherBonus]・決定 68）。
+ * 記録する高さと「みんな」に送るタワーは、大きくしたあとのもの（[StackResult.finalHeight]・[StackResult.uploadTower]）
+ *
+ * Placing    … 出てきた 1 個をドラッグ・回転して、指を離して落とす（決定 67。前は「置く」のボタン）
  * Settling   … 落下中。塔全体が止まったら次へ（落ちたパーツがあれば終わり）。落ちたパーツは、落ちた時点で取り除いて数える
  * Finished   … パーツが落ちて終わり、塔全体が止まったのを確かめた。結果（[result]）を固定し、物理も止める
  * Unresolved … 終わったあと、上限の時間までに塔が止まらなかった（判定できない）。結果は見せるが送信はできない
@@ -62,6 +67,10 @@ class StackViewModel(
      * @property fallenCount 落ちたパーツの数（置いたあとに崩れて落ちたものも含む）
      * @property settled     終わったあと、塔全体が止まったのを確かめられたか
      * @property walked      置いたパーツ（落ちたものも含む。同じパーツは 1 回）のうち、本当に歩いた道の距離
+     * @property tower       物理で積んだままの塔（大きくする前。画面の物理の形と同じ）
+     * @property bonus       天気のボーナス（台の上に残っていたパーツの天気から。決定 68）
+     * @property bonusMarks  ボーナスの付いたパーツ（くもり・霧・霧雨・雨・雪）の、すべりやすさと位置。低い順。
+     *   終わったときに、1 つずつ上に「雪 +0.20」の札を出してから塔を大きくする（なぜ大きくなったか分かるように）
      */
     data class StackResult(
         val tower: Tower,
@@ -69,7 +78,15 @@ class StackViewModel(
         val fallenCount: Int,
         val settled: Boolean,
         val walked: WalkDistance = WalkDistance.NONE,
+        val bonus: WeatherBonus.Result = WeatherBonus.NONE,
+        val bonusMarks: List<StackWorld.PlacedMark> = emptyList(),
     ) {
+        /** 天気のボーナスで大きくしたあとの模型の高さ [m]。終わりのカード・高さのメーター・自分の最高に使う */
+        val finalHeight: Float get() = (tower.height * bonus.multiplier).toFloat()
+
+        /** 「みんな」に送るタワー：天気のボーナスの倍率で、塔ごと大きくしたもの（台の上面のまん中を中心に） */
+        val uploadTower: Tower get() = tower.enlarged(bonus.multiplier)
+
         /** 台の上に残ったパーツの数（同じパーツを何度も置いたら、その数だけ） */
         val remainingCount: Int get() = tower.placements.size
 
@@ -125,6 +142,10 @@ class StackViewModel(
     var height: Float by mutableStateOf(0f)
         private set
     var fallenCount: Int by mutableStateOf(0)
+        private set
+
+    /** いま台の上に残っているパーツの天気のボーナス（パーツが止まったときに数え直す。終わったときは [StackResult.bonus] と同じ） */
+    var bonus: WeatherBonus.Result by mutableStateOf(WeatherBonus.NONE)
         private set
 
     /** ゴースト（置く前のパーツ）の位置と角度。x [m]、角度は度（反時計回り正） */
@@ -217,6 +238,7 @@ class StackViewModel(
         gameOver = false
         height = 0f
         fallenCount = 0
+        bonus = WeatherBonus.NONE
         uploadMessage = null
         shapes = world.renderShapes()
         nextPart()
@@ -229,6 +251,8 @@ class StackViewModel(
     private fun nextPart(settled: Boolean = true) {
         ghostX = 0f
         ghostAngleDeg = 0f
+        // 台の上に残っているパーツで数える（落ちたパーツは、落ちた時点で取り除いている）
+        bonus = WeatherBonus.of(world.placedGrips)
         if (gameOver) {
             current = null
             val used = placedSequence.distinctBy { it.id }
@@ -246,6 +270,8 @@ class StackViewModel(
                 fallenCount = fallenCount,
                 settled = settled,
                 walked = walkDistance(used, sessionOrigins),
+                bonus = bonus,
+                bonusMarks = world.placedMarks().filter { it.grip.bonusPercent > 0 }.sortedBy { it.topY },
             )
             phase = if (settled) Phase.Finished else Phase.Unresolved
         } else {
@@ -261,7 +287,8 @@ class StackViewModel(
      * - 次のパーツを狙うとき：大きさは変えず、出てくる範囲のいちばん上（出てくる高さ＋どう回しても入る半径）が入るところまで
      *   カメラを上げる。縮めると、同じ指の動きでパーツが大きく動き、細かく狙いたい高い塔ほど狙いにくくなるため（#70 のレビュー）
      * - 置き切ったとき：台と、台の上に残っているパーツが全部入るように引く。全体が台の下面より下にあるパーツ
-     *   （落ちている途中のもの）は入れない（落ちていくパーツを入れようとして小さくなりすぎないように）
+     *   （落ちている途中のもの）は入れない（落ちていくパーツを入れようとして小さくなりすぎないように）。
+     *   天気のボーナスで模型を大きくするので（決定 68）、大きくしたあとの塔と台が入るように、範囲も同じ倍率で広げる
      */
     private fun computeCamera(): CameraTarget {
         val part = current
@@ -273,7 +300,8 @@ class StackViewModel(
             val bounds = shapesOfPart.map { it.bounds() }.reduce(WorldRect::union)
             if (bounds.maxY >= bottom) focus = focus.union(bounds)
         }
-        return CameraTarget.Overview(focus)
+        val m = (result?.bonus?.multiplier ?: 1.0).toFloat()
+        return CameraTarget.Overview(WorldRect(focus.minX * m, focus.maxX * m, focus.minY * m, focus.maxY * m))
     }
 
     /**
@@ -376,7 +404,8 @@ class StackViewModel(
     }
 
     fun upload() {
-        val tower = result?.tower ?: return
+        // 天気のボーナスで大きくしたあとの塔を送る（決定 68）
+        val tower = result?.uploadTower ?: return
         if (!canUpload || uploading || uploaded) return
         val uploadingRunId = runId
         uploading = true
@@ -385,12 +414,12 @@ class StackViewModel(
                 val response = postTower(tower)
                 if (runId == uploadingRunId) {
                     uploadedRunId = uploadingRunId
-                    uploadMessage = "送信しました：${response.url}"
+                    uploadMessage = "保存しました：${response.url}"
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (runId == uploadingRunId) uploadMessage = "送信できませんでした（${serverUrl()}）：${e.message}"
+                if (runId == uploadingRunId) uploadMessage = "保存できませんでした（${serverUrl()}）：${e.message}"
             } finally {
                 if (runId == uploadingRunId) uploading = false
             }

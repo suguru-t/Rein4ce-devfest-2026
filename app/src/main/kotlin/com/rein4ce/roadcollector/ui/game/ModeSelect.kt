@@ -110,17 +110,18 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
             ModePlayPage(PlayMode.NORMAL, onBack = { chosen = null }) { leading ->
                 StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
-            // 終わって塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
+            // 終わって塔が止まり、パーツが残ったら（「保存」できる結果）、通常の最高を更新する。
+            // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
             val vm: StackViewModel = viewModel()
             val canUpload = vm.canUpload
             LaunchedEffect(vm.runId, canUpload) {
-                if (canUpload) vm.result?.let { records.submitNormal(it.tower.height) }
+                if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
             }
         }
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
-            // 時計と物理は、この画面を離れると止まる（ChallengeScreen のフレームのループ）。戻ってくると続きから
+            // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
             ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
         }
         PlayMode.DAILY -> {
@@ -129,10 +130,11 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         }
         null -> {
             val best by records.normalBest.collectAsStateWithLifecycle()
-            // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）
+            // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
+            // 画面で遊べる遊び方（自分で落とす。決定 69）の記録の最高
             val directory = LocalContext.current.applicationContext.filesDir
             val challengeBest by produceState<Double?>(null, directory) {
-                value = runCatching { ChallengeStorage(directory).update(null).maxOfOrNull { it.height } }.getOrNull()
+                value = runCatching { ChallengeStorage(directory).ranking(ChallengeViewModel.PLAYABLE_STYLE.ruleId).maxOfOrNull { it.height } }.getOrNull()
             }
             // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
             val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower

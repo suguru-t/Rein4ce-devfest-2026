@@ -71,13 +71,13 @@ class ChallengeViewModel(
         private set
 
     /**
-     * 遊び方（自分で落とす・自動で落ちる。#45・決定 65）。始める前の画面で選ぶ。記録の一覧もこれで分ける
+     * 遊び方（[PLAYABLE_STYLE]）。記録の一覧もこの決まりの ID で読む
      */
-    var style by mutableStateOf(ChallengeStyle.MANUAL)
-        private set
+    val style = PLAYABLE_STYLE
 
     /**
-     * いま狙っている形の高さ [m]。自動で落ちるときは毎コマ下がるので、フレーム（[frame]）には入れず、キャンバスの描画の中だけで読む
+     * いま狙っている形の高さ [m]。自分で落とすときは出てくる高さのまま。自動で落ちる（core に残している）ときは毎コマ下がるので、
+     * フレーム（[frame]）には入れず、キャンバスの描画の中だけで読む
      */
     var ghostY by mutableFloatStateOf(0f)
         private set
@@ -114,14 +114,7 @@ class ChallengeViewModel(
         refreshRecords()
     }
 
-    /** 遊び方を選ぶ（始める前だけ）。記録の一覧を、その遊び方のものに読み直す */
-    fun selectStyle(next: ChallengeStyle) {
-        if (frame != null || next == style) return
-        style = next
-        ranking = emptyList()
-        load()
-    }
-
+    /** 新しい回を始める。画面を開いたとき（始めるボタンは無い。決定 69）と、終わったあとの「もう一度」 */
     fun start() {
         if (!canStart) return
         run?.pause()
@@ -138,9 +131,12 @@ class ChallengeViewModel(
         start()
     }
 
-    /** 「中断」：今の回を記録に残さずに捨てて、始める前の画面（説明とランキング）に戻る */
-    fun abandon() {
-        if (frame?.terminal == true) return
+    /**
+     * 画面を離れた（「‹ 戻る」・ほかのタブ）：今の回を捨てる。次に開いたときは、その前の段階を引き継がず新しい回から（決定 69）。
+     * 遊んでいる途中（締切のあとに塔が落ち着くのを待っている間も）の回は記録に残さない。
+     * 終わった回の記録は、結果が出たときに保存を始めているので、離れても保存は続く
+     */
+    fun leave() {
         run?.pause()
         run = null
         frame = null
@@ -244,5 +240,11 @@ class ChallengeViewModel(
 
         /** 始める前の残り時間の表示 [秒]（3:00） */
         val FULL_SECONDS = (ChallengeRules.DURATION_NS / NS_PER_SECOND).toInt()
+
+        /**
+         * 画面で遊べる遊び方。自分で落とす（ドラッグして、指を離すと落ちる）だけ（決定 69）。遊び方を選ぶ画面のカードの最高も、この決まりの記録。
+         * 自動で落ちる（[ChallengeStyle.AUTO]）は core に残っているが、画面からは選べない（前は始める前の画面で選んでいた。決定 65）
+         */
+        val PLAYABLE_STYLE = ChallengeStyle.MANUAL
     }
 }

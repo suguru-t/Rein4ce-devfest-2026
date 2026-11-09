@@ -50,8 +50,29 @@ class StackWorld(
     /** 置いたパーツの大きさ（長辺 [m]）。保存する配置（[placements]）に入れる */
     private val scales = HashMap<Body, Double>()
 
+    /** 置いたパーツのすべりやすさ（天気のボーナスを数えるため。決定 68） */
+    private val grips = HashMap<Body, Grip>()
+
+    /** 固めたパーツ（[freeze]）。動かないので、止まったか（[isSettled]）は見ない */
+    private val frozen = HashSet<Body>()
+
     /** 置かれているパーツ（落下で消えたものは含まない） */
     val placedParts: List<Part> get() = placed.values.toList()
+
+    /** 置かれているパーツのすべりやすさ（落下で消えたものは含まない。置いた数だけ並ぶ）。天気のボーナス（[WeatherBonus]）を数える */
+    val placedGrips: List<Grip> get() = placed.keys.map { grips[it] ?: Grip.NORMAL }
+
+    /**
+     * 置いたパーツ 1 つの、すべりやすさと、てっぺんのまん中の位置 [m]（当たり判定の形を囲む長方形の上の辺のまん中）。
+     * 終わったときに、天気のボーナスの付いたパーツの上に「雪 +0.20」の札を出す場所（決定 68）
+     */
+    data class PlacedMark(val grip: Grip, val x: Double, val topY: Double)
+
+    /** 置かれているパーツごとの [PlacedMark]（落下で消えたものは含まない。置いた順） */
+    fun placedMarks(): List<PlacedMark> = placed.keys.map { body ->
+        val box = body.createAABB()
+        PlacedMark(grips[body] ?: Grip.NORMAL, (box.minX + box.maxX) / 2, box.maxY)
+    }
 
     init {
         val s = world.settings
@@ -90,7 +111,22 @@ class StackWorld(
         placed[body] = part
         visuals[body] = PartGeometry.shapes(part, scale)
         scales[body] = scale
+        grips[body] = grip
         return body
+    }
+
+    /**
+     * 置いたパーツ（[place] が返したもの）を、その場で固める。重さを無限にして、台と同じく、ぶつかっても動かず落ちもしない。
+     * 毎日 1 つずつ積むで、昨日までの塔を固めるのに使う（決定 70。今日のパーツが当たっても崩れないように）。
+     * 固めたパーツも、塔の高さ・保存する配置・描く形には入る
+     */
+    fun freeze(body: Body) {
+        require(body in placed) { "置いたパーツだけ固められる" }
+        body.setMass(MassType.INFINITE)
+        body.linearVelocity.zero()
+        body.angularVelocity = 0.0
+        body.setAtRest(true)
+        frozen += body
     }
 
     /**
@@ -123,11 +159,11 @@ class StackWorld(
         world.update(elapsedSeconds.coerceIn(0.0, 0.1), 5)
     }
 
-    /** 全パーツが静止しているか。 */
-    fun isSettled(): Boolean = placed.keys.all { it.isAtRest }
+    /** 全パーツが静止しているか（固めたパーツ（[freeze]）は動かないので見ない）。 */
+    fun isSettled(): Boolean = placed.keys.all { it in frozen || it.isAtRest }
 
-    /** まだ動いているパーツの数。 */
-    fun movingCount(): Int = placed.keys.count { !it.isAtRest }
+    /** まだ動いているパーツの数（固めたパーツは数えない）。 */
+    fun movingCount(): Int = placed.keys.count { it !in frozen && !it.isAtRest }
 
     /** 台から落ちたパーツをワールドから外して返す。 */
     fun removeFallen(): List<Part> {
@@ -136,6 +172,8 @@ class StackWorld(
         fallen.forEach {
             visuals.remove(it)
             scales.remove(it)
+            grips.remove(it)
+            frozen.remove(it)
         }
         fallen.forEach { world.removeBody(it) }
         return parts
@@ -168,6 +206,8 @@ class StackWorld(
         placed.clear()
         visuals.clear()
         scales.clear()
+        grips.clear()
+        frozen.clear()
     }
 
     // ---- 描画用 ----

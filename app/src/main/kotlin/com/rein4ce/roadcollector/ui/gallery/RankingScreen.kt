@@ -154,7 +154,7 @@ internal fun RankingScreen(
                     .padding(14.dp),
             ) {
                 Text("まだ送っていません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("積んで「サーバに送信」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("積んで「保存」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
             }
         }
         LazyColumn(
