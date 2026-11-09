@@ -195,7 +195,7 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEachIndexed { i, s ->
+        options.forEach { s ->
             val selected = s == sort
             val source = remember { MutableInteractionSource() }
             Box(
@@ -220,8 +220,6 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     color = if (selected) Pop.Letter else sortInk(s),
                     maxLines = 1,
                     modifier = Modifier
-                        // 選んでいる札だけ少し傾けて、積み木を置いたように
-                        .graphicsLayer { rotationZ = if (selected) (if (i % 2 == 0) -2f else 2f) else 0f }
                         .popBlock(
                             face = if (selected) sortFace(s) else Fieldbook.Card,
                             corner = 50.dp,

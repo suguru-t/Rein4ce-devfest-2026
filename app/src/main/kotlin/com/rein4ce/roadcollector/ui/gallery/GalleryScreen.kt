@@ -398,9 +398,9 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         }
         Spacer(Modifier.height(4.dp))
         when {
-            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札
-            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter, tiltDeg = -2f)
-            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow, tiltDeg = -2f)
+            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札。数字の下にそろえて、傾けずに水平に置く
+            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter)
+            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow)
             else -> Text(
                 sub,
                 fontFamily = Pop.Rounded,
