@@ -338,6 +338,58 @@ object AppIcons {
         }
     }
 
+    // ---- 積む画面のモード（モードを選ぶ画面の積み木に載せる塗りのアイコン。ui/game/ModeSelect.kt） ----
+
+    /** ストップウォッチ（3 分チャレンジ）：丸い文字盤に針をくり抜き、上に押すつまみ、右上に小さなボタン */
+    val Stopwatch: ImageVector by lazy {
+        icon("Stopwatch") {
+            // 文字盤と、くり抜いた針（12 時から少し右へ。偶奇の塗りで穴にする）
+            filled(evenOdd = true) {
+                ellipse(12f, 13.6f, 8.2f, 8.2f)
+                moveTo(11.1f, 8.4f)
+                lineTo(12.9f, 8.4f)
+                lineTo(12.9f, 13.1f)
+                lineTo(15.6f, 15.8f)
+                lineTo(14.3f, 17.1f)
+                lineTo(11.1f, 13.9f)
+                close()
+            }
+            // 上のつまみ（横長の頭と、文字盤へつながる軸）
+            filled { roundRect(9.4f, 1.6f, 5.2f, 2.3f, 1f) }
+            filled { roundRect(11.1f, 3.4f, 1.8f, 2.5f, 0.4f) }
+            // 右上の小さなボタン（斜め）
+            filled {
+                moveTo(17.3f, 6.1f)
+                lineTo(18.7f, 4.7f)
+                lineTo(20.5f, 6.5f)
+                lineTo(19.1f, 7.9f)
+                close()
+            }
+        }
+    }
+
+    /** カレンダー（毎日 1 つずつ積む）：上に 2 つのリング、見出しの線と日のます目をくり抜く */
+    val Calendar: ImageVector by lazy {
+        icon("Calendar") {
+            filled(evenOdd = true) {
+                roundRect(2.8f, 4.4f, 18.4f, 17f, 2.4f)
+                // 見出しと日付のあいだの線
+                roundRect(2.8f, 8.9f, 18.4f, 1.2f, 0f)
+                // 日のます目（2 段 × 3 列）
+                for (row in 0..1) {
+                    for (col in 0..2) {
+                        val l = 5.6f + col * 4.7f
+                        val t = 12.3f + row * 4.5f
+                        roundRect(l, t, 3.4f, 2.9f, 0.6f)
+                    }
+                }
+            }
+            // リング
+            filled { roundRect(6.6f, 2.0f, 2.4f, 4.6f, 1.2f) }
+            filled { roundRect(15.0f, 2.0f, 2.4f, 4.6f, 1.2f) }
+        }
+    }
+
     // ---- 動かすアイコン用の形（下のタブで、選ばれたときに部品ごとに動かす。ui/TabIcons.kt） ----
 
     private fun shape(build: PathBuilder.() -> Unit): Path = PathBuilder().apply(build).nodes.toPath()

@@ -44,6 +44,8 @@ SOURCES = [
     APP / "ui/game/StackScreen.kt",
     # 名前を付ける窓（「保存」「AI に考えてもらう」。パーツの名前とニックネーム）
     APP / "ui/common/NameField.kt",
+    # 積む画面のモードを選ぶ画面（画面名「みちをつむ」・モードの名前と一言・記録・「‹ 戻る」）
+    APP / "ui/game/ModeSelect.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）
