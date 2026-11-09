@@ -209,9 +209,9 @@ fun StackScreen(
                     }
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                // 画面名「ツム」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
+                // 画面名「つむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
                 // 押すと動く。積み木は文字の大きさの設定では大きくしない（dp で決める）
-                BlockWord("ツム", modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
+                BlockWord("つむ", modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
                 // 字は「みんな」・コレクションと同じ太い丸ゴシック。方眼の紙と天気の上に直接書くので、紙の色の縁取りを付ける（SkyText。決定 59）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
