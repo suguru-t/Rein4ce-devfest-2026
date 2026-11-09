@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通信の決まり（本番：release ビルド）。暗号化しない通信（http）は許さない。
+  つなぐ先（サーバの Cloud Run・天気の Open-Meteo・Google の地図）はどれも https なので、これで困ることはない。
+  debug ビルドは src/debug/res/xml の同じ名前のファイルが代わりに使われ、手元のサーバに http でつなげる（決定 47・docs/security.md）
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

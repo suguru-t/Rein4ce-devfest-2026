@@ -7,6 +7,7 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.content.res.Resources
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -57,6 +58,13 @@ class MainActivity : ComponentActivity() {
         if (!showIntro) TitleIntroState.done = true
         enableEdgeToEdge()
         val settings = RoadCollectorApp.from(this).settings
+        // BGM：設定は、画面ができる前に渡しておく（オフにしている人に、開いた瞬間だけ鳴らないように）
+        volumeControlStream = volumeStreamFor(settings.bgmOn.value, settings.sfxOn.value)
+        val bgm = RoadCollectorApp.from(this).bgm
+        bgm.setTrack(settings.bgmTrack.value)
+        bgm.setSettings(settings.bgmOn.value, settings.bgmVolume.value)
+        // 効果音は、最初に押したボタンから鳴るように、画面ができる前に読み込みを始めておく
+        RoadCollectorApp.from(this).sfx
         setContent {
             // 画面の明るさ：設定（採集画面の歯車）と、端末のダークテーマから決める
             val mode by settings.themeMode.collectAsStateWithLifecycle()
@@ -76,6 +84,15 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 LaunchedEffect(mode) { splashScreen.setSplashScreenTheme(splashThemeFor(mode)) }
             }
+            // BGM のオン・オフと音量が変わったら、すぐに効かせる（設定の画面で動かしながら聞ける）
+            val bgmOn by settings.bgmOn.collectAsStateWithLifecycle()
+            val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
+            val sfxOn by settings.sfxOn.collectAsStateWithLifecycle()
+            LaunchedEffect(bgmOn, bgmVolume) { bgm.setSettings(bgmOn, bgmVolume) }
+            // 曲を選び直したら、すぐに切り替える（設定の画面で聞き比べられる）
+            val bgmTrack by settings.bgmTrack.collectAsStateWithLifecycle()
+            LaunchedEffect(bgmTrack) { bgm.setTrack(bgmTrack) }
+            LaunchedEffect(bgmOn, sfxOn) { volumeControlStream = volumeStreamFor(bgmOn, sfxOn) }
             // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
             val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
             val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
@@ -95,6 +112,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 音量ボタンで動かす音量。BGM か効果音がオンなら、メディアの音量（曲の音と音のあいだに押しても、BGM・効果音の大きさが変わる）。
+     * どちらもオフなら端末にまかせる（ほかのアプリと同じく、着信音などの音量が動く。#86 の C のレビュー）
+     */
+    private fun volumeStreamFor(bgmOn: Boolean, sfxOn: Boolean) =
+        if (bgmOn || sfxOn) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
+
+    // BGM は、アプリが前に出ている間だけ流す（ほかのアプリを見ているとき・記録中に画面を消したときは止める）
+    override fun onStart() {
+        super.onStart()
+        RoadCollectorApp.from(this).bgm.setForeground(true)
+    }
+
+    override fun onStop() {
+        RoadCollectorApp.from(this).bgm.setForeground(false)
+        super.onStop()
     }
 
     /** 起動画面のテーマ。「端末に合わせる」なら決めない（マニフェストのテーマのまま、端末のダークテーマで地の色が決まる） */

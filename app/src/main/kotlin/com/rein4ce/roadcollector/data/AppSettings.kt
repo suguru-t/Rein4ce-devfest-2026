@@ -24,6 +24,22 @@ enum class ThemeMode(val label: String) {
 }
 
 /**
+ * BGM の曲（決定 48）。テーマの違う 3 曲で、どれも tools/make_bgm.py で作る（ファイルは audio/BgmPlayer.kt が選ぶ）。
+ * 3 曲とも効果音と同じハ長調の音だけなので、どの曲でも効果音と重なって濁らない。
+ * 設定では「‹ ›」でこの並びの順に切り替える。保存は名前（MARIMBA など）なので、並べ替えても前の設定は読める
+ */
+enum class BgmTrack(val label: String) {
+    /** はじめからある曲。木琴で、歩く速さくらい（88 BPM）のゆったりした曲。はじめは「いつもの」と呼んでいた */
+    MARIMBA("トコトコ"),
+
+    /** 昔のゲーム機のような音（140 BPM）。速い分散和音と太鼓で、冒険に出るような曲 */
+    CHIP("ピコピコ"),
+
+    /** ウクレレの刻みと口笛（112 BPM）。晴れた日に外を歩くような曲 */
+    UKULELE("ウクレレ"),
+}
+
+/**
  * 背景の天気（雨・雪・雲・太陽）の動き。なめらかさと電池の持ちのかね合い。
  * 並びは動きの少ない順（設定のスライダーの左から）。保存は名前なので、並べ替えても前の設定は読める
  *
@@ -31,16 +47,16 @@ enum class ThemeMode(val label: String) {
  */
 enum class WeatherMotion(val label: String, val note: String) {
     /** 背景に天気を出さない（道の色は天気で変わる） */
-    OFF("出さない", "背景に天気を出しません。道の色は、歩いたときの天気で変わります。"),
+    OFF("出さない", "背景に天気を出しません。"),
 
     /** 止まった絵にする（電池にやさしい） */
-    STILL("止める", "天気を、止まった絵で出します。動かさないので、電池にやさしい設定です。"),
+    STILL("止める", "止まった絵で出します。電池にやさしい設定です。"),
 
     /** ゆっくりな空（くもり・霧・晴れ）は 30 回、雨・雪は 60 回。初めはこれ */
-    NORMAL("ふつう", "雲や太陽はゆっくり（1 秒に 30 回）、雨と雪はなめらか（60 回）に動かします。"),
+    NORMAL("ふつう", "雲や太陽はゆっくり、雨や雪はなめらかに動かします。"),
 
     /** どの天気も 1 秒に 60 回描き直す */
-    SMOOTH("なめらか", "どの天気も 1 秒に 60 回描き直します。電池を少し多く使います。"),
+    SMOOTH("なめらか", "どの天気もなめらかに動かします。電池を少し多く使います。"),
 }
 
 /**
@@ -51,7 +67,7 @@ enum class WeatherMotion(val label: String, val note: String) {
 const val DEMO_SETTINGS = true
 
 /**
- * 発表（デモ）で見せる天気。本当の天気の代わりに、記録とみんなの背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
+ * 発表（デモ）で見せる天気。本当の天気の代わりに、記録・みんな・コレクションの一覧の背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
  * 審査のときに、その日の天気に関係なく、雨・雪・夜の月などを見せるため。ふだんは本当の天気（[REAL]）。保存は名前
  *
  * @property weather 見せる天気。本当の天気なら null
@@ -153,6 +169,52 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _haptics.value = on
     }
 
+    private val _bgmOn = MutableStateFlow(readBoolean(KEY_BGM_ON, true))
+
+    /** BGM を流すか。初めはオン。オフなら、音量（[bgmVolume]）に関係なく流さない（audio/BgmPlayer.kt） */
+    val bgmOn: StateFlow<Boolean> = _bgmOn
+
+    fun setBgmOn(on: Boolean) {
+        store.put(KEY_BGM_ON, on.toString())
+        _bgmOn.value = on
+    }
+
+    private val _bgmVolume = MutableStateFlow(
+        store.get(KEY_BGM_VOLUME)?.toIntOrNull()?.coerceIn(1, MAX_BGM_VOLUME) ?: DEFAULT_BGM_VOLUME,
+    )
+
+    /** BGM の音量（1〜[MAX_BGM_VOLUME]）。端末のメディアの音量に、さらにこの割合を掛ける */
+    val bgmVolume: StateFlow<Int> = _bgmVolume
+
+    fun setBgmVolume(level: Int) {
+        val v = level.coerceIn(1, MAX_BGM_VOLUME)
+        store.put(KEY_BGM_VOLUME, v.toString())
+        _bgmVolume.value = v
+    }
+
+    private val _bgmTrack = MutableStateFlow(readEnum(KEY_BGM_TRACK, BgmTrack.MARIMBA))
+
+    /** BGM の曲。初めは「トコトコ」。選ぶとすぐに切り替わる（流している途中なら、新しい曲の頭から） */
+    val bgmTrack: StateFlow<BgmTrack> = _bgmTrack
+
+    fun setBgmTrack(track: BgmTrack) {
+        store.put(KEY_BGM_TRACK, track.name)
+        _bgmTrack.value = track
+    }
+
+    private val _sfxOn = MutableStateFlow(readBoolean(KEY_SFX_ON, true))
+
+    /**
+     * 効果音（ボタンを押したとき・題字や画面名の積み木を押したとき・道を 1 本集めたとき）を鳴らすか。初めはオン。
+     * BGM とは別に切り替えられる。鳴らすかは鳴らす瞬間に読む（audio/SoundEffects.kt）
+     */
+    val sfxOn: StateFlow<Boolean> = _sfxOn
+
+    fun setSfxOn(on: Boolean) {
+        store.put(KEY_SFX_ON, on.toString())
+        _sfxOn.value = on
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -218,11 +280,19 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         /** ニックネームの長さの上限。「みんな」の一覧の 1 行に収まる長さ */
         const val MAX_NICKNAME_LENGTH = NicknameHints.MAX_NICKNAME_LENGTH
 
+        /** BGM の音量の段階の数と、初めの音量（まん中） */
+        const val MAX_BGM_VOLUME = 10
+        const val DEFAULT_BGM_VOLUME = 5
+
         private const val KEY_THEME = "theme_mode"
         private const val KEY_WEATHER_MOTION = "weather_motion"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_AI_NAMING = "ai_naming"
         private const val KEY_HAPTICS = "haptics"
+        private const val KEY_BGM_ON = "bgm_on"
+        private const val KEY_BGM_VOLUME = "bgm_volume"
+        private const val KEY_SFX_ON = "sfx_on"
+        private const val KEY_BGM_TRACK = "bgm_track"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"

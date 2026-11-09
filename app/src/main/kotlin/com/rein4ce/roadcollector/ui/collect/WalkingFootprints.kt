@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.rein4ce.roadcollector.ui.common.AppIcons.Foot
 import kotlin.math.floor
+import kotlinx.coroutines.delay
 
 /**
  * 歩いた長さの横の足跡（[com.rein4ce.roadcollector.ui.common.AppIcons.Footprints] と同じ形）。
@@ -24,21 +25,28 @@ import kotlin.math.floor
 @Composable
 internal fun WalkingFootprints(steps: () -> Float, tint: Color, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.clipToBounds()) {
-        val unit = size.minDimension / ICON_UNITS
-        val p = steps()
-        val n = floor(p).toInt()
-        // 今見えている足跡と、上から入ってくる足跡・下へ出ていく足跡
-        for (k in n - 1..n + 2) {
-            val top = restTop(k) + STEP * p
-            // 上の足跡の場所より上は入ってくる途中、下の足跡の場所より下は出ていく途中なので、薄くする
-            val alpha = when {
-                top < UPPER_TOP -> 1f - (UPPER_TOP - top) / STEP
-                top > LOWER_TOP -> 1f - (top - LOWER_TOP) / STEP
-                else -> 1f
-            }.coerceIn(0f, 1f)
-            if (alpha <= 0f) continue
-            footprint(cx = if (k % 2 == 0) RIGHT_X else LEFT_X, top = top, unit = unit, color = tint.copy(alpha = tint.alpha * alpha))
-        }
+        drawWalkingFootprints(steps(), tint, sizePx = size.minDimension)
+    }
+}
+
+/**
+ * [WalkingFootprints] の絵を、左上が原点の一辺 [sizePx] の正方形に描く（Canvas の中で、ほかの絵と一緒に描くとき。
+ * コレクションの拡大表示の「もう一度歩く」で、道をなぞる足跡に使う）。[steps] は進んだ歩数
+ */
+internal fun DrawScope.drawWalkingFootprints(steps: Float, tint: Color, sizePx: Float) {
+    val unit = sizePx / ICON_UNITS
+    val n = floor(steps).toInt()
+    // 今見えている足跡と、上から入ってくる足跡・下へ出ていく足跡
+    for (k in n - 1..n + 2) {
+        val top = restTop(k) + STEP * steps
+        // 上の足跡の場所より上は入ってくる途中、下の足跡の場所より下は出ていく途中なので、薄くする
+        val alpha = when {
+            top < UPPER_TOP -> 1f - (UPPER_TOP - top) / STEP
+            top > LOWER_TOP -> 1f - (top - LOWER_TOP) / STEP
+            else -> 1f
+        }.coerceIn(0f, 1f)
+        if (alpha <= 0f) continue
+        footprint(cx = if (k % 2 == 0) RIGHT_X else LEFT_X, top = top, unit = unit, color = tint.copy(alpha = tint.alpha * alpha))
     }
 }
 
@@ -48,6 +56,25 @@ internal suspend fun Animatable<Float, *>.walkFootprints(count: Int = 4) {
     for (i in 1..count) animateTo(i.toFloat(), tween(durationMillis = 260, easing = FastOutSlowInEasing))
     snapTo(0f)
 }
+
+/**
+ * 足跡を歩かせ続ける（記録中）。1 歩踏み出して少し止まる、をくり返す（[walkFootprints] と同じ 1 歩）。
+ * 止めるときは呼んだ側で取り消して、0 に戻す
+ */
+internal suspend fun Animatable<Float, *>.keepWalking() {
+    snapTo(0f)
+    var i = 0
+    while (true) {
+        // 値が大きくなりすぎないよう、偶数歩（見た目はアイコンと同じ並び）で 0 に戻す
+        if (i >= 1_000) { snapTo(0f); i = 0 }
+        i++
+        animateTo(i.toFloat(), tween(durationMillis = 260, easing = FastOutSlowInEasing))
+        delay(KEEP_WALKING_PAUSE_MS)
+    }
+}
+
+/** 記録中に歩き続けるときの、1 歩と次の 1 歩のあいだの止まっている時間 [ms]（1 歩 0.5 秒ほど。ゆっくり歩く速さ） */
+private const val KEEP_WALKING_PAUSE_MS = 240L
 
 /** 足跡 1 つ（足裏とかかと）。形はアイコンと同じ（[Foot]） */
 private fun DrawScope.footprint(cx: Float, top: Float, unit: Float, color: Color) {

@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.inventory
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -13,12 +14,15 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -26,6 +30,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,8 +38,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -42,14 +49,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -62,6 +68,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -73,15 +81,12 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.BuildConfig
@@ -93,7 +98,6 @@ import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.common.FramedDialog
-import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -104,10 +108,18 @@ import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
+import com.rein4ce.roadcollector.ui.weather.ZoomWeather
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
 import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopTag
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.popBlock
 
 /**
  * B 担当：コレクション（手持ちパーツ）の一覧。状態は 3 つ（写真アプリ・iPhone のホーム画面と同じ形）：
@@ -192,19 +204,15 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：歩いた距離の合計をメーターのように大きく出す（開くたびに 0 から上がり、増えたり減ったりすると、数字が回って新しい値まで動く）。
-        // 右上に「選択」（選択中は「キャンセル」）。並べ替え中は出さない（見出しの右に「並べ替え中」と出る）
-        Row(verticalAlignment = Alignment.Top) {
-            CollectionMeter(
-                totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM },
-                walks = parts.size - sampleCount,
-                samples = sampleCount,
-                isLoaded = isLoaded,
-                editing = editing,
-                reduceMotion = reduceMotion,
-                modifier = Modifier.weight(1f),
-            )
-            if (!editing && isLoaded && parts.isNotEmpty()) {
+        // 画面名（題字「ミチツミ」と同じ積み木。「みんな」と同じ形）と、右上に「選択」（選択中は「キャンセル」）。
+        // 並べ替え中は「選択」の代わりに「並べ替え中」の札。行の高さは「選択」のボタン（48dp）に合わせて決めておく
+        // （札に替わったときに下の一覧が上にずれると、長押しでつかんだカードが指の下からずれるため）
+        Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            BlockWord("コレクション")
+            Spacer(Modifier.weight(1f))
+            if (editing) {
+                PopTag("並べ替え中", face = Pop.Navy, fontSize = 12.sp, tiltDeg = 2f)
+            } else if (isLoaded && parts.isNotEmpty()) {
                 SelectButton(
                     selecting = selecting,
                     onClick = { if (selecting) cancelSelecting() else selecting = true },
@@ -212,62 +220,10 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                 )
             }
         }
-        Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when {
-                    editing -> notes("長押しのまま動かして並べ替え", "× で削除")
-                    selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
-                    // 並べ替え（長押しのドラッグ）は、いつもの順で絞り込んでいないときだけ（ほかの並びで動かしても意味が分からないため）
-                    !filter.isDefault -> notes("タップで大きく見る", "並べ替えは「いつもの順」のときだけ")
-                    else -> notes("タップで大きく見る", "長押しで並べ替え")
-                },
-                style = noteStyle,
-                fontSize = 12.sp,
-                color = Fieldbook.Muted,
-                // 字の幅だけ紙の色を敷く（ui/common/PaperBand。見出しの字が方眼の線にかぶって読みにくいため）
-                modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).paperBand(),
-            )
-            // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
-            // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
-            if (!editing && !selecting && isLoaded && missingSamples > 0) {
-                PressTextButton(onClick = { repository.restoreMissingSamples() }) {
-                    Text("見本を戻す", color = Fieldbook.Survey, fontSize = 13.sp)
-                }
-            }
-        }
-
-        // 並びと絞り込みの行。並べ替え中は見えなくして押せなくする（並べ替えは、いつもの順で絞り込んでいないときだけなので）。
-        // 行の場所は残す：消すと一覧が上に詰まり、長押しでつかんだカードが指の下からずれるため（#75 のレビュー）
-        if (isLoaded && parts.isNotEmpty()) {
-            PartFilterBar(
-                filter = filter,
-                onChange = settings::setPartFilter,
-                skies = filtering.skies,
-                enabled = !editing,
-                modifier = Modifier
-                    .graphicsLayer { alpha = if (editing) 0f else 1f }
-                    .then(if (editing) Modifier.clearAndSetSemantics {} else Modifier),
-            )
-        }
-
-        // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
-        // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
-        if (selecting && !editing && isLoaded) {
-            RandomPickRow(
-                // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
-                enabled = visible.isNotEmpty(),
-                count = pickCount,
-                onCountChange = { pickCount = it },
-                note = pickNote,
-                onPick = {
-                    // 絞り込んでいれば、出ているパーツの中から選ぶ
-                    val picked = pickRandom(visible.map { it.id }, pickCount)
-                    selectedIds.clear()
-                    selectedIds.addAll(picked)
-                    pickNote = randomPickNote(picked.size, pickCount)
-                },
-            )
-        }
+        // 歩いた距離の合計（見出しのメーター）。値は画面で持つ（下の見出しは一覧といっしょに動くので、見出しの中で持つと、
+        // 画面の外に出て戻るたびに 0 から回り直す）
+        val totalM = parts.filter { SampleParts.byId(it.id) == null }.sumOf { it.distanceM }
+        val meter = rememberMeter(totalM, isLoaded, reduceMotion)
 
         val gridState = rememberLazyGridState()
         // 並びや絞り込みを変えたら、いちばん上から見せる（リストは、それまで上に見えていたカードを上に残そうとするので、
@@ -276,30 +232,114 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         ScrollToTopOnChange(filter, gridState)
         val haptics = rememberHaptics()
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
-            // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）
-            arranged = arranged.moved(from.index, to.index)
+            // ドラッグ中：指の下に来たカードと場所を入れ替える（ほかのカードはよけるように動く）。
+            // 一覧のいちばん上は見出しなので、何番目かではなく id で探す（見出しは並べ替えの相手にならない）
+            val f = arranged.indexOfFirst { it.id == from.key }
+            val t = arranged.indexOfFirst { it.id == to.key }
+            if (f >= 0 && t >= 0) arranged = arranged.moved(f, t)
         }
-        if (isLoaded && parts.isNotEmpty() && visible.isEmpty()) {
-            // 絞り込んだら何も残らなかった
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted, modifier = Modifier.paperBand())
-                PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
-                    Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
-                }
-            }
-        } else LazyVerticalGrid(
+        // メーター・注記・並びと絞り込みは、一覧のいちばん上に置いて、カードといっしょに動かす。
+        // 上に止めておくと、小さい画面や文字を大きくしている人の画面では、見出しだけで半分ほどになり、カードが 1 段も見えないため
+        // （画面名と「選択」の行だけは止めておく）
+        LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             state = gridState,
             modifier = Modifier.weight(1f),
-            // 並べ替え中の「×」がカードの左上からはみ出すので、上と左右に少し余白
-            contentPadding = PaddingValues(start = 6.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
+            // 並べ替え中の「×」がカードの左上からはみ出すので、左右に少し余白（上は見出しがあるので要らない）
+            contentPadding = PaddingValues(start = GRID_START, end = GRID_END, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item(key = HEADER_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = HEADER_KEY) {
+                // 見出しは一覧の左右の余白の外まで広げて、上の画面名と左をそろえる
+                Column(modifier = Modifier.outdent(start = GRID_START, end = GRID_END)) {
+                    // 歩いた距離の合計をメーターのように大きく出す（開くたびに 0 から上がり、増えたり減ったりすると、数字が回って新しい値まで動く）
+                    CollectionMeter(
+                        meter = meter,
+                        totalM = totalM,
+                        walks = parts.size - sampleCount,
+                        samples = sampleCount,
+                        isLoaded = isLoaded,
+                    )
+                    Row(modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            when {
+                                editing -> notes("長押しのまま動かして並べ替え", "× で削除")
+                                selecting -> notes("タップで積むパーツを選ぶ", "${GameSession.MAX_PARTS} 本まで")
+                                // 並べ替え（長押しのドラッグ）は、いつもの順で絞り込んでいないときだけ（ほかの並びで動かしても意味が分からないため）
+                                !filter.isDefault -> notes("タップで大きく見る", "並べ替えは「いつもの順」のときだけ")
+                                else -> notes("タップで大きく見る", "長押しで並べ替え")
+                            },
+                            fontFamily = Pop.Rounded,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.sp,
+                            color = Fieldbook.Muted,
+                            // 字の幅だけ紙の色を敷く（ui/common/PaperBand。見出しの字が方眼の線にかぶって読みにくいため）
+                            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).paperBand(),
+                        )
+                        // 消した見本だけを足し戻す。採集したパーツと選択には触らない。
+                        // 読み込み中は出さない（parts が空なので全部の見本が「消えた」ように見え、押すとわざと消した見本まで戻るため）
+                        if (!editing && !selecting && isLoaded && missingSamples > 0) {
+                            PopChip(
+                                "見本を戻す",
+                                face = Fieldbook.Card,
+                                text = Pop.TealLine,
+                                edge = Pop.TealLine,
+                                fontSize = 12.sp,
+                                depth = 2.dp,
+                                onClick = { repository.restoreMissingSamples() },
+                            )
+                        }
+                    }
+
+                    // 並びと絞り込みの行。並べ替え中は見えなくして押せなくする（並べ替えは、いつもの順で絞り込んでいないときだけなので）。
+                    // 行の場所は残す：消すと一覧が上に詰まり、長押しでつかんだカードが指の下からずれるため（#75 のレビュー）
+                    if (isLoaded && parts.isNotEmpty()) {
+                        PartFilterBar(
+                            filter = filter,
+                            onChange = settings::setPartFilter,
+                            skies = filtering.skies,
+                            enabled = !editing,
+                            modifier = Modifier
+                                .graphicsLayer { alpha = if (editing) 0f else 1f }
+                                .then(if (editing) Modifier.clearAndSetSemantics {} else Modifier),
+                        )
+                    }
+
+                    // 選択中だけ：積むパーツを「おまかせ」で選ぶ（Issue #44）。見本も選ぶ対象に入れる（見本も積めるパーツで、
+                    // 採集が少ないうちでも 5 本そろうため）。選択だけを置き換え、ゲームは始めない。並び順・進行中のゲームも変えない
+                    if (selecting && !editing && isLoaded) {
+                        RandomPickRow(
+                            // コレクションが空なら選べないので押せなくする（「0 本なので全部選びました」と出さないように）
+                            enabled = visible.isNotEmpty(),
+                            count = pickCount,
+                            onCountChange = { pickCount = it },
+                            note = pickNote,
+                            onPick = {
+                                // 絞り込んでいれば、出ているパーツの中から選ぶ
+                                val picked = pickRandom(visible.map { it.id }, pickCount)
+                                selectedIds.clear()
+                                selectedIds.addAll(picked)
+                                pickNote = randomPickNote(picked.size, pickCount)
+                            },
+                        )
+                    }
+                }
+            }
+            if (isLoaded && parts.isNotEmpty() && visible.isEmpty()) {
+                // 絞り込んだら何も残らなかった（見出しは残すので、上の並びと絞り込みからも外せる）
+                item(key = EMPTY_KEY, span = { GridItemSpan(maxLineSpan) }, contentType = EMPTY_KEY) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted, modifier = Modifier.paperBand())
+                        PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
+                            Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
             items(visible, key = { it.id }) { part ->
                 // ReorderableItem が、並びが変わったときにカードを滑らかに動かす（animateItem）
                 ReorderableItem(reorderState, key = part.id) { isDragging ->
@@ -374,7 +414,16 @@ fun InventoryScreen(onGoStack: () -> Unit) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        PressButton(
+        // いちばん下のボタン：「みんな」の「ランキングを見る」と同じ、オレンジのブロック（押せないときは灰色）。
+        // 高さは 48dp 以上（文字を大きくして 2 行になっても切れないように）
+        val mainEnabled = editing || !selecting || validSelected.isNotEmpty()
+        PopButton(
+            label = when {
+                editing -> "完了"
+                !selecting -> "積むパーツを選ぶ"
+                validSelected.isEmpty() -> "積むパーツを選んでください"
+                else -> "選んだ ${validSelected.size} 本で積む"
+            },
             onClick = {
                 when {
                     editing -> editing = false
@@ -385,32 +434,14 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     }
                 }
             },
-            enabled = editing || !selecting || validSelected.isNotEmpty(),
-            // 両端が丸い形（Material の標準）。積む画面の「パーツを選ぶ」の窓の「選んだ n 本で積む」と同じ形
-            shape = ButtonDefaults.shape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Fieldbook.Survey,
-                contentColor = Color.White,
-                disabledContainerColor = Fieldbook.GridMajor,
-                disabledContentColor = Fieldbook.Muted,
-            ),
-            // 高さも「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) {
-            Text(
-                when {
-                    editing -> "完了"
-                    !selecting -> "積むパーツを選ぶ"
-                    validSelected.isEmpty() -> "積むパーツを選んでください"
-                    else -> "選んだ ${validSelected.size} 本で積む"
-                },
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+            face = Pop.OrangeDeep,
+            text = Pop.Letter,
+            enabled = mainEnabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 
-    // 大きく見ている間は、背景にそのパーツを歩いたときの天気を降らせる（ui/weather/WeatherLayer）
+    // 大きく見ている間だけ、背景にそのパーツを歩いたときの天気を降らせる（一覧のときは今の天気。ui/weather/WeatherLayer）
     DisposableEffect(zoomedId) {
         BackdropFocus.partId.value = zoomedId
         onDispose { BackdropFocus.partId.value = null }
@@ -457,22 +488,11 @@ fun InventoryScreen(onGoStack: () -> Unit) {
 }
 
 /**
- * コレクション画面の見出し。小さな「コレクション」の下に、歩いた距離の合計（見本は含めない）を大きく出す。
- * 画面を開くたびに、メーターのように 0 から数字が回って合計まで上がる（「みんな」の見出しと同じ）。
- * 開いている間に合計が変わったら（記録した・消した）、今の値から新しい値まで動く。アニメーションを切っている人には動かさない。
- * 読み込み中は parts が空なので、数字は出さない（読み終わってから 0 から上がる）。
+ * 見出しのメーターの値。画面を開くたびに 0 から始まり（覚えておかない）、読み終わったら合計まで回って上がる。
+ * 見出しは一覧といっしょに動く（画面の外に出ると作り直される）ので、値は画面の側で持つ（戻るたびに 0 から回り直さないように）
  */
 @Composable
-private fun CollectionMeter(
-    totalM: Int,
-    walks: Int,
-    samples: Int,
-    isLoaded: Boolean,
-    editing: Boolean,
-    reduceMotion: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    // メーターの値。画面に出るたびに 0 から始まり（覚えておかない）、読み終わったら合計まで回って上がる
+private fun rememberMeter(totalM: Int, isLoaded: Boolean, reduceMotion: Boolean): Animatable<Float, AnimationVector1D> {
     val meter = remember { Animatable(0f) }
     LaunchedEffect(isLoaded, totalM) {
         if (!isLoaded) return@LaunchedEffect
@@ -482,55 +502,98 @@ private fun CollectionMeter(
             meter.animateTo(totalM.toFloat(), tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
         }
     }
+    return meter
+}
+
+/**
+ * 一覧（LazyVerticalGrid）の中に置いたものを、一覧の左右の余白（[start]・[end]）の外まで広げる。
+ * 一覧のいちばん上に置いた見出しを、一覧の外にある画面名と左右そろえるのに使う
+ */
+private fun Modifier.outdent(start: Dp, end: Dp): Modifier = layout { measurable, constraints ->
+    val s = start.roundToPx()
+    val extra = s + end.roundToPx()
+    val placeable = measurable.measure(
+        constraints.copy(
+            minWidth = constraints.minWidth + extra,
+            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + extra else constraints.maxWidth,
+        ),
+    )
+    layout((placeable.width - extra).coerceIn(constraints.minWidth, constraints.maxWidth), placeable.height) {
+        placeable.placeRelative(-s, 0)
+    }
+}
+
+/** 一覧の左右の余白。並べ替え中にカードの左上からはみ出す「×」の分 */
+private val GRID_START = 6.dp
+private val GRID_END = 2.dp
+
+/** 一覧のいちばん上の見出しと、絞り込んで何も残らなかったときの一言の key（パーツの id とは重ならない） */
+private const val HEADER_KEY = "inventory-header"
+private const val EMPTY_KEY = "inventory-empty"
+
+/**
+ * コレクション画面の見出し（画面名の積み木の下）。歩いた距離の合計（見本は含めない）を大きく出す（「みんな」の「あなたの最高」と同じ形）。
+ * 画面を開くたびに、メーターのように 0 から数字が回って合計まで上がる（「みんな」の見出しと同じ）。
+ * 開いている間に合計が変わったら（記録した・消した）、今の値から新しい値まで動く。アニメーションを切っている人には動かさない。
+ * 読み込み中は parts が空なので、数字は出さない（読み終わってから 0 から上がる）。
+ * 数字の動きは [rememberMeter] で、画面の側で持つ
+ */
+@Composable
+private fun CollectionMeter(
+    meter: Animatable<Float, AnimationVector1D>,
+    totalM: Int,
+    walks: Int,
+    samples: Int,
+    isLoaded: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val shownM = meter.value
     Column(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 val total = totalDistance(totalM)
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "コレクション。読み込み中"
+                // 画面名は、すぐ上の積み木（BlockWord）が見出しとして読むので、ここでは言わない（2 回続かないように。#90 の A のレビュー）
+                contentDescription = if (isLoaded) "これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "読み込み中"
             },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // 見出しの字は、行ごとに字の幅だけ紙の色を敷く（方眼の線にかぶって読みにくいため。ui/common/PaperBand）。
-            // 見出し全体に敷くと、数字の右のすき間など字のない所まで方眼が消えて不自然になる
-            Text(
-                "コレクション",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp,
-                color = Fieldbook.Muted,
-                modifier = Modifier.paperBand(),
-            )
-            Spacer(Modifier.weight(1f))
-            if (editing) {
-                Text("並べ替え中", fontFamily = Fieldbook.Data, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
-            }
-        }
+        Spacer(Modifier.height(4.dp))
         // 1 km 未満は m、1 km からは km で出す（totalDistance）。
         // 回っている途中の値も切り捨てる（四捨五入だと、1,999 m に向かう途中の 1999.6 が一瞬「2.0 km」になって、歩いた分より多く見える）
         val shown = totalDistance(shownM.toInt())
+        // 見出しの字は、字の幅だけ紙の色を敷く（方眼の線にかぶって読みにくいため。ui/common/PaperBand）
         Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
             Text(
-                if (isLoaded) narrowPoint(shown.number) else AnnotatedString("—"),
-                fontFamily = Fieldbook.Data,
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp,
+                "歩いた合計",
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 15.sp,
                 color = Fieldbook.Ink,
+                modifier = Modifier.padding(end = 10.dp, bottom = 8.dp),
+            )
+            // 数字は道の色（オレンジ）。字なので、紙の上で読める濃い色（ダークでは明るいオレンジ）
+            Text(
+                if (isLoaded) shown.number else "—",
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
+                fontSize = 40.sp,
+                color = MeterInk,
+                maxLines = 1,
+                softWrap = false,
             )
             Text(
                 if (isLoaded) shown.unit.label else DistanceUnit.M.label,
-                fontFamily = Fieldbook.Data,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Fieldbook.Ink,
+                color = MeterInk,
                 modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
             )
         }
         Text(
             if (isLoaded) notes("これまでに集めた道 $walks 本", "見本 $samples") else "読み込み中…",
-            style = noteStyle,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
             fontSize = 13.sp,
             color = Fieldbook.Ink,
             modifier = Modifier.paperBand(),
@@ -565,66 +628,166 @@ internal fun totalDistance(m: Int): TotalDistance =
         TotalDistance("${tenths / 10}.${tenths % 10}", DistanceUnit.KM)
     }
 
-/**
- * 小数点の前後を詰める。メーターの数字は等幅の字なので、そのままだと「.」も数字 1 文字分の幅を取って、前後が空いて見えるため。
- * 字体は変えずに字間だけ詰める（「.」だけ別の字体にすると、行の高さが変わって、横の単位の位置が km のときだけずれることがある）
- */
-private fun narrowPoint(number: String): AnnotatedString = buildAnnotatedString {
-    val i = number.indexOf('.')
-    if (i < 0) {
-        append(number)
-    } else {
-        append(number.substring(0, i))
-        withStyle(SpanStyle(letterSpacing = POINT_LETTER_SPACING)) { append('.') }
-        append(number.substring(i + 1))
-    }
-}
-
-/** 小数点の字間。等幅の字の 1 文字分（およそ 0.6 文字の高さ）のうち、半分ほどを詰める（左右に半分ずつ詰まる） */
-private val POINT_LETTER_SPACING = (-0.3).em
+/** 見出しの合計の数字の色：道のオレンジ。紙の上で読めるよう、ライトは濃いオレンジ、ダークは明るいオレンジ */
+private val MeterInk: Color get() = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
 
 /**
- * カードを押して開く拡大表示。設定などと同じ枠（見出しの帯にパーツの名前、枠の下に丸い「×」）に、大きな図と注記を出す。
+ * カードを押して開く拡大表示。設定などと同じ枠（見出しの帯にパーツの名前、枠の下に丸い「×」）を、一覧と同じポップな見た目にして、
+ * 大きな図と注記を出す。図は「みんな」の紙片の図と同じブロックの面に載せる。
  * 枠の中のいちばん下の「名前を付ける」から名前を付けられる
  */
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
-    FramedDialog(title = part.displayName, onDismiss = onDismiss) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))) {
-                // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
-                // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
-                val mapPlace = place?.takeIf { BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = maxWidth.value) }
-                if (mapPlace != null) {
-                    // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
-                    // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
-                    PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
-                }
-                Column {
-                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-                        // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
-                        if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
-                    }
-                    if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
-                }
+    // 「もう一度歩く」：道を歩いた順になぞる（WalkReplay.kt）。窓を閉じると止まる
+    val replay = rememberWalkReplay()
+    FramedDialog(
+        title = part.displayName,
+        onDismiss = onDismiss,
+        pop = true,
+        // 枠の中の高さを中身に渡して、図の大きさで枠に収める（入りきらないときだけ、中身の側でスクロールする。FitFigureLayout）
+        scrollContent = false,
+        // 歩いたときの天気を、窓の紙（図のまわり）にも降らせる。背景の天気は、窓とまわりの暗い幕で見えにくいため。
+        // 図（地図と道）はふさがない
+        backdrop = { ZoomWeather(weather, walkedAt = part.walkedAt, modifier = Modifier.matchParentSize()) },
+        // もう一度歩くと、名前を付ける（付け直す）。どちらも「みんな」と同じブロックのボタン。
+        // 主な操作の「もう一度歩く」は青緑の面、「名前を付ける」は白い面に青緑の縁（「リンクをコピー」と同じ）。
+        // 枠の中のいちばん下に止めておく（小さい画面で図が長くなっても、ボタンが枠の下に隠れないように）。
+        // 横に 2 つ同じ幅で並べ、文字を大きくして入らなければ、ボタンの中で 2 行に折り返す（縦に積むと、図の場所がなくなる）。
+        // 高さは 2 つでそろえる。閉じるのは、ほかの窓と同じく枠の下の「×」
+        footer = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            ) {
+                ReplayButton(replay, padding = ZOOM_BUTTON_PADDING, modifier = Modifier.weight(1f).fillMaxHeight())
+                PopButton(
+                    label = "名前を付ける",
+                    onClick = onRename,
+                    face = Fieldbook.Card,
+                    text = Pop.TealLine,
+                    edge = Pop.TealLine,
+                    fontSize = 15.sp,
+                    padding = ZOOM_BUTTON_PADDING,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
             }
-            Spacer(Modifier.height(4.dp))
-            // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
-            // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
-            WalkNote(
-                distanceM = part.distanceM,
-                date = if (isSample) "見本" else walkDate(part.walkedAt),
-                weather = weather?.sky?.label,
+        },
+    ) {
+        // 図と、その下の注記。図は正方形で、ふつうは枠の幅いっぱい。窓に入りきらないとき（小さい画面や、文字を大きくしている人の画面）は、
+        // 注記と枠の下のボタンが見えるよう、残りの高さに入るまで図を小さくする（FitFigureLayout）。
+        // 小さくする限り（MIN_FIGURE）まで縮めても入らないとき（文字をとても大きくしたときなど）だけ、中身をスクロールさせる
+        // （図を最小のまま押し込むと、注記に重なって読めなくなるため。#97 の A のレビュー）
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            FitFigureLayout(
+                // 枠の中で、中身に使える高さ（FramedDialog の scrollContent = false で、見出しとボタンを引いた残り）
+                viewport = if (constraints.hasBoundedHeight) constraints.maxHeight else Constraints.Infinity,
+                minFigure = MIN_FIGURE + MAP_LOGO_STRIP_DP.dp + FIGURE_DEPTH,
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                figure = {
+                    BoxWithConstraints(contentAlignment = Alignment.TopCenter, modifier = Modifier.fillMaxWidth()) {
+                        // 図の一辺：渡された高さ（FitFigureLayout が、注記を引いた残りを渡す）に入る大きさ。
+                        // [strip] は図の下の Google のロゴの帯（地図を敷くときだけ）
+                        fun side(strip: Dp): Dp =
+                            if (constraints.hasBoundedHeight) minOf(maxWidth, maxOf(maxHeight - strip - FIGURE_DEPTH, MIN_FIGURE)) else maxWidth
+                        // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                        // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                        val mapPlace = place?.takeIf {
+                            BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = side(MAP_LOGO_STRIP_DP.dp).value)
+                        }
+                        val side = side(if (mapPlace != null) MAP_LOGO_STRIP_DP.dp else 0.dp)
+                        Box(
+                            modifier = Modifier
+                                .width(side)
+                                .popBlock(face = Fieldbook.Card, corner = CARD_CORNER, depth = FIGURE_DEPTH, edge = Fieldbook.CardEdge)
+                                .clip(RoundedCornerShape(CARD_CORNER)),
+                        ) {
+                            if (mapPlace != null) {
+                                // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                                // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                                PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
+                            }
+                            Column {
+                                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                    // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                                    if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                                    // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
+                                    FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
+                                }
+                                if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                            }
+                        }
+                    }
+                },
+                below = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.height(6.dp))
+                        // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
+                        // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+                        // 再生している間は、この行に何倍速かを出す（図の中に出すと旗や道にかかる。注記は見えなくするだけで場所は残し、
+                        // 下の「止める」ボタンが動かないようにする）
+                        val speed = replaySpeed(part.distanceM)
+                        val showSpeed = replay.playing && speed != null
+                        Box(contentAlignment = Alignment.Center) {
+                            WalkNote(
+                                distanceM = part.distanceM,
+                                date = if (isSample) "見本" else walkDate(part.walkedAt),
+                                weather = weather?.sky?.label,
+                                // 再生中は見えなくするだけでなく、読み上げからも外す（見えている「約 ○ 倍速」とそろえる。#94 の A のレビュー）
+                                modifier = Modifier
+                                    .graphicsLayer { alpha = if (showSpeed) 0f else 1f }
+                                    .then(if (showSpeed) Modifier.clearAndSetSemantics {} else Modifier),
+                            )
+                            if (showSpeed) {
+                                // 行の大きさは注記で決め、倍速の字では変えない（字の高さが少し違うので、再生を始めると
+                                // 図の大きさが 1px 動いていた。#97 の A のレビュー）
+                                Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "約 $speed 倍速",
+                                        fontFamily = Fieldbook.Data,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Fieldbook.Survey,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.wrapContentSize(unbounded = true),
+                                    )
+                                }
+                            }
+                        }
+                        // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+                        if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
+                    }
+                },
             )
-            // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
-            if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
-            // 名前を付ける（付け直す）。閉じるのは、ほかの窓と同じく枠の下の「×」
-            PressTextButton(onClick = onRename, modifier = Modifier.padding(top = 8.dp)) {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = Fieldbook.Survey, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("名前を付ける", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/**
+ * 拡大表示の図（[figure]）と、その下の注記（[below]）を縦に並べる。注記を先に測り、図には [viewport] から注記を引いた残りの高さを
+ * 最大として渡す（図の側で、その高さに入る大きさにする）。残りが [minFigure] より少なければ [minFigure] を渡すので、全体は
+ * [viewport] より高くなる（外側のスクロールで見る）
+ */
+@Composable
+private fun FitFigureLayout(
+    viewport: Int,
+    minFigure: Dp,
+    figure: @Composable () -> Unit,
+    below: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(figure, below), modifier = modifier) { (figureParts, belowParts), constraints ->
+        val width = constraints.maxWidth
+        val belowPlaced = belowParts.map { it.measure(Constraints(maxWidth = width)) }
+        val belowHeight = belowPlaced.sumOf { it.height }
+        val room = if (viewport == Constraints.Infinity) Constraints.Infinity else maxOf(viewport - belowHeight, minFigure.roundToPx())
+        val figurePlaced = figureParts.map { it.measure(Constraints(maxWidth = width, maxHeight = room)) }
+        layout(width, figurePlaced.sumOf { it.height } + belowHeight) {
+            var y = 0
+            (figurePlaced + belowPlaced).forEach {
+                it.place((width - it.width) / 2, y)
+                y += it.height
             }
         }
     }
@@ -664,7 +827,8 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
 }
 
 /**
- * パーツ 1 本のカード。方眼の上に置いた白い紙片に、図と注記を載せる（選んだときは青い破線の枠）。
+ * パーツ 1 本のカード。方眼の上に置いたブロックの面（「みんな」の紙片と同じ、下に側面がのぞく白い面）に、図と注記を載せる
+ * （選んだときは青い破線の枠）。押すと、ほかのボタンと同じ押し心地（ui/common/PressFeel）で縮む。
  * - タップ（[onClick]）：普段は大きく見る、選択中は選ぶ／外す
  * - 選択中は図の右下に丸を出し、押すと選ぶ／外す（[onToggleSelect]）。選ぶと青く塗られ、積む順の数字が入る（写真アプリの複数選択と同じ形）
  * @param order 選んだ順（＝積む順）。選んでいなければ null
@@ -696,43 +860,37 @@ private fun PartCard(
     val selected = order != null && selecting && !editing
     // 主役は形そのもの。分類（L字など）は出さない
     val date = if (isSample) "見本" else walkDate(part.walkedAt)
-    // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない
-    val angle = if (editing && !isDragging && !reduceMotion) {
-        val wobble = rememberInfiniteTransition(label = "jiggle")
-        wobble.animateFloat(
+    // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない。
+    // 揺れの値は、下の graphicsLayer の中（描くとき）で読む。ここで読むと、揺れが動くたび（1 秒に 60 回）に
+    // カードの中身（図・名前・☆）まで組み立て直して描き直すので重い（並べ替え中に CPU が倍になっていた）
+    val wobble: State<Float>? = if (editing && !isDragging && !reduceMotion) {
+        rememberInfiniteTransition(label = "jiggle").animateFloat(
             initialValue = -1f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(durationMillis = 140, easing = LinearEasing), RepeatMode.Reverse),
             label = "jiggle",
-        ).value * 1.2f * jiggleDirection
+        )
     } else {
-        0f
+        null
     }
+    val source = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            // ドラッグ中は少し持ち上げる（大きく・影・白地）。並べ替え中は小さく揺らす
+            // ドラッグ中は少し持ち上げる（大きく・影）。並べ替え中は小さく揺らす
             .graphicsLayer {
                 val s = if (isDragging) 1.05f else 1f
                 scaleX = s
                 scaleY = s
-                rotationZ = angle
+                rotationZ = (wobble?.value ?: 0f) * 1.2f * jiggleDirection
                 shadowElevation = if (isDragging) 10.dp.toPx() else 0f
                 shape = CardShape
             }
-            // 1 本ずつ、方眼の上に置いた白い紙片にして、隣との境目を分かりやすくする。
-            // 選んだパーツは青い破線、持ち上げているパーツは真っ白
-            .then(
-                when {
-                    isDragging -> Modifier.background(Fieldbook.Card, CardShape)
-                    selected -> Modifier
-                        .background(Fieldbook.Card, CardShape)
-                        .dashedOutline(Fieldbook.Survey, width = 2.dp, corner = 4.dp)
-                    else -> Modifier
-                        .background(Fieldbook.Card, CardShape)
-                        .border(1.dp, Fieldbook.CardEdge, CardShape)
-                },
-            )
+            .pressFeel(source)
+            // 1 本ずつ、方眼の上に置いたブロックの面にして、隣との境目を分かりやすくする（縁は細い線、下に側面）。
+            // 選んだパーツは縁の代わりに青い破線
+            .popBlock(face = Fieldbook.Card, corner = CARD_CORNER, depth = 3.dp, edge = if (selected) null else Fieldbook.CardEdge)
+            .then(if (selected) Modifier.dashedOutline(Fieldbook.Survey, width = 2.dp, corner = CARD_CORNER) else Modifier)
             // 読み上げでも「何番目に積むか」が伝わるように
             .semantics {
                 if (selected) stateDescription = "$order 番目に積む"
@@ -740,6 +898,9 @@ private fun PartCard(
             }
             .then(dragHandle)
             .clickable(
+                interactionSource = source,
+                // 角の丸い面に四角い波紋が出ないよう、波紋は出さず、縮む動きだけで応える
+                indication = null,
                 enabled = !editing,
                 // 読み上げ（TalkBack）で、タップの意味が伝わるように
                 onClickLabel = when {
@@ -841,37 +1002,40 @@ private val FavoriteToggleWidth = 44.dp
 /** 拡大表示で、地図の Google のロゴを置くために図の下に足す帯の高さ [dp] */
 private const val MAP_LOGO_STRIP_DP = 28f
 
+/** 拡大表示の図のブロックの厚み（下にのぞく側面） */
+private val FIGURE_DEPTH = 4.dp
+
+/** 拡大表示の図をこれより小さくはしない（それでも入らないときは、中身をスクロールさせる。FitFigureLayout） */
+private val MIN_FIGURE = 160.dp
+
+/**
+ * 拡大表示の下の 2 つのボタンの内側の余白。左右をふつう（16dp）より狭くして、小さい画面で文字を大きくしていても
+ * 「立ち止まる」が言葉の途中で折り返さないようにする
+ */
+private val ZOOM_BUTTON_PADDING = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+
 /**
  * 見出しの右上の「選択」ボタン（選択中は「キャンセル」）。写真アプリと同じ位置・言葉。
- * 野帳に合わせて、測量の青の細い縁の小さな丸いボタンにする。
+ * 「みんな」の札と同じ丸いブロック。選ぶ印（図の右下の丸・選んだカードの破線）と同じ測量の青で、選択中は塗る。
+ * 塗った面は白い字が読める濃さの [Fieldbook.SurveyFace]、カードの面に書く字と縁は [Fieldbook.SurveyInk]（ダークでも 4.5:1 を超える）。
+ * 押せる範囲は高さ 48dp
  */
 @Composable
 private fun SelectButton(selecting: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(50)
-    val source = remember { MutableInteractionSource() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .heightIn(min = 48.dp)
-            .pressFeel(source)
-            // 押せる範囲（48dp の四角）に波紋は出さず、縮む動きだけで応える（丸い形のものは形だけが応える）
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick),
-    ) {
-        Text(
-            if (selecting) "キャンセル" else "選択",
-            color = if (selecting) Color.White else Fieldbook.Survey,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .background(if (selecting) Fieldbook.Survey else Fieldbook.Card, shape)
-                .border(1.dp, Fieldbook.Survey, shape)
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-        )
-    }
+    PopChip(
+        if (selecting) "キャンセル" else "選択",
+        face = if (selecting) Fieldbook.SurveyFace else Fieldbook.Card,
+        text = if (selecting) Pop.Letter else Fieldbook.SurveyInk,
+        edge = if (selecting) null else Fieldbook.SurveyInk,
+        depth = if (selecting) 4.dp else 2.dp,
+        tiltDeg = if (selecting) 2f else 0f,
+        modifier = modifier.heightIn(min = 48.dp),
+        onClick = onClick,
+    )
 }
 
 /**
- * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青で塗って積む順の数字を入れる。
+ * 図の右下の「選ぶ」丸。選んでいないときは白い丸に細い縁、選ぶと測量の青（白い数字が読める濃さの [Fieldbook.SurveyFace]）で塗って積む順の数字を入れる。
  * 見た目は 26dp だが、押せる範囲は 44dp（指で押しやすいように）。
  * 読み上げではチェックボックスとして「選ぶ」「n 番目に積む」を伝える。
  */
@@ -903,7 +1067,7 @@ internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: (
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(if (selected) Fieldbook.Survey else Fieldbook.Card.copy(alpha = 0.92f))
+                .background(if (selected) Fieldbook.SurveyFace else Fieldbook.Card.copy(alpha = 0.92f))
                 .border(
                     BorderStroke(if (selected) 2.dp else 1.5.dp, if (selected) Color.White else if (enabled) Fieldbook.Muted else Fieldbook.GridMajor),
                     CircleShape,
@@ -920,7 +1084,9 @@ internal fun SelectMark(order: Int?, enabled: Boolean, name: String, onToggle: (
 }
 
 /** パーツ 1 本ぶんの紙片の形（角を少しだけ丸める） */
-private val CardShape = RoundedCornerShape(4.dp)
+/** カードの角の丸さ（「みんな」の断面図・紙片と同じ） */
+private val CARD_CORNER = SECTION_CORNER
+private val CardShape = RoundedCornerShape(CARD_CORNER)
 
 /**
  * 選択中に出す「ランダムに選ぶ」の行。左にボタン、右に個数（1〜[GameSession.MAX_PARTS] 本）。
