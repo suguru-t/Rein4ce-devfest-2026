@@ -296,7 +296,7 @@ class StackViewModel(
         val halfWidth = (world.platformWidth / 2).toFloat()
         val bottom = -world.platformThickness.toFloat()
         var focus = WorldRect(-halfWidth, halfWidth, bottom, 0f)
-        world.renderShapes().filter { it.part != null }.groupBy { it.part }.values.forEach { shapesOfPart ->
+        world.renderShapes().filter { it.part != null }.groupBy { it.body }.values.forEach { shapesOfPart ->
             val bounds = shapesOfPart.map { it.bounds() }.reduce(WorldRect::union)
             if (bounds.maxY >= bottom) focus = focus.union(bounds)
         }

@@ -661,7 +661,8 @@ private fun StackCanvas(
         // 積み木は、色相が歩いたときの天気、明るさが歩いた時間帯の色で塗り、自分の色を暗くした線で囲む（決定 74。前は形の種類ごとの色だった）
         val outlinePx = PIECE_OUTLINE_DP.dp.toPx()
         withTransform({ if (grow != 1f) scale(grow, grow, pivot = pivot) }) {
-            drawWorldShapes(vm.shapes, platform, outlinePx, { sx(it) }, { sy(it) }, scalePx, colorsOf)
+            // 線は大きくした分だけ細くして描き、画面の上ではほかの積み木と同じ太さにする（#129 の C のレビュー）
+            drawWorldShapes(vm.shapes, platform, outlinePx / grow, { sx(it) }, { sy(it) }, scalePx, colorsOf)
         }
 
         // 天気のボーナスの札。ボーナスの付いたパーツの上に、低い順に 1 つずつポンと出し、塔と一緒に動かす（字は大きくしない）。
