@@ -377,7 +377,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
-                                    motion.dropIn(fromDx, fromDy, WordMotion) {
+                                    motion.dropIn(fromDx, fromDy, wordMotionFor(blockDp.value)) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         sfx.play(Sfx.LAND)
                                     }
@@ -385,7 +385,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
                                     sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
-                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = WordMotion)
+                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = wordMotionFor(blockDp.value))
                                 }
                             }
                         }
@@ -419,13 +419,27 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
  * 画面名の積み木の動きの大きさ（ui/common/BlockMotion.kt。題字と同じ動きで、大きさだけ違う）。
  * ブロックが題字より小さいので跳ねる高さを少し低く（題字の 32dp のときの 26/32）、題字より下にあって落ちる距離が長いので、落ちる時間を少し長くする
  */
+private val WordMotion = BlockMotionSpec(hopDp = 10f, hopBounceDp = 3f, fallMs = 220, landDxDp = 10f, landBounceDp = 6f)
+
+/** [WordMotion] の大きさを決めたときの、ブロック 1 つの大きさ [dp]（[BlockWord] の初めの値） */
+private const val WORD_MOTION_BLOCK_DP = 26f
+
+/** ブロックの大きさに合わせた動きの大きさ。大きいブロックは、跳ねる高さ・着いたときの揺れもそのぶん大きく（落ちる時間は同じ） */
+private fun wordMotionFor(blockDp: Float): BlockMotionSpec {
+    val k = blockDp / WORD_MOTION_BLOCK_DP
+    return WordMotion.copy(
+        hopDp = WordMotion.hopDp * k,
+        hopBounceDp = WordMotion.hopBounceDp * k,
+        landDxDp = WordMotion.landDxDp * k,
+        landBounceDp = WordMotion.landBounceDp * k,
+    )
+}
+
 /**
- * 記録とコレクションの画面名（[BlockWord]）のブロックの大きさ。ほかの画面名（26dp）より一回り大きくした（B の希望。決定 80）。
- * ランキングの一覧の画面名は、右に個数とリロードが並んで幅が足りないので 26dp のまま
+ * 記録とコレクションの画面名（[BlockWord]）のブロックの大きさ（B の希望。決定 80）。
+ * ほかの画面名は、ランキングの一覧が 26dp（右に個数とリロードが並んで幅が足りない）、「みんな」のホームとみちをつむの選ぶ画面が 28dp
  */
 internal val SCREEN_TITLE_BLOCK = 30.dp
-
-private val WordMotion = BlockMotionSpec(hopDp = 10f, hopBounceDp = 3f, fallMs = 220, landDxDp = 10f, landBounceDp = 6f)
 
 /** ブロックの色：アイコンの 4 色を順に */
 private val BlockColors = listOf(Pop.Orange, Pop.Teal, Pop.Yellow, Pop.Navy)

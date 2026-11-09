@@ -113,6 +113,7 @@ import androidx.compose.foundation.LocalIndication
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SCREEN_TITLE_BLOCK
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PopChip
@@ -862,6 +863,8 @@ private fun PartCard(
         // どのカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる。それでも入らない分は「…」にする。
         // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
         val largeText = LocalDensity.current.fontScale > 1f
+        // 幅の狭い端末（400dp 未満）も、13sp の長さと日付が 1 行に入らない（「776 m・1…」で切れる）ので、2 行にする（#134 の C のレビュー）
+        val twoLines = largeText || isNarrowScreen()
         // 歩いた長さと日付（記録のあとの窓・大きく見る窓と同じ形。ui/common/WalkNote）。
         // 天気の名前は、字を大きくしたら入らなくなったので出さない（左上の天気のアイコンで分かる。読み上げもアイコンが伝える。決定 80）
         WalkNote(
@@ -870,8 +873,8 @@ private fun PartCard(
             weather = null,
             fontSize = 13.sp,
             separator = "・",
-            minLines = if (largeText) 2 else 1,
-            maxLines = if (largeText) 2 else 1,
+            minLines = if (twoLines) 2 else 1,
+            maxLines = if (twoLines) 2 else 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )

@@ -330,7 +330,7 @@ fun CollectScreen(
                     // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
                     Text(note, fontSize = 14.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
                 }
-                // 歩いた長さ・日付・天気（コレクションのカード・大きく見る窓と同じ形。ui/common/WalkNote）。
+                // 歩いた長さ・日付・天気（大きく見る窓と同じ形。コレクションのカードは天気だけ出さない。ui/common/WalkNote）。
                 // 天気は記録のあとに取ってくるので、届いたら足す（届くまでは出さない）。
                 // 変換の数字（頂点・ε・GPS の点など）は、見ても分からないので出さない（開発用に Logcat へ。CollectViewModel.keep）
                 WalkNote(

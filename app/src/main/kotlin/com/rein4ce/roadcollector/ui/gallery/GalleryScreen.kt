@@ -9,7 +9,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,20 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,7 +72,7 @@ import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
 import com.rein4ce.roadcollector.ui.common.isNarrowScreen
-import com.rein4ce.roadcollector.ui.common.zoomOrigin
+import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -120,18 +109,16 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     var page by remember { mutableStateOf(if (gallery.consumeOpenRequest()) GalleryPage.OVERVIEW else GalleryPage.HOME) }
 
     // 「‹ 戻る」で 1 つ前の画面（ホーム・遊び方のランキング）に戻るときだけ、戻った先を「‹ 戻る」の所から大きくして出す
-    // （積む画面の「‹ 戻る」と同じ。決定 78・80）。値は大きくなり始める点（画面の中の割合）。端末の「戻る」と、先へ進むときは null
-    var zoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
-    // この画面の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため）
-    val area = remember { arrayOf(Rect.Zero) }
+    // （積む画面の「‹ 戻る」と同じ。決定 78・80。共通の仕組みは ui/common/ZoomFrom.kt）。端末の「戻る」と、先へ進むときは動かさない
+    val zoom = rememberBackZoom()
     // 1 つ前の画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
     fun back(center: Offset?) {
-        zoomFrom = center?.let { zoomOrigin(it, area[0]) ?: BACK_ZOOM_FALLBACK }
+        zoom.back(center)
         page = if (page == GalleryPage.OVERVIEW) GalleryPage.HOME else GalleryPage.OVERVIEW
     }
     // 先へ進む（戻った先ではないので、大きくする動きは付けない）
     fun forward(to: GalleryPage) {
-        zoomFrom = null
+        zoom.forward()
         page = to
     }
     BackHandler(enabled = page != GalleryPage.HOME) { back(null) }
@@ -171,9 +158,9 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     var opened by remember { mutableStateOf<TowerSummary?>(null) }
     var showNickname by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { area[0] = it.boundsInRoot() }) {
+    Box(modifier = Modifier.fillMaxSize().then(zoom.area)) {
         when (page) {
-            GalleryPage.HOME -> ZoomInFrom(zoomFrom) {
+            GalleryPage.HOME -> ZoomInFrom(zoom.from, zoom::settled) {
                 GalleryHome(
                     stateOf = gallery::stateOf,
                     isMine = isMine,
@@ -183,7 +170,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
                     },
                 )
             }
-            GalleryPage.OVERVIEW -> ZoomInFrom(zoomFrom) {
+            GalleryPage.OVERVIEW -> ZoomInFrom(zoom.from, zoom::settled) {
                 Overview(
                     gallery = gallery,
                     towers = towers,
@@ -247,9 +234,6 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
  */
 private enum class GalleryPage { HOME, OVERVIEW, RANKING, MINE }
 
-/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、戻った先が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
-private val BACK_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
-
 /** 「みんな」の最初の画面：見出し、物差しの切り替え、断面図（1 番と自分）、2 基の行、「ランキングを見る」「あなたのタワー」 */
 @Composable
 private fun Overview(
@@ -297,7 +281,8 @@ private fun Overview(
         val narrow = isNarrowScreen()
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopBackButton(onBack, small = narrow, onClickLabel = "どのランキングを見るかの画面に戻る")
-            PopModeTag(mode.fullLabel, face = modeFace(mode), small = narrow)
+            // 見た目は遊び方の名前だけ。読み上げでは、前と同じく「通常のランキング」と何の画面かを伝える（#134 の C のレビュー）
+            PopModeTag(mode.fullLabel, face = modeFace(mode), small = narrow, spoken = "${mode.fullLabel}のランキング")
             Spacer(Modifier.weight(1f))
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }

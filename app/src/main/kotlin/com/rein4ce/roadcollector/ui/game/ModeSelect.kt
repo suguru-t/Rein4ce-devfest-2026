@@ -37,19 +37,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -72,14 +68,13 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
 import com.rein4ce.roadcollector.ui.common.isNarrowScreen
-import com.rein4ce.roadcollector.ui.common.zoomOrigin
+import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -118,18 +113,16 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     // 「‹ 戻る」で選ぶ画面に戻るときだけ、選ぶ画面を「‹ 戻る」の所から大きくして出す（ホームの家のボタンと同じ。決定 78）。
-    // 値は大きくなり始める点（画面の中の割合）。端末の「戻る」では null にして、今までどおりすぐ切り替える
-    var selectZoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
-    // この画面（積むタブの中身）の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため）
-    val area = remember { arrayOf(Rect.Zero) }
+    // 端末の「戻る」では、今までどおりすぐ切り替える（ランキングと共通の仕組み。ui/common/ZoomFrom.kt）
+    val zoom = rememberBackZoom()
 
     // 選ぶ画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
     fun backToSelect(center: Offset?) {
-        selectZoomFrom = center?.let { zoomOrigin(it, area[0]) ?: SELECT_ZOOM_FALLBACK }
+        zoom.back(center)
         chosen = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { area[0] = it.boundsInRoot() }) {
+    Box(modifier = Modifier.fillMaxSize().then(zoom.area)) {
         when (mode) {
             PlayMode.NORMAL -> {
                 // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
@@ -177,16 +170,13 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
                 val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
                 val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
-                ZoomInFrom(selectZoomFrom) {
+                ZoomInFrom(zoom.from, zoom::settled) {
                     ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
                 }
             }
         }
     }
 }
-
-/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、選ぶ画面が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
-private val SELECT_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
 
 /**
  * モードを選ぶ画面（ゲームのタイトル画面のように）。ホームと同じ組み方：
@@ -437,7 +427,7 @@ private const val HEADER_SCALE_MAX = 1.8f
 private val HEADER_ROWS_GAP = 22.dp
 
 /**
- * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ほかの画面の見出しは 26dp。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
+ * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ランキングの一覧の見出しは 26dp、記録とコレクションは 30dp（決定 80）。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
  * はじめは 40dp で画面の幅いっぱいになり、B が大きすぎるとした）
  */
 private val ART_WIDTH = 176.dp

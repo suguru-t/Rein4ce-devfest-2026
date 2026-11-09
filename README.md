@@ -120,7 +120,7 @@ app/    com.rein4ce.roadcollector
   ui/gallery/    みんなのタワー                                                             … C
   net/           ApiClient（Ktor client）                                                  … C
   data/          PartRepository（JSON ファイル保存。Room に替えるならここ）, GameSession, WeatherService（天気を取ってくる。B）, AppSettings（設定。B）
-  ui/common/     PartDrawing（パーツの描画。PartGeometry の見た目の丸い形を使う。当たり判定は角ばった形）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, WalkNote（パーツの注記：足跡・長さ・日付・天気）
+  ui/common/     PartDrawing（パーツの描画。PartGeometry の見た目の丸い形を使う。当たり判定は角ばった形）, FramedDialog（見出しの帯と「×」の付いた枠）, Notes（崩れない注記）, WalkNote（パーツの注記：足跡・長さ・日付・天気。コレクションのカードは天気を出さない）
   ui/settings/   設定（SettingsDialog）、ニックネーム、アプリについて                                  … B
 
 server/ com.rein4ce.roadcollector.server                                                  … C

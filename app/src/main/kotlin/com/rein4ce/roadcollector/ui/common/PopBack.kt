@@ -19,6 +19,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -58,13 +60,16 @@ internal fun PopBackButton(onBack: (center: Offset) -> Unit, small: Boolean, onC
 /**
  * 遊び方の札（「通常」「90 秒チャレンジ」「毎日 1 つずつ積む」）。遊び方の色の積み木に白い字で、少し傾ける。
  * 「‹ 戻る」と同じ高さ・同じ字の大きさ（[small] なら一回り小さく）。押すものではないので、読み上げでは字だけ
+ *
+ * @param spoken 読み上げで字の代わりに伝えること（ランキングでは「通常のランキング」。見た目は遊び方の名前だけなので、何の画面かを伝える）
  */
 @Composable
-internal fun PopModeTag(label: String, face: Color, small: Boolean) {
+internal fun PopModeTag(label: String, face: Color, small: Boolean, spoken: String? = null) {
     val size = with(LocalDensity.current) { (if (small) 14.dp else 16.dp).toSp() }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .then(if (spoken != null) Modifier.clearAndSetSemantics { contentDescription = spoken } else Modifier)
             .graphicsLayer { rotationZ = 2f }
             .popBlock(face = face, corner = 10.dp, depth = 3.dp)
             .heightIn(min = if (small) 36.dp else 42.dp)

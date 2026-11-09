@@ -47,6 +47,7 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.popBlock
 
 /**
@@ -68,7 +69,9 @@ import com.rein4ce.roadcollector.ui.common.popBlock
 @Composable
 fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set<Sky>, modifier: Modifier = Modifier, enabled: Boolean = true) {
     // 丸ゴシックは字の幅が広いので、札の字・間を少し詰めて、ふつうの文字の大きさなら 3 つが 1 行に収まるようにする
-    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // 幅の狭い端末（400dp 未満）では、札の間と札の左右の余白を少し詰めて、3 つを 1 行に収める（前の 12sp でも入らず、お気に入りが 2 行目に落ちていた。#134 の C のレビュー）
+    val narrow = isNarrowScreen()
+    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(if (narrow) 4.dp else 6.dp)) {
         // 並び
         Box {
             var open by remember { mutableStateOf(false) }
@@ -163,8 +166,9 @@ private fun FilterTag(
             color = if (active) activeText else Pop.TealLine,
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
-            // 前は 12sp。大きくすると 3 つが 1 行に入らなくなるので 13sp まで（決定 80）
-            fontSize = 13.sp,
+            // 前は 12sp。大きくすると 3 つが 1 行に入らなくなるので 13sp まで（決定 80）。
+            // 幅の狭い端末（400dp 未満）では 13sp でも入らないので、前の 12sp のまま（#134 の C のレビュー）
+            fontSize = if (isNarrowScreen()) 12.sp else 13.sp,
             maxLines = 1,
             modifier = Modifier
                 .graphicsLayer { rotationZ = if (active) -2f else 0f }
@@ -174,7 +178,7 @@ private fun FilterTag(
                     depth = if (active) 4.dp else 2.dp,
                     edge = if (active) null else Pop.TealLine,
                 )
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = if (isNarrowScreen()) 8.dp else 10.dp, vertical = 6.dp),
         )
     }
 }
