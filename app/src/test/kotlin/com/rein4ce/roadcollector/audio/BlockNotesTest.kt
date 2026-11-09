@@ -13,9 +13,9 @@ class BlockNotesTest {
     private fun semitones(rate: Float): Float = (12 * ln(rate.toDouble()) / ln(2.0)).toFloat()
 
     @Test
-    fun `blocks from the left play do re mi so la do re`() {
-        val notes = (0 until 7).map { semitones(BlockNotes.rate(it)) }
-        assertEquals(listOf(-7, -5, -3, 0, 2, 5, 7), notes.map { it.roundToInt() })
+    fun `blocks from the left play do re mi fa so la ti do`() {
+        val notes = (0 until 8).map { semitones(BlockNotes.rate(it)) }
+        assertEquals(listOf(-7, -5, -3, -2, 0, 2, 4, 5), notes.map { it.roundToInt() })
         notes.forEach { assertTrue("半音にそろっている: $it", abs(it - it.roundToInt()) < 0.001f) }
     }
 
@@ -27,9 +27,9 @@ class BlockNotesTest {
     }
 
     @Test
-    fun `an eighth block starts over from the first note`() {
-        assertEquals(BlockNotes.rate(0), BlockNotes.rate(7), 0f)
-        assertEquals(BlockNotes.rate(1), BlockNotes.rate(8), 0f)
+    fun `a ninth block starts over from the first note`() {
+        assertEquals(BlockNotes.rate(0), BlockNotes.rate(8), 0f)
+        assertEquals(BlockNotes.rate(1), BlockNotes.rate(9), 0f)
     }
 
     @Test

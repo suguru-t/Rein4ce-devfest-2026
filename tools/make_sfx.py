@@ -9,7 +9,7 @@ BGM（tools/make_bgm.py）と同じ木琴（マリンバ）の音で作り、曲
 - sfx_hop.ogg：題字・画面名の積み木が跳ねたとき。下から上へ跳ねる 2 つの音「ぴょん」。
   積み木ごとに高さを変えて鳴らす（アプリが再生の速さで音の高さを変える。audio/SoundEffects.kt の BlockNotes）ので、
   基準の高さ（G5）で作っておく
-- sfx_land.ogg：最後の積み木が落ちてきて着いたとき。低い「ことっ」
+- sfx_land.ogg：最後の積み木が落ちてきて着いたとき。軽い「ことっ」（押したときは、ほかの積み木と同じ「ぴょん」を鳴らしてある）
 - sfx_done.ogg：記録を止めて道を 1 本集めたとき。ド・ミ・ソ・ドと駆け上がる短いごほうび
 
 使い方（リポジトリのいちばん上で）:
@@ -70,12 +70,12 @@ def hop() -> np.ndarray:
 
 
 def land() -> np.ndarray:
-    """最後の積み木が着く：低い木琴の音に「コツ」を重ねた「ことっ」"""
-    buf = np.zeros(int(0.35 * SR))
-    place(buf, 0.0, marimba(midi("G3"), 1.0))
-    place(buf, 0.0, marimba(midi("D4"), 0.35))
-    place(buf, 0.0, knock(0.05, 0.6))
-    return finish(buf, 0.38)
+    """最後の積み木が着く：高めの短い 2 つの音を、上から下へ「こ・とっ」。小さな「コツ」を重ね、響きは短く切って軽くする"""
+    buf = np.zeros(int(0.2 * SR))
+    place(buf, 0.0, marimba(midi("E6"), 0.4))
+    place(buf, 0.035, marimba(midi("C6"), 1.0))
+    place(buf, 0.035, knock(0.03, 0.25))
+    return finish(buf, 0.24)
 
 
 def done() -> np.ndarray:

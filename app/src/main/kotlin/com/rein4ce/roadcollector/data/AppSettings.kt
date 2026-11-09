@@ -179,7 +179,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
     private val _sfxOn = MutableStateFlow(readBoolean(KEY_SFX_ON, true))
 
     /**
-     * 効果音（ボタンを押したとき・題字や画面名の積み木が跳ねたとき・道を 1 本集めたとき）を鳴らすか。初めはオン。
+     * 効果音（ボタンを押したとき・題字や画面名の積み木を押したとき・道を 1 本集めたとき）を鳴らすか。初めはオン。
      * BGM とは別に切り替えられる。鳴らすかは鳴らす瞬間に読む（audio/SoundEffects.kt）
      */
     val sfxOn: StateFlow<Boolean> = _sfxOn
