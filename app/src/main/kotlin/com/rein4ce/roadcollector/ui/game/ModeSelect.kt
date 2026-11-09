@@ -35,15 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +66,9 @@ import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
+import com.rein4ce.roadcollector.ui.common.artBars
+import com.rein4ce.roadcollector.ui.common.artSlab
+import com.rein4ce.roadcollector.ui.common.bar
 import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -242,37 +238,31 @@ private fun ModeTitle(scale: Float) {
 }
 
 /**
- * 台に積んだパーツの絵（飾り。読み上げない）。積む画面と同じ紺の台に、題字の色の道のパーツを 3 つ：
- * 下に横たわった棒（黄）、その上に橋のような形（青緑）、いちばん上に少し傾いた L（オレンジ）。
- * パーツは、コレクションの道と同じく、濃い縁取りを描いてから本体を重ねる
+ * 積んでいる途中の絵（飾り。読み上げない）。積む画面と同じ紺の台に、形の違う道のパーツを積み、上からもう 1 つ落ちてくる：
+ * 台の上に横たわった板（黄）、その上に U（青緑）と L（紺）を並べ、上にクランク（オレンジ）が浮いている。
+ * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツは角の立った同じ太さの棒を組み合わせ、
+ * 板と台だけ角を少し丸め、傾けない（ui/common/TowerArt.kt。決定 82。前は縁取りのある丸い太線で、ホームと質感が違った）。
+ * 並びはホームの塔（板・橋・L を 1 本に積む）と同じにならないよう、横に並べて、落ちてくるパーツを足した（B の希望）
  */
 @Composable
 private fun StackArt(modifier: Modifier = Modifier) {
     // 台の色は積む画面と同じ（ダークでは、暗い地の上でも見える明るさ）
     val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
+    // 紺のパーツは、ダークでは台と同じ明るい紺にして、暗い地に沈ませない
+    val navy = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
     Canvas(modifier = modifier.clearAndSetSemantics {}) {
         // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる
         val u = size.width / 176f
-        fun p(x: Float, y: Float) = Offset(x * u, y * u)
-        val width = 10f * u
-        fun part(color: Color, points: List<Offset>) {
-            val path = Path().apply {
-                moveTo(points[0].x, points[0].y)
-                points.drop(1).forEach { lineTo(it.x, it.y) }
-            }
-            drawPath(path, Pop.side(color), style = Stroke(width + 3f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
         // 台
-        drawRoundRect(platform, topLeft = p(34f, 96f), size = Size(108f * u, 14f * u), cornerRadius = CornerRadius(2f * u))
-        // 横たわった棒
-        part(Pop.Yellow, listOf(p(46f, 87f), p(130f, 87f)))
-        // 橋のような形
-        part(Pop.Teal, listOf(p(60f, 79f), p(60f, 60f), p(114f, 60f), p(114f, 79f)))
-        // 少し傾いた L
-        rotate(degrees = -8f, pivot = p(92f, 38f)) {
-            part(Pop.Orange, listOf(p(70f, 51f), p(104f, 51f), p(104f, 22f)))
-        }
+        artSlab(platform, x = 22f, y = 98f, w = 132f, h = 12f, r = 3f, u = u)
+        // 横たわった板
+        artSlab(Pop.Yellow, x = 30f, y = 84f, w = 116f, h = 14f, r = 4f, u = u)
+        // U（2 本の脚と下の棒）
+        artBars(Pop.Teal, u, bar(38f, 50f, 11f, 34f), bar(76f, 50f, 11f, 34f), bar(38f, 73f, 49f, 11f))
+        // L（縦の棒と、下の横の棒）
+        artBars(navy, u, bar(100f, 46f, 11f, 38f), bar(100f, 73f, 36f, 11f))
+        // 上から落ちてくるクランク（段になった 3 本の棒）
+        artBars(Pop.Orange, u, bar(66f, 8f, 30f, 11f), bar(85f, 8f, 11f, 26f), bar(85f, 23f, 30f, 11f))
     }
 }
 

@@ -18,13 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +31,13 @@ import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.artBars
+import com.rein4ce.roadcollector.ui.common.artSlab
+import com.rein4ce.roadcollector.ui.common.artStar
+import com.rein4ce.roadcollector.ui.common.bar
 import com.rein4ce.roadcollector.ui.game.ModeRow
 import com.rein4ce.roadcollector.ui.game.PlayMode
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * 「みんな」のホーム（決定 77）。みちをつむの、遊び方を選ぶ画面（ui/game/ModeSelect.kt の ModeSelectScreen）と同じ組み方：
@@ -112,10 +108,10 @@ private fun HomeTitle(scale: Float) {
 }
 
 /**
- * 積み木で作った塔の絵（飾り。読み上げない）。題字の積み木と同じ、角の丸い面の下に濃い側面がのぞく積み木で、
- * 高さの違う 2 本の塔を 1 本の台に並べる（ランキングで比べる、という絵）。
- * 積み木は 1 つずつ形・大きさ・色・傾きを変え、人が手で積んだように少しずつずらす（同じ積み木を並べない）。
- * 高い塔のてっぺんには、1 番の星
+ * 積み木で作った塔の絵（飾り。読み上げない）。高さの違う 2 本の塔を 1 本の台に並べる（ランキングで比べる、という絵）。
+ * 高い塔のてっぺんには、1 番の星。
+ * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツ（橋・L）は角の立った同じ太さの棒を組み合わせ、
+ * 板と台だけ角を少し丸め、傾けない（ui/common/TowerArt.kt。決定 82。前は下に濃い側面がのぞく傾いた積み木で、ホームと質感が違った）
  */
 @Composable
 private fun RankingArt(modifier: Modifier = Modifier) {
@@ -127,46 +123,18 @@ private fun RankingArt(modifier: Modifier = Modifier) {
         // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる（みちをつむの絵と同じ）
         val u = size.width / 176f
         // 台
-        drawRoundRect(platform, topLeft = Offset(20f * u, 98f * u), size = Size(136f * u, 12f * u), cornerRadius = CornerRadius(2f * u))
-        // 高い塔（左）：下から、平たい黄・太い青緑・縦長のオレンジ・細い紺
-        block(Pop.Yellow, cx = 64f, cy = 89f, w = 50f, h = 14f, tilt = -2f, u = u)
-        block(Pop.Teal, cx = 69f, cy = 72f, w = 32f, h = 20f, tilt = 4f, u = u)
-        block(Pop.Orange, cx = 61f, cy = 51f, w = 20f, h = 24f, tilt = -6f, u = u)
-        block(navy, cx = 68f, cy = 34f, w = 28f, h = 11f, tilt = 3f, u = u)
-        star(Pop.Yellow, cx = 66f, cy = 17f, r = 9.5f, tilt = 8f, u = u)
-        // 低い塔（右）：下から、オレンジの板・黄の四角・小さな青緑
-        block(Pop.Orange, cx = 120f, cy = 89f, w = 38f, h = 14f, tilt = 3f, u = u)
-        block(Pop.Yellow, cx = 116f, cy = 71f, w = 22f, h = 22f, tilt = -7f, u = u)
-        block(Pop.Teal, cx = 123f, cy = 54f, w = 17f, h = 12f, tilt = 9f, u = u)
+        artSlab(platform, x = 20f, y = 98f, w = 136f, h = 12f, r = 3f, u = u)
+        // 高い塔（左）：下から、黄の板・青緑の橋・オレンジの L・紺の板、てっぺんに星
+        artSlab(Pop.Yellow, x = 36f, y = 84f, w = 52f, h = 14f, r = 4f, u = u)
+        artBars(Pop.Teal, u, bar(43f, 60f, 10f, 24f), bar(72f, 60f, 10f, 24f), bar(43f, 60f, 39f, 10f))
+        artBars(Pop.Orange, u, bar(52f, 32f, 10f, 28f), bar(52f, 50f, 26f, 10f))
+        artSlab(navy, x = 44f, y = 22f, w = 28f, h = 10f, r = 3f, u = u)
+        artStar(Pop.Yellow, cx = 58f, cy = 11f, r = 9.5f, u = u)
+        // 低い塔（右）：下から、オレンジの板・黄の四角・青緑の短い棒
+        artSlab(Pop.Orange, x = 100f, y = 86f, w = 44f, h = 12f, r = 4f, u = u)
+        artSlab(Pop.Yellow, x = 110f, y = 64f, w = 24f, h = 22f, r = 3f, u = u)
+        artBars(Pop.Teal, u, bar(114f, 54f, 16f, 10f))
     }
-}
-
-/** 積み木 1 つ：中心 ([cx], [cy])・幅 [w]・高さ [h]（絵の目盛り）を [tilt] 度傾け、下に濃い側面をのぞかせる */
-private fun DrawScope.block(color: Color, cx: Float, cy: Float, w: Float, h: Float, tilt: Float, u: Float) {
-    val depth = 3f * u
-    val corner = CornerRadius(3.5f * u)
-    rotate(degrees = tilt, pivot = Offset(cx * u, cy * u)) {
-        val topLeft = Offset((cx - w / 2) * u, (cy - h / 2) * u)
-        val sz = Size(w * u, h * u)
-        drawRoundRect(Pop.side(color), topLeft = topLeft + Offset(0f, depth), size = sz, cornerRadius = corner)
-        drawRoundRect(color, topLeft = topLeft, size = sz, cornerRadius = corner)
-    }
-}
-
-/** 星（5 つの角）。下に濃い側面をのぞかせる（積み木と同じ） */
-private fun DrawScope.star(color: Color, cx: Float, cy: Float, r: Float, tilt: Float, u: Float) {
-    fun path(dy: Float) = Path().apply {
-        for (i in 0 until 10) {
-            val radius = (if (i % 2 == 0) r else r * 0.45f) * u
-            val a = Math.toRadians((-90.0 + i * 36.0 + tilt)).toFloat()
-            val x = cx * u + radius * cos(a)
-            val y = cy * u + dy + radius * sin(a)
-            if (i == 0) moveTo(x, y) else lineTo(x, y)
-        }
-        close()
-    }
-    drawPath(path(2.5f * u), Pop.side(color))
-    drawPath(path(0f), color)
 }
 
 /** ホームの行の一言（そのランキングで何を比べるか） */
