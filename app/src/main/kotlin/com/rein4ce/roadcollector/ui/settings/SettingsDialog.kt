@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -123,7 +124,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
         onDismiss = { if (page == Page.LIST) onDismiss() else back() },
         onClose = onDismiss,
         onBack = if (page == Page.LIST) null else back,
-        // コレクションの拡大表示と同じポップな枠（紺の名札の見出し・下に側面がのぞく紙の面。決定 56）
+        // コレクションの拡大表示と同じポップな枠（下に側面がのぞく紙の面。決定 56）
         pop = true,
         // 見出しは名札にせず字だけ（名札はボタンのように見えたため）
         nameTag = false,
@@ -132,7 +133,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             Page.LIST -> {
                 // ニックネーム（「みんな」に出る作者名）を、いちばん上に置く（名前を付ける所なので、最初に目に入るように）
                 Section("みんなのタワー", accent = Pop.Navy) {
-                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
+                    // ニックネームは人や AI が付けた字なので、丸ゴシック（使う字だけの切り出し）ではなく端末の字体で出す
+                    // （切り出しに無い字だけ端末の字体になって、1 つの名前の中で字体が混ざらないように。#105 の C のレビュー）。
+                    // 「名無し」はアプリの言葉なので、ほかの値と同じ丸ゴシック
+                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }, valueFont = if (nickname.isBlank()) Pop.Rounded else null) {
+                        editingNickname = true
+                    }
                 }
                 // 前は「見た目」。振動も入れたので「システム」にした
                 Section("システム", accent = Pop.Teal) {
@@ -547,9 +553,13 @@ private fun Toggle(label: String, note: String?, checked: Boolean, onChange: (Bo
     }
 }
 
-/** 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定（灰色の丸ゴシック）と「›」（まとまりの枠の中に並べる） */
+/**
+ * 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定（灰色）と「›」（まとまりの枠の中に並べる）
+ *
+ * @param valueFont 今の設定の字体。ふつうは丸ゴシック。人や AI が付けた字（ニックネーム）は null（端末の字体）にする
+ */
 @Composable
-private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
+private fun LinkRow(label: String, value: String?, valueFont: FontFamily? = Pop.Rounded, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -569,7 +579,7 @@ private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
         if (value != null) {
             Spacer(Modifier.width(8.dp))
             // 今の設定は、項目の名前と同じ丸ゴシックで、少し小さく灰色にして控えめに
-            Text(value, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Muted, maxLines = 1)
+            Text(value, fontFamily = valueFont, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Muted, maxLines = 1)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Fieldbook.Muted, modifier = Modifier.size(24.dp))
     }
