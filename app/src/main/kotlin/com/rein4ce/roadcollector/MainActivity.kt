@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.content.Intent
 import android.content.res.Resources
 import android.graphics.Color
 import android.media.AudioManager
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
@@ -105,7 +108,7 @@ class MainActivity : ComponentActivity() {
                 Box {
                     // タイトルを出している間は、下のホームを読み上げから外す（読み上げで、見えないボタンを押せないように）
                     Box(modifier = if (TitleIntroState.done) Modifier else Modifier.clearAndSetSemantics {}) {
-                        AppNav()
+                        AppNav(collectRequests = collectRequests)
                     }
                     // 開いたときのタイトル。終わったら何も描かない
                     if (showIntro) TitleIntro()
@@ -120,6 +123,22 @@ class MainActivity : ComponentActivity() {
      */
     private fun volumeStreamFor(bgmOn: Boolean, sfxOn: Boolean) =
         if (bgmOn || sfxOn) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
+
+    /**
+     * アプリが生きているまま、記録中の通知を押して戻ってきた回数。増えたら、ホームなどにいても記録画面へ移す（AppNav）。
+     * 画面の作り直しでは 0 に戻る（そのときは移さない）
+     */
+    private var collectRequests by mutableIntStateOf(0)
+
+    // 記録中の通知を押したとき：アプリが生きていれば（singleTop。通知は FLAG_ACTIVITY_SINGLE_TOP）、開き直さずにここに来る。
+    // 記録中なら、記録画面へ移す（ホームへ戻ってから裏に回していても、記録の様子が出るように。#101 の A のレビュー）。
+    // アプリが終わっていたときは開き直しになり、AppNav が記録画面から始める。
+    // アイコンから戻ったとき（ACTION_MAIN・CATEGORY_LAUNCHER）も singleTop なのでここに来るが、こちらは見ていた画面のままにする
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val fromLauncher = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+        if (!fromLauncher && TrackRecorder.isRecording.value) collectRequests++
+    }
 
     // BGM は、アプリが前に出ている間だけ流す（ほかのアプリを見ているとき・記録中に画面を消したときは止める）
     override fun onStart() {

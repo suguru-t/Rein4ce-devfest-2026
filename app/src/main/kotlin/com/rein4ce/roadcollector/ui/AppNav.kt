@@ -81,8 +81,12 @@ sealed class Dest(val route: String, val label: String, val iconOutline: ImageVe
 /** ホームの route。ホームはタブではないので [Dest] には入れない（ui/HomeScreen.kt） */
 internal const val HOME_ROUTE = "home"
 
+/**
+ * @param collectRequests アプリが生きているまま、記録中の通知を押して戻ってきた回数（MainActivity.onNewIntent）。
+ *   増えたら、記録中なら記録画面へ移す
+ */
 @Composable
-fun AppNav() {
+fun AppNav(collectRequests: Int = 0) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentDestination = backStack?.destination
@@ -126,6 +130,11 @@ fun AppNav() {
             withFrameNanos {}
             instant = false
         }
+    }
+    // アプリが生きているまま記録中の通知を押したとき（ホームへ戻ってから裏に回していたときなど）も、記録画面へ移す。
+    // こちらは見ていた画面から移るので、ふだんの切り替えの動きを付ける（#101 の A のレビュー）
+    LaunchedEffect(collectRequests) {
+        if (collectRequests > 0 && TrackRecorder.isRecording.value) go(Dest.Collect)
     }
 
     // タブバーがホームへ戻るとき（下へ隠れる間）も、さっきまでの画面を選んだままにしておく
