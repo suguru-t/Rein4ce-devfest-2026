@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,8 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.AiNamingRow
-import com.rein4ce.roadcollector.ui.common.PressTextButton
-import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
+import com.rein4ce.roadcollector.ui.common.NameDialogFrame
 import com.rein4ce.roadcollector.ui.common.fieldbookTextFieldColors
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -70,63 +68,49 @@ internal fun RenameDialog(
     // AI に名前を考えてもらっているところ（ダイアログを閉じると取りやめる。ui/common/NameField.kt）
     val naming = rememberAiNaming()
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(8.dp),
-        containerColor = Fieldbook.Paper,
-        titleContentColor = Fieldbook.Ink,
-        textContentColor = Fieldbook.Ink,
-        title = { Text("名前を付ける", fontWeight = FontWeight.Bold) },
-        // 入力欄で字を長押しして選ぶときの振動も、設定の「振動」に従わせる（ui/common/Haptics.kt）
-        text = { ProvideAppHaptics {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    // AI に聞いている間は打てなくする（届いた案で、待っている間に打った字を上書きしないように）
-                    readOnly = naming.asking,
-                    singleLine = true,
-                    label = { Text("名前") },
-                    placeholder = { Text(fallback) },
-                    isError = tooLong,
-                    supportingText = {
-                        Row(Modifier.fillMaxWidth()) {
-                            Text(
-                                // 数と単位（「10 文字」「488 m」）が別の行に分かれないよう、notes() を通す
-                                notes(if (tooLong) "$MAX_NAME_LENGTH 文字までです" else "空なら「$fallback」に戻る"),
-                                style = noteStyle,
-                                modifier = Modifier.weight(1f).padding(end = 8.dp),
-                            )
-                            Text("$length/$MAX_NAME_LENGTH", fontFamily = Fieldbook.Data)
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { if (!tooLong) onSave(text.text) }),
-                    shape = RoundedCornerShape(4.dp),
-                    colors = fieldbookTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
-                )
-                // 設定で AI の名前付けをオフにしていたら、ボタンを出さない
-                if (aiOn) {
-                    AiNamingRow(
-                        naming = naming,
-                        enabled = true,
-                        idleNote = notes("歩いた場所（位置）は送らず、形・距離・日時で考えます"),
-                        failedNote = notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください"),
-                        onAsk = {
-                            naming.ask(suggest = { suggest(part) }) { name -> text = TextFieldValue(name, selection = TextRange(name.length)) }
-                        },
+    NameDialogFrame(
+        title = "名前を付ける",
+        saveEnabled = !tooLong,
+        onSave = { onSave(text.text) },
+        onDismiss = onDismiss,
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            // AI に聞いている間は打てなくする（届いた案で、待っている間に打った字を上書きしないように）
+            readOnly = naming.asking,
+            singleLine = true,
+            label = { Text("名前") },
+            placeholder = { Text(fallback) },
+            isError = tooLong,
+            supportingText = {
+                Row(Modifier.fillMaxWidth()) {
+                    Text(
+                        // 数と単位（「10 文字」「488 m」）が別の行に分かれないよう、notes() を通す
+                        notes(if (tooLong) "$MAX_NAME_LENGTH 文字までです" else "空なら「$fallback」に戻る"),
+                        style = noteStyle,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )
+                    Text("$length/$MAX_NAME_LENGTH", fontFamily = Fieldbook.Data)
                 }
-            }
-        } },
-        confirmButton = {
-            PressTextButton(onClick = { onSave(text.text) }, enabled = !tooLong) {
-                Text("保存", color = if (tooLong) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            PressTextButton(onClick = onDismiss) { Text("やめる", color = Fieldbook.Muted) }
-        },
-    )
+            },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (!tooLong) onSave(text.text) }),
+            shape = RoundedCornerShape(12.dp),
+            colors = fieldbookTextFieldColors(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+        )
+        // 設定で AI の名前付けをオフにしていたら、ボタンを出さない
+        if (aiOn) {
+            AiNamingRow(
+                naming = naming,
+                enabled = true,
+                idleNote = notes("歩いた場所（位置）は送らず、形・距離・日時で考えます"),
+                failedNote = notes("名前を考えられませんでした", "もう一度押すか、自分で付けてください"),
+                onAsk = {
+                    naming.ask(suggest = { suggest(part) }) { name -> text = TextFieldValue(name, selection = TextRange(name.length)) }
+                },
+            )
+        }
+    }
 }
