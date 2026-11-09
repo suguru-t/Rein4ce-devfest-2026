@@ -100,12 +100,19 @@ class DailyViewModelTest {
         assertTrue("前の日に使い切っていても、今日は積める", tomorrow.canPlaceToday)
     }
 
+    @Test fun `台は通常と同じ長さ（台の端から 80 cm 外まで狙える）`() {
+        val vm = newVm(DailyTower())
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.dragBy(10f)
+        assertEquals(StackViewModel.PLATFORM_WIDTH_M.toFloat() / 2 + 0.8f, vm.ghostX, 1e-4f)
+    }
+
     @Test fun `昨日までの塔は固めてあり、今日のパーツが当たっても動かない`() {
-        // 昨日の棒は、台の右の端から半分はみ出している（固めていないと、上に落ちてきたパーツに押されて傾き、落ちる）
-        val yesterday = Placement("yesterday", x = 0.7f, y = 0.05f, angleRad = 0f, scale = 1f)
+        // 昨日の棒は、台（2.8 m）の右の端から半分はみ出している（固めていないと、上に落ちてきたパーツに押されて傾き、落ちる）
+        val yesterday = Placement("yesterday", x = 1.4f, y = 0.05f, angleRad = 0f, scale = 1f)
         val vm = newVm(DailyTower(listOf(DailyBlock(part("yesterday"), yesterday, Grip.NORMAL, "2026-11-09")), height = 0.1))
         vm.choose(part("today"), Grip.NORMAL)
-        vm.dragBy(1.1f) // はみ出した端の上
+        vm.dragBy(1.8f) // はみ出した端の上
         vm.place()
         vm.runUntilStill()
         val kept = vm.tower.blocks.single { it.part.id == "yesterday" }

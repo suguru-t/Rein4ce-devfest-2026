@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
  *   今日のパーツが台から落ちたときは、同じパーツで、そのまま狙い直す（置き直し。位置と向きもそのまま）。
  *   置き直しは 1 日 [DailyTower.MAX_RETRIES] 回まで（落ちた回数は塔と一緒に保存する）。使い切ったら、その日はもう積めない
  * - 日の変わり目は端末の時刻の 0 時（[today]）。積まなかった日は何もしない（塔はそのまま）
+ * - 台は通常と同じ 2.8 m（決定 70。3 つのモードでそろえる。前は 1.4 m）
  *
  * @param today 今日の日付（"2026-11-10"）。テストで差し替える
  */
@@ -79,7 +80,7 @@ class DailyViewModel(
     var saveFailed by mutableStateOf(false)
         private set
 
-    private var world = StackWorld()
+    private var world = newWorld()
     private var settleTimer = 0.0
 
     /** 今日もう積んだか（今日のパーツが塔に残っているか） */
@@ -108,7 +109,7 @@ class DailyViewModel(
      * （前は止めておくだけで、当たると動き出して、昨日までのパーツが落ちることがあった）
      */
     private fun rebuild() {
-        world = StackWorld()
+        world = newWorld()
         for (block in tower.blocks) {
             val p = block.placement
             world.freeze(world.place(block.part, p.x.toDouble(), p.y.toDouble(), p.angleRad.toDouble(), p.scale.toDouble(), block.grip))
@@ -236,6 +237,9 @@ class DailyViewModel(
     }
 
     companion object {
+        /** 台は通常（[StackViewModel.PLATFORM_WIDTH_M]）と同じ 2.8 m（決定 70。前は StackWorld の既定の 1.4 m） */
+        private fun newWorld() = StackWorld(platformWidth = StackViewModel.PLATFORM_WIDTH_M)
+
         const val SPAWN_ABOVE_M = 1.5f
         const val DRAG_MARGIN_M = 0.8
         const val MAX_FRAME_SECONDS = 0.05

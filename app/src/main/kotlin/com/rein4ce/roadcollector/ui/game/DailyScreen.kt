@@ -182,7 +182,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                             SkyText(" ・ ドラッグして、指を離すと落ちる", color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
                         // 操作のボタンは「回す」の 1 つだけ（ふつうの積む画面と同じ。決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる。
-                        // 回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114・決定 64。ui/game/RotateButtons.kt）
+                        // 回すのは時計回りだけで、押している間なめらかに回る（きざみは無い。決定 71。ui/game/RotateButtons.kt）
                         RotateButton(
                             RotateDirection.RIGHT,
                             sessionKey = part?.id ?: "",
