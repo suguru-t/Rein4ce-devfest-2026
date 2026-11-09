@@ -94,6 +94,10 @@ class AppSettingsTest {
         // BGM は初めからオンで、音量はまん中
         assertTrue(settings.bgmOn.value)
         assertEquals(AppSettings.DEFAULT_BGM_VOLUME, settings.bgmVolume.value)
+        // 効果音も初めからオン
+        assertTrue(settings.sfxOn.value)
+        // BGM の曲は、はじめからある「トコトコ」
+        assertEquals(BgmTrack.MARIMBA, settings.bgmTrack.value)
     }
 
     @Test
@@ -107,6 +111,8 @@ class AppSettingsTest {
             setNickname("みちつみ太郎")
             setBgmOn(false)
             setBgmVolume(8)
+            setSfxOn(false)
+            setBgmTrack(BgmTrack.UKULELE)
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
@@ -117,6 +123,9 @@ class AppSettingsTest {
         // BGM をオフにしても、音量は覚えている（オンに戻したときに同じ大きさで流れる）
         assertFalse(again.bgmOn.value)
         assertEquals(8, again.bgmVolume.value)
+        // 効果音は BGM と別に覚えている
+        assertFalse(again.sfxOn.value)
+        assertEquals(BgmTrack.UKULELE, again.bgmTrack.value)
     }
 
     @Test
@@ -156,9 +165,11 @@ class AppSettingsTest {
             map["weather_motion"] = "TURBO"
             map["keep_screen_on"] = "maybe"
             map["ai_naming"] = ""
+            map["bgm_track"] = "DISCO"
         }
         val settings = AppSettings(store)
         assertEquals(WeatherMotion.NORMAL, settings.weatherMotion.value)
+        assertEquals(BgmTrack.MARIMBA, settings.bgmTrack.value)
         assertFalse(settings.keepScreenOn.value)
         assertTrue(settings.aiNaming.value)
     }

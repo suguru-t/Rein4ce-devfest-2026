@@ -31,7 +31,7 @@
 
 - **本番は https だけ**：release ビルドは、暗号化しない通信（http）を許さない（`res/xml/network_security_config.xml`）。debug ビルドだけ、手元のサーバ（`http://10.0.2.2:8080`）用に http を許す
 - **他人からもらったファイルを安全に読む**：GPX（XML）を読むときは、外部のファイルや DOCTYPE を読まない（XXE 対策。`core/io/TrackFileParser`）
-- **地図のキーをリポジトリに置かない**：`local.properties`（git に入れない）と、CI は GitHub の Secrets から渡す。キーは「Maps SDK for Android だけ」と「このアプリの署名だけ」に制限してある
+- **地図のキーをリポジトリに置かない**：パソコンのユーザーの `~/.gradle/gradle.properties`（リポジトリの外）か、このクローンの `local.properties`（git に入れない）に書き、CI は GitHub の Secrets から渡す（#95）。同じ名前でも、リポジトリの中の `gradle.properties`（git に入る）には書かない。うっかり書いても、ビルドはそこからキーを読まない。キーは「Maps SDK for Android だけ」と「このアプリの署名だけ」に制限してある
 
 ## 5. していないこと（理由）
 

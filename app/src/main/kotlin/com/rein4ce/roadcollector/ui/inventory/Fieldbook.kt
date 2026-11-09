@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -26,10 +28,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rein4ce.roadcollector.core.geo.PartTrace
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.ui.collect.FLAG_SPREAD_DEGREES
+import com.rein4ce.roadcollector.ui.collect.FlagWidth
 import com.rein4ce.roadcollector.ui.common.drawGridClearings
+import com.rein4ce.roadcollector.ui.collect.GoalFlagColor
+import com.rein4ce.roadcollector.ui.collect.StartFlagColor
+import com.rein4ce.roadcollector.ui.collect.drawFlag
+import com.rein4ce.roadcollector.ui.collect.drawWalkingFootprints
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
 import kotlin.math.max
@@ -198,9 +208,14 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
  * @param sky 歩いたときの空のようす。道の色が変わり（[Fieldbook.roadColors]）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
  *   分からなければ null（いつもの色で、アイコンなし）
+ * @param trace 歩いた順になぞっているところ（拡大表示の「もう一度歩く」。WalkReplay.kt）を返す関数。null か、null を返せばなぞらない（ふつうの図）。
+ *   なぞっている間は、歩き始めに赤い旗・終わりに青い旗を立て、まだ歩いていない道をうすく、歩いたところまでを濃く出し、
+ *   いま歩いているところに、歩いている向きに回した足跡を出す。
+ *   なぞるところは 1 秒に 60 回変わるので、値ではなく関数で受け取り、描くとき（Canvas の中）だけで読む
+ *   （外で読むと、毎コマ図のまわり全体（拡大表示の地図も）を組み立て直すことになり重い。#94 の A のレビュー）
  */
 @Composable
-fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
+fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, trace: (() -> WalkTraceFrame?)? = null) {
     val (road, casing) = Fieldbook.roadColors(sky)
     val measurer = rememberTextMeasurer()
     // 図の中の字（縮尺・北）は図の一部なので、図と同じ大きさのままにする（文字の大きさの設定では大きくしない）。
@@ -232,8 +247,37 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null) {
         val scalePx = s * FIGURE_ROAD_RATIO
         val center = Offset(ox + s / 2, oy + s / 2)
         val edgePx = 1.8f * u
-        drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
-        drawPart(part, center, scalePx, color = road)
+        val frame = trace?.invoke()
+        if (frame == null) {
+            drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
+            drawPart(part, center, scalePx, color = road)
+        } else {
+            // まだ歩いていない道はうすく（どこへ向かうか見えるように）、歩いたところまでを濃く重ねる
+            drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing, alpha = TRACE_AHEAD_ALPHA)
+            drawPart(part, center, scalePx, color = road, alpha = TRACE_AHEAD_ALPHA)
+            // なぞった途中の形・いま歩いているところ・歩いている向きを、1 回の計算で出す
+            val traced = PartTrace.frame(part, frame.progress)
+            val now = traced.progress
+            drawPart(now.walked.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
+            drawPart(now.walked, center, scalePx, color = road)
+            fun onFigure(p: Pt) = Offset(center.x + p.x * scalePx, center.y - p.y * scalePx)
+            // スタートの赤い旗とゴールの青い旗（記録画面の地図と同じ）
+            if (part.points.isNotEmpty()) {
+                val start = onFigure(part.points.first())
+                // 輪は歩き始めの所に戻ってくる（最後の点から始めの点へつながる）ので、ゴールもスタートと同じ所
+                val goal = if (part.closed) start else onFigure(part.points.last())
+                drawStartGoalFlags(start, goal)
+            }
+            // いま歩いているところに、歩いている向きに回した足跡（記録画面の見出しの足跡と同じ絵）
+            val head = onFigure(now.head)
+            val walker = TRACE_WALKER_SIZE.toPx()
+            withTransform({
+                rotate(traced.heading, pivot = head)
+                translate(head.x - walker / 2f, head.y - walker / 2f)
+            }) {
+                drawWalkingFootprints(frame.steps, Fieldbook.Ink, sizePx = walker)
+            }
+        }
 
         // 北（パーツは北が上のまま正規化されている）。道に隠れないよう、道のあとに右上の見当の内側に描く
         drawCompassNeedle(measurer, center = Offset(ox + s - 13f * u, oy + 19f * u), length = 18f * u, labelStyle = label.copy(fontSize = northSize))
@@ -292,6 +336,24 @@ internal fun niceLength(m: Float): Int = NICE_LENGTHS.firstOrNull { it >= m } ?:
 
 /** 縮尺の目盛りの長さの候補 [m] */
 private val NICE_LENGTHS = listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+/**
+ * スタートの赤い旗とゴールの青い旗を立てる。同じ所（輪、歩き始めの近くに戻ってきた道）では、そのまま立てると
+ * 後の旗に隠れて 1 本に見えるので、赤い旗は右へ、青い旗は左向きにして左へ、根もとから開いて 2 本とも見えるようにする。
+ * 開き方と、開くかどうかの決め方（旗の幅より近いか）は、記録画面の地図なしの軌跡（ui/collect/CollectScreen の TrackCanvas、#85）と同じ
+ */
+private fun DrawScope.drawStartGoalFlags(start: Offset, goal: Offset) {
+    val spread = (goal - start).getDistance() < FlagWidth.toPx()
+    val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+    drawFlag(goal, GoalFlagColor, mirrored = spread, tilt = -tilt)
+    drawFlag(start, StartFlagColor, tilt = tilt)
+}
+
+/** なぞっている間の、まだ歩いていない道の濃さ */
+private const val TRACE_AHEAD_ALPHA = 0.28f
+
+/** なぞっている間の足跡の大きさ */
+private val TRACE_WALKER_SIZE = 42.dp
 
 /** 図の右下で、縮尺の字が入らないように空けておく幅（コレクションの選ぶ丸の場所） */
 private val SCALE_RIGHT_RESERVE = 44.dp

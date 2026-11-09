@@ -34,7 +34,7 @@ import kotlin.math.sin
  * - 地図は上から見た絵、人は横から見た絵なので、人は回さずにいつもまっすぐ立てる。画面の上で東寄りを向いたら右向き、
  *   西寄りなら左向きにする（左右を反転するだけ。ちょうど北・南のあたりは、前の向きのまま）
  * - 正確な方位は、人のまわりを回るオレンジの三角（[HeadingPointer]）が指す。地図に寝かせた印なので、地図を回しても方位のまま
- * - 記録中は足を交互に出して歩き、記録していないときは一歩踏み出した姿のまま止まる（正面を向いた立ち姿だと、向きが分からず、
+ * - 記録中は足を交互に出して歩き（歩いている向きを向く）、記録していないときは一歩踏み出した姿のまま止まる（正面を向いた立ち姿だと、向きが分からず、
  *   トイレの案内の人のようにも見えるため）
  */
 
@@ -51,8 +51,8 @@ private val FigureEdge: Color get() = Pop.InkOnYellow
 /** 縁取りの太さ [マス]（手足の線の両側に足す） */
 private const val EDGE_UNITS = 1.6f
 
-/** 方位の三角の、人の中心から三角の付け根までの長さ（人のすぐ外。離れすぎると人とのつながりが分かりにくい） */
-private val PointerRadius = 22.dp
+/** 方位の三角の、人の中心から三角の付け根までの長さ（人の頭のすぐ外。北を指したときに付け根が頭に隠れないように。離れすぎると人とのつながりが分かりにくい） */
+private val PointerRadius = 26.dp
 
 /** 方位の三角の幅と高さ */
 private val PointerWidth = 20.dp
@@ -68,7 +68,8 @@ internal val WalkerAnchor: Offset get() = Offset(0.5f, 0.5f)
 @Composable
 internal fun rememberWalkerIcon(facingRight: Boolean, pose: WalkerPose): BitmapDescriptor {
     val density = LocalDensity.current
-    return remember(facingRight, pose, density) {
+    val icons = remember(density) { HashMap<Pair<Boolean, WalkerPose>, BitmapDescriptor>() }
+    return icons.getOrPut(facingRight to pose) {
         val side = with(density) { FigureSize.toPx() }.roundToInt()
         val image = ImageBitmap(side, side)
         CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(image), Size(side.toFloat(), side.toFloat())) {

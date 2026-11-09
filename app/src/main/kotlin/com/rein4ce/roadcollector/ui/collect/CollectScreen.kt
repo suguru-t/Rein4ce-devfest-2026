@@ -48,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,6 +96,7 @@ import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
@@ -115,9 +117,11 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlinx.coroutines.delay
@@ -341,6 +345,15 @@ fun CollectScreen(
         // 設定・拡大表示と同じ形：灰色の帯の見出し、枠の中のいちばん下に「コレクションを見る」、枠の下の丸い「×」で閉じる。
         // 見出しは「パーツができました」だと機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
         is CollectViewModel.Outcome.Created -> FramedDialog(title = "道を 1 本集めました", onDismiss = { vm.dismissOutcome() }) {
+            // 窓が出たときに 1 回だけ、ごほうびの音（ド・ミ・ソ・ド）。名前が届いて中身が変わっても、画面を回しても鳴らし直さない
+            val sfx = rememberSfx()
+            var cheered by rememberSaveable(o.part.id) { mutableStateOf(false) }
+            LaunchedEffect(o.part.id) {
+                if (!cheered) {
+                    cheered = true
+                    sfx.play(Sfx.DONE)
+                }
+            }
             // 天気は記録のあとに取ってくるので、届いたら図（道の色・左上のアイコン）と注記に出す（届くまではいつもの色）
             val sky = app.partRepository.weatherOf(o.part.id, weathers)?.sky
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -590,6 +603,8 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         centeredOnIdle = step
         if (!movedByHand) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(idle.lat, idle.lng)))
     }
+    // 人が今どちらを向いているか（記録していない間と記録中で同じものを使い、記録を始めたときに向きが飛ばないように）
+    val facing = remember { WalkerFacing() }
     // 向いている方位（人のまわりの三角）。デモ散歩の再生中は、スマホの向きと見本の道は関係がないので出さない
     val showIdleDot = idle != null && !playingDemo && (!recording || last == null)
     val heading = rememberCompassHeading(
@@ -627,8 +642,6 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
             }
         }
         if (last != null) {
-            val nowState = rememberMarkerState()
-            nowState.position = LatLng(last.lat, last.lng)
             if (recording) {
                 // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
                 // 位置は、点から点へ飛ばさず、なめらかに動かす
@@ -640,20 +653,23 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
                         shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
                     }
                 }
-                // 黄色の人が歩き、まわりの三角がスマホの向いている方位を指す（デモ散歩の再生中は三角を出さず、人は歩いている向きを向く）
+                // 黄色の人が歩いている向きを向いて歩き、まわりの三角がスマホの向いている方位を指す（デモ散歩の再生中は三角を出さない）
                 HereMarker(
                     at = shown,
                     heading = heading,
                     showPointer = !playingDemo,
                     walking = true,
-                    fallbackRight = movingEast(points),
+                    walkingEast = movingEast(points),
                     camera = cameraPositionState,
+                    facing = facing,
                     zIndex = 5f,
                 )
             } else if (points.size >= 2) {
                 // 止めたあと：最後の点に青い旗（ゴール）
                 // （歩き始めの近くなら、左右を反転して左へ傾ける）
-                MarkerComposable(Fieldbook.dark, spread, state = nowState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
+                val goalState = rememberMarkerState()
+                goalState.position = LatLng(last.lat, last.lng)
+                MarkerComposable(Fieldbook.dark, spread, state = goalState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
                     FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
                 }
             }
@@ -676,8 +692,9 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
                 heading = heading,
                 showPointer = true,
                 walking = false,
-                fallbackRight = null,
+                walkingEast = null,
                 camera = cameraPositionState,
+                facing = facing,
                 zIndex = 4.5f,
             )
         }
@@ -685,12 +702,14 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
 }
 
 /**
- * [at] に、今いる場所の黄色の人（[WalkerFigure]）と、向いている方位の三角（[HeadingPointer]）を出す。
+ * [at] に、今いる場所の黄色の人（[rememberWalkerIcon]）と、向いている方位の三角（[HeadingPointer]）を出す。
  * 方位は 1 秒に何度も変わるので、ここだけで読む（地図の中身全体を組み立て直さないように）。
  * - 三角は [showPointer] で、方位が分かる（センサーがある）ときだけ。地図に寝かせた印なので、地図を回しても方位のまま
- * - 人の向きは、方位から地図の回転を引いた「画面の上の向き」で、東寄りなら右・西寄りなら左。方位が分からなければ
- *   [fallbackRight]（歩いている向き）、それも無ければ前の向きのまま
- * - [walking] なら 0.5 秒ごとに足を入れ替えて歩く（見出しの足跡と同じ速さ）。そうでなければ一歩踏み出した姿のまま止まる
+ * - 人の向き：記録中（[walking]）で歩いている向き [walkingEast] が決まるときは、そちらを向く（人は「歩いている人」なので、
+ *   スマホを横に向けて持って歩いても、歩いている向きと逆を向かないように）。そうでなければ、方位から地図の回転を引いた
+ *   「画面の上の向き」で、東寄りなら右・西寄りなら左。どれも決まらなければ前の向き（[facing]）のまま
+ * - [walking] なら 0.5 秒ごとに足を入れ替えて歩く（見出しの足跡と同じ速さ）。そうでないとき、端末で「動きを減らす」にしているときは、
+ *   一歩踏み出した姿のまま止まる
  */
 @Composable
 private fun HereMarker(
@@ -698,21 +717,25 @@ private fun HereMarker(
     heading: State<Float?>,
     showPointer: Boolean,
     walking: Boolean,
-    fallbackRight: Boolean?,
+    walkingEast: Boolean?,
     camera: CameraPositionState,
+    facing: WalkerFacing,
     zIndex: Float,
 ) {
     val deg = if (showPointer) heading.value else null
-    val lastFacing = remember { BooleanArray(1) { true } }
+    // 地図の回転は、変わったときだけ読み直す（地図を動かす・拡大するたびに、毎コマ組み立て直さないように）
+    val bearing by remember(camera) { derivedStateOf { camera.position.bearing } }
     val right = when {
-        deg != null -> facingRight(deg - camera.position.bearing, lastFacing[0])
-        fallbackRight != null -> fallbackRight
-        else -> lastFacing[0]
+        walking && walkingEast != null -> walkingEast
+        deg != null -> facingRight(deg - bearing, facing.right)
+        walkingEast != null -> walkingEast
+        else -> facing.right
     }
-    lastFacing[0] = right
-    val step by produceState(0, walking) {
+    facing.right = right
+    val reduceMotion = rememberReduceMotion()
+    val step by produceState(0, walking && !reduceMotion) {
         value = 0
-        if (walking) while (true) { delay(WALKER_STEP_MS); value++ }
+        if (walking && !reduceMotion) while (true) { delay(WALKER_STEP_MS); value++ }
     }
     val pose = if (step % 2 == 0) WalkerPose.STEP_A else WalkerPose.STEP_B
     if (deg != null) {
@@ -724,7 +747,7 @@ private fun HereMarker(
             anchor = Offset(0.5f, 0.5f),
             flat = true,
             rotation = deg,
-            zIndex = zIndex - 0.5f,
+            zIndex = POINTER_Z,
             title = "向いている方向",
         ) {
             HeadingPointer()
@@ -740,6 +763,14 @@ private fun HereMarker(
         zIndex = zIndex,
         title = "いまの場所",
     )
+}
+
+/** 方位の三角の重なり順（道 1・2 より上、旗 4・人より下。人の頭や旗に隠れても、三角の先は外に出る） */
+private const val POINTER_Z = 3.5f
+
+/** 人が今どちらを向いているか（北・南のあたりで前の向きのままにするために覚えておく。描き直しの合図にはしない） */
+private class WalkerFacing {
+    var right = true
 }
 
 /** 記録中に、地図の人が足を入れ替える間隔 [ms]（見出しの足跡の 1 歩と同じくらい） */
