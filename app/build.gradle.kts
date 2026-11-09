@@ -12,15 +12,23 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
+// パソコンのユーザーの Gradle の設定ファイル（~/.gradle/gradle.properties。リポジトリの外）
+val userGradleProps = Properties().apply {
+    val f = File(gradle.gradleUserHomeDir, "gradle.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
 // Maps API キー：次の順に見て、最初に空でないものを使う（どれにも無ければ空＝地図の代わりに軌跡を Canvas に描く）。
 // 1. このクローンの local.properties
-// 2. Gradle のプロパティ。ふつうはパソコンのユーザーの ~/.gradle/gradle.properties に 1 回書いておけば、
-//    そのパソコンのどのクローン・作業フォルダ（git worktree）でも読まれる（-PMAPS_API_KEY=… でも渡せる）
-// 3. 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）
-// local.properties に「MAPS_API_KEY=」の空の行だけがあるときも、2・3 を見に行く
+// 2. コマンドの -PMAPS_API_KEY=…
+// 3. パソコンのユーザーの ~/.gradle/gradle.properties。1 回書いておけば、そのパソコンのどのクローン・作業フォルダ（git worktree）でも読まれる
+// 4. 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）
+// local.properties に「MAPS_API_KEY=」の空の行だけがあるときも、次を見に行く。
+// リポジトリの gradle.properties（git に入る）は、うっかり書いてもキーが公開されないよう、わざと読まない
+// （providers.gradleProperty だと、そこも読んでしまう）
 val mapsApiKey: String = listOf(
     localProps.getProperty("MAPS_API_KEY"),
-    providers.gradleProperty("MAPS_API_KEY").orNull,
+    gradle.startParameter.projectProperties["MAPS_API_KEY"],
+    userGradleProps.getProperty("MAPS_API_KEY"),
     System.getenv("MAPS_API_KEY"),
 ).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
 val serverBaseUrl: String = localProps.getProperty("SERVER_BASE_URL")?.trim().orEmpty()
