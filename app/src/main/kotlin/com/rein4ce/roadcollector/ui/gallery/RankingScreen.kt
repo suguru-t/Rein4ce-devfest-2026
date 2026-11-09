@@ -57,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
@@ -133,7 +132,7 @@ internal fun RankingScreen(
                 if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
                 fontSize = 13.sp,
-                modifier = Modifier.padding(end = 4.dp).paperBand(),
+                modifier = Modifier.padding(end = 4.dp),
             )
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
@@ -357,7 +356,6 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
         modifier = Modifier
             .heightIn(min = 24.dp)
             .wrapContentWidth(Alignment.Start)
-            .then(if (status != null) Modifier.paperBand() else Modifier)
             .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -404,7 +402,6 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
             modifier = Modifier
                 .weight(1f)
                 .wrapContentWidth(Alignment.CenterHorizontally)
-                .paperBand()
                 // 縁取りの字と本来の字の 2 つが中にあるので、外側で 1 つにまとめて、説明だけを読ませる（#115 のレビュー）
                 .clearAndSetSemantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )

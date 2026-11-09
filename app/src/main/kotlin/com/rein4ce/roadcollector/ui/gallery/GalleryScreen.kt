@@ -62,7 +62,6 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -267,7 +266,6 @@ private fun Overview(
                                 .weight(1f, fill = false)
                                 .heightIn(max = SECTION_HEIGHT)
                                 .fillMaxHeight()
-                                .paperBand(bleedX = 8.dp, bleedY = 6.dp)
                                 // ブロックの面（下に側面がのぞく）。中身は TowerSection が同じ角の丸さで描く
                                 .popBlock(face = Fieldbook.Paper, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge),
                         )
@@ -287,7 +285,6 @@ private fun Overview(
                                     fontWeight = FontWeight.Black,
                                     color = Pop.TealLine,
                                     fontSize = 12.sp,
-                                    modifier = Modifier.paperBand(bleedX = 6.dp, bleedY = 2.dp),
                                 )
                             }
                         }
@@ -366,7 +363,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         },
     ) {
         Spacer(Modifier.height(4.dp))
-        Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.Bottom) {
             SkyText(
                 label,
                 color = Fieldbook.Ink,
@@ -402,7 +399,6 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
                 fontWeight = FontWeight.Black,
                 fontSize = 13.sp,
                 color = if (isError) Fieldbook.Danger else Fieldbook.Muted,
-                modifier = Modifier.paperBand(),
             )
         }
     }
@@ -426,7 +422,6 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
                 contentDescription = "$label。$heightText メートル。パーツ ${tower.partCount} 本、$author、${formatDate(tower.createdAt)}"
             }
             .drawBehind { drawLine(Fieldbook.GridMajor, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
-            .paperBand(bleedX = 4.dp, bleedY = 0.dp)
             .padding(horizontal = 4.dp),
     ) {
         // 左の小さな積み木：自分のは道の色（オレンジ）、ほかの人のは紺

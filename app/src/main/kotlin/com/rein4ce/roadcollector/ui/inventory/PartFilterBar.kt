@@ -45,7 +45,6 @@ import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -234,10 +233,9 @@ internal fun ScrollToTopOnChange(filter: PartFilter, state: LazyGridState) {
  * 見えないパーツが数に入ったまま、外せず・ほかも選べなくなるのを防ぐ（#75 のレビュー）
  *
  * @param hidden 隠れている選んだパーツの数（0 なら何も出さない）
- * @param onGrid 方眼の上に出すか（字の下だけ方眼の線を消す。選ぶ窓は別の窓なので使わない）
  */
 @Composable
-internal fun HiddenSelectionNote(hidden: Int, onRemove: () -> Unit, onGrid: Boolean, modifier: Modifier = Modifier) {
+internal fun HiddenSelectionNote(hidden: Int, onRemove: () -> Unit, modifier: Modifier = Modifier) {
     if (hidden <= 0) return
     Row(modifier = modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -245,7 +243,7 @@ internal fun HiddenSelectionNote(hidden: Int, onRemove: () -> Unit, onGrid: Bool
             style = noteStyle,
             fontSize = 12.sp,
             color = Fieldbook.Muted,
-            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start).then(if (onGrid) Modifier.paperBand() else Modifier),
+            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start),
         )
         PressTextButton(onClick = onRemove) { Text("外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
     }

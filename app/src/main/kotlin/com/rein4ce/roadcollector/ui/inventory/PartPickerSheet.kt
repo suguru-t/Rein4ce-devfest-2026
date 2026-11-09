@@ -138,7 +138,7 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 // 一覧は、見出しとボタンを置いた残りの高さに収める（決まった高さにすると、小さい画面や大きい文字で
                 // 窓に入りきらず、下の「選んだ n 本で積む」が切れて押せなくなる。#74 の A のレビュー）
-                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).fieldbookGrid(clearings = false),
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).fieldbookGrid(),
             ) {
                 // 絞り込んだら何も残らなかったとき（コレクションが空のときや読み込み中は出さない）。コレクションと同じく外せるように
                 if (isLoaded && parts.isNotEmpty() && visible.isEmpty()) {
@@ -174,7 +174,6 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
             HiddenSelectionNote(
                 hidden = valid.count { id -> visible.none { it.id == id } },
                 onRemove = { selected.removeAll { id -> visible.none { it.id == id } } },
-                onGrid = false,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             Spacer(Modifier.height(12.dp))
