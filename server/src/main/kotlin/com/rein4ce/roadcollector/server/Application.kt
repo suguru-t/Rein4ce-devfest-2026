@@ -1,15 +1,14 @@
 package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.AppJson
-import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.routing.routing
 
 /**
@@ -21,16 +20,20 @@ fun main() {
     embeddedServer(Netty, port = port, host = "0.0.0.0") { module() }.start(wait = true)
 }
 
-fun Application.module(store: TowerStore = TowerStore.fromEnvironment(), namer: PartNamer = PartNamer.fromEnvironment()) {
+fun Application.module(
+    store: TowerStore = TowerStore.fromEnvironment(),
+    namer: PartNamer = PartNamer.fromEnvironment(),
+    limits: RateLimits = RateLimits.fromEnvironment(),
+) {
     install(ContentNegotiation) { json(AppJson) }
     install(CallLogging)
-    install(CORS) {
-        anyHost() // ハッカソン用。公開時は Web フロントのドメインに絞る
-        allowHeader(HttpHeaders.ContentType)
-    }
+    // CORS は入れない（決定 57）。ブラウザからこのサーバの API を呼ぶ画面は無く（アプリはブラウザではない。共有ページはサーバ自身が返す）、
+    // 「どこからでも可」にしておくと、ほかのサイトが訪問者のブラウザからこの API を叩けてしまうため。
+    // 別のドメインのウェブ画面から呼ぶことになったら、そのドメインだけを許す形で入れ直す
+    log.info("RateLimit: ${limits.description}")
 
     routing {
-        towerRoutes(store)
-        partRoutes(namer)
+        towerRoutes(store, limits)
+        partRoutes(namer, limits)
     }
 }
