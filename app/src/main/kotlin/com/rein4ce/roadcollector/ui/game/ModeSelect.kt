@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,12 +103,11 @@ internal fun shownMode(chosen: PlayMode?, request: GameSession.StartRequest?, ju
     if (request != null && !request.started && request.id != jumpedFor) PlayMode.NORMAL else chosen
 
 /**
- * 積むタブで、モードを選ぶ画面を出しているか。背景の天気を決める AppNav が見て、選ぶ画面のときだけ今の天気を出す
- * （遊んでいる間は出さない。今の積む画面は地を塗っていて、天気が隠れるため）
+ * 積むタブの、画面をまたいで覚えておくこと。
+ * （前は、選ぶ画面を出しているかもここで AppNav に知らせて、選ぶ画面のときだけ天気を出していた。#116 で積む画面が地を塗らなくなり、
+ * 遊んでいる間も天気を出すようになったので外した）
  */
 internal object StackTabState {
-    var selecting by mutableStateOf(false)
-
     /**
      * 選ぶ画面を飛ばして通常へ移った開始要求の id（[shownMode]）。開始要求（[GameSession]）と同じく、アプリのプロセスの中だけで覚える。
      * 要求の番号はプロセスごとに 1 から数え直すので、画面の保存（rememberSaveable）に残すと、裏でプロセスが終わって復元されたあとの
@@ -138,18 +136,12 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         }
     }
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
-    // 選ぶ画面を出しているかを、背景の天気に知らせる（この画面を離れたら、選んでいないことにする）
-    val selecting = mode != PlayMode.NORMAL
-    DisposableEffect(selecting) {
-        StackTabState.selecting = selecting
-        onDispose { StackTabState.selecting = false }
-    }
 
     when (mode) {
         PlayMode.NORMAL -> {
             BackHandler { chosen = null }
-            ModePlayPage(PlayMode.NORMAL, onBack = { chosen = null }) {
-                StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery)
+            ModePlayPage(PlayMode.NORMAL, onBack = { chosen = null }) { leading ->
+                StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
             // 積み切って塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
@@ -363,21 +355,22 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
 }
 
 /**
- * モードで遊ぶ画面の枠：上に「‹ 戻る」（モードを選ぶ画面へ。「みんな」のランキングと同じ黄色い札）と、右に今のモードの札。
- * その下に、モードの画面（積む画面など）を残りの高さ全部で置く
+ * モードで遊ぶ画面の枠：「‹ 戻る」（モードを選ぶ画面へ。「みんな」のランキングと同じ黄色い札）と、その右に今のモードの札を、
+ * モードの画面（積む画面など）に渡して、その画面の 1 行目の左（ほかの画面で画面名がある所）に置いてもらう。
+ * 行を別に足すと、その分だけ塔を描く所が狭くなり、小さい画面で台が見えなくなるため（#116）。
+ * 小さい画面（compact）では、高さ・残りと同じ行に並ぶので、幅を取らないよう「‹ 戻る」だけにする
  */
 @Composable
-private fun ModePlayPage(mode: PlayMode, onBack: () -> Unit, content: @Composable () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 10.dp),
-        ) {
+private fun ModePlayPage(
+    mode: PlayMode,
+    onBack: () -> Unit,
+    content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
+) {
+    content { compact ->
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
-            Spacer(Modifier.weight(1f))
-            PopTag(mode.label, face = lookOf(mode).tagFace, fontSize = 12.sp, tiltDeg = 2f)
+            if (!compact) PopTag(mode.label, face = lookOf(mode).tagFace, fontSize = 12.sp, tiltDeg = 2f)
         }
-        Box(modifier = Modifier.weight(1f)) { content() }
     }
 }
 

@@ -101,11 +101,16 @@ import kotlinx.coroutines.launch
  *   横 5 m がキャンバスの幅になる倍率で、台はキャンバスの下から 22% の位置。
  *   狙っている間と落下中は大きさを変えず、塔が高くなったら、次のパーツが出てくる高さが入るところまでカメラを上げる
  *   （台はキャンバスの下へ外れることがある）。置き切ったら、塔全体と台が入るように引いて見せる。
+ *
+ * @param leading 情報の段の 1 行目の左に置くもの。モードで遊ぶ画面（ModeSelect.kt の ModePlayPage）からは「‹ 戻る」と今のモードの札が来る
+ *   （行を別に足すと、その分だけ塔を描く所が狭くなるため。#116）。[compact] は小さい画面（1 行に並べるので、幅を取らないものにする）。
+ *   渡さなければ、画面名「みちをつむ」の積み木（[StackTitle]）
  */
 @Composable
 fun StackScreen(
     onGoInventory: () -> Unit,
     onGoGallery: () -> Unit,
+    leading: @Composable (compact: Boolean) -> Unit = { compact -> StackTitle(compact) },
     vm: StackViewModel = viewModel(),
 ) {
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
@@ -214,18 +219,16 @@ fun StackScreen(
                     }
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                // 画面名「みちをつむ」は、コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
-                // 押すと動く。積み木は文字の大きさの設定では大きくしない（dp で決める）。
+                // 1 行目の左は [leading]（モードで遊ぶ画面では「‹ 戻る」とモードの札、渡されなければ画面名の積み木）。
                 // 字は「みんな」・コレクションと同じ太い丸ゴシック。方眼の紙と天気の上に直接書くので、紙の色の縁取りを付ける（SkyText。決定 59）。
-                // 小さい画面では、画面名・高さ・残りと落下を 1 行に並べて、情報の段を低くする（塔を描く所が狭くなって、台が見えなくならないように。
-                // #116 のレビュー）。ふつうの画面では、1 行目に画面名と残り・落下、2 行目に大きな高さ
+                // 小さい画面では、1 行目の左・高さ・残りと落下を 1 行に並べて、情報の段を低くする（塔を描く所が狭くなって、台が見えなくならないように。
+                // #116 のレビュー）。ふつうの画面では、1 行目に左のものと残り・落下、2 行目に大きな高さ
                 if (compact) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // 画面名は 5 文字あるので、小さい画面では積み木を一回り小さくして、高さ・残りと同じ行に収める
-                        BlockWord("みちをつむ", modifier = Modifier.padding(end = 12.dp), blockDp = 20.dp)
+                        Box(Modifier.padding(end = 12.dp)) { leading(true) }
                         HeightMeter(vm.height.toFloat(), compact = true)
                         Spacer(Modifier.weight(1f))
                         RemainingAndFallen(vm.remaining, vm.fallenCount, compact = true)
@@ -236,7 +239,7 @@ fun StackScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BlockWord("みちをつむ")
+                        leading(false)
                         RemainingAndFallen(vm.remaining, vm.fallenCount, compact = false)
                     }
                     HeightMeter(vm.height.toFloat(), compact = false)
@@ -542,6 +545,15 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/**
+ * 画面名「みちをつむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、押すと動く。
+ * 積み木は文字の大きさの設定では大きくしない（dp で決める）。5 文字あるので、小さい画面（[compact]）では一回り小さくして、高さ・残りと同じ行に収める
+ */
+@Composable
+internal fun StackTitle(compact: Boolean) {
+    if (compact) BlockWord("みちをつむ", blockDp = 20.dp) else BlockWord("みちをつむ")
 }
 
 /**
