@@ -97,6 +97,7 @@ import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.weather.BackdropFocus
 import com.rein4ce.roadcollector.ui.weather.WeatherCredit
+import com.rein4ce.roadcollector.ui.weather.ZoomWeather
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
@@ -412,7 +413,7 @@ fun InventoryScreen(onGoStack: () -> Unit) {
         )
     }
 
-    // 大きく見ている間は、背景にそのパーツを歩いたときの天気を降らせる（ui/weather/WeatherLayer）
+    // 大きく見ている間だけ、背景にそのパーツを歩いたときの天気を降らせる（一覧のときは今の天気。ui/weather/WeatherLayer）
     DisposableEffect(zoomedId) {
         BackdropFocus.partId.value = zoomedId
         onDispose { BackdropFocus.partId.value = null }
@@ -574,7 +575,14 @@ private val MeterInk: Color get() = if (Fieldbook.dark) Pop.Orange else Pop.Oran
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
-    FramedDialog(title = part.displayName, onDismiss = onDismiss, pop = true) {
+    FramedDialog(
+        title = part.displayName,
+        onDismiss = onDismiss,
+        pop = true,
+        // 歩いたときの天気を、窓の紙（図のまわり）にも降らせる。背景の天気は、窓とまわりの暗い幕で見えにくいため。
+        // 図（地図と道）はふさがない
+        backdrop = { ZoomWeather(weather, walkedAt = part.walkedAt, modifier = Modifier.matchParentSize()) },
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
             BoxWithConstraints(
                 modifier = Modifier

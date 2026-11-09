@@ -6,6 +6,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -52,6 +53,8 @@ private val POP_CORNER = 18.dp
  * @param pop 「みんな」・コレクションと同じポップな見た目にする（Pop.kt）：枠と下の丸いボタンを、
  *   下に側面がのぞくブロックの面にし、角を大きく丸める。見出しは灰色の帯の代わりに、紺の名札のブロックに白い字で載せる
  *   （「みんな」の断面図の名札の台と同じ考え方）。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
+ * @param backdrop 枠の紙の上・見出しと中身の下に敷くもの（`Modifier.matchParentSize()` で枠いっぱいに敷く）。
+ *   コレクションの拡大表示で、そのパーツを歩いた日の天気を降らせるのに使う。中身を動かしても、敷いたものは動かない
  */
 @Composable
 fun FramedDialog(
@@ -60,11 +63,12 @@ fun FramedDialog(
     onClose: () -> Unit = onDismiss,
     onBack: (() -> Unit)? = null,
     pop: Boolean = false,
+    backdrop: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(
+            Box(
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .fillMaxWidth()
@@ -78,50 +82,53 @@ fun FramedDialog(
                         },
                     ),
             ) {
-                if (pop) {
-                    // 見出しは名札のブロック。見出し（パーツの名前など）は人や AI が付ける字なので、丸ゴシック（使う字だけの切り出し）
-                    // ではなく端末の字体の極太にする。読みやすいよう、札は傾けない
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 4.dp),
-                    ) {
-                        Text(
-                            title,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Pop.Letter,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            modifier = Modifier
-                                .popBlock(face = Pop.Navy, corner = 10.dp, depth = 4.dp)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .semantics { heading() },
-                        )
+                backdrop?.invoke(this)
+                Column {
+                    if (pop) {
+                        // 見出しは名札のブロック。見出し（パーツの名前など）は人や AI が付ける字なので、丸ゴシック（使う字だけの切り出し）
+                        // ではなく端末の字体の極太にする。読みやすいよう、札は傾けない
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 4.dp),
+                        ) {
+                            Text(
+                                title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Pop.Letter,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                modifier = Modifier
+                                    .popBlock(face = Pop.Navy, corner = 10.dp, depth = 4.dp)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .semantics { heading() },
+                            )
+                        }
+                    } else {
+                        Box(modifier = Modifier.fillMaxWidth().background(Fieldbook.Band)) {
+                            Text(
+                                title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Fieldbook.Ink,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 48.dp, vertical = 14.dp)
+                                    .semantics { heading() },
+                            )
+                        }
                     }
-                } else {
-                    Box(modifier = Modifier.fillMaxWidth().background(Fieldbook.Band)) {
-                        Text(
-                            title,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Fieldbook.Ink,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 48.dp, vertical = 14.dp)
-                                .semantics { heading() },
-                        )
-                    }
+                    // 見出しが変わったら（設定 → アプリについて など）、いちばん上から見せる
+                    val scroll = remember(title) { ScrollState(0) }
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(scroll)
+                            // 左右・下は 24dp。上は、中身の最初の見出しや行の上の余白と合わせて 24dp ほどになるように
+                            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 24.dp),
+                        content = content,
+                    )
                 }
-                // 見出しが変わったら（設定 → アプリについて など）、いちばん上から見せる
-                val scroll = remember(title) { ScrollState(0) }
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(scroll)
-                        // 左右・下は 24dp。上は、中身の最初の見出しや行の上の余白と合わせて 24dp ほどになるように
-                        .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 24.dp),
-                    content = content,
-                )
             }
             // 枠の下の丸いボタン：ふつうは「×」で閉じる。戻る先があるときは「＜」で戻る
             Spacer(Modifier.height(16.dp))
