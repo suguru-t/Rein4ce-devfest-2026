@@ -212,12 +212,18 @@ class StackWorld(
 
     // ---- 描画用 ----
 
+    /**
+     * 描く図形 1 つ。
+     * @property body どのボディ（台・置いたパーツ 1 つ）の図形か。同じ値の図形は 1 つの積み木なので、まとめて輪郭を描く（決定 74）。
+     *   同じパーツを何度も置いたときも、置いたもの 1 つずつで違う値になる
+     */
     sealed class RenderShape {
         abstract val part: Part?
+        abstract val body: Int
 
         /** ワールド座標の多角形頂点（x, y の順に並ぶ） */
-        data class Poly(override val part: Part?, val xs: DoubleArray, val ys: DoubleArray) : RenderShape()
-        data class Disc(override val part: Part?, val cx: Double, val cy: Double, val r: Double) : RenderShape()
+        data class Poly(override val part: Part?, val xs: DoubleArray, val ys: DoubleArray, override val body: Int = 0) : RenderShape()
+        data class Disc(override val part: Part?, val cx: Double, val cy: Double, val r: Double, override val body: Int = 0) : RenderShape()
     }
 
     /**
@@ -244,7 +250,7 @@ class StackWorld(
                 xs[i] = v.x
                 ys[i] = v.y
             }
-            out += RenderShape.Poly(part, xs, ys)
+            out += RenderShape.Poly(part, xs, ys, System.identityHashCode(body))
         }
     }
 
@@ -261,11 +267,11 @@ class StackWorld(
                         xs[i] = w.x
                         ys[i] = w.y
                     }
-                    out += RenderShape.Poly(part, xs, ys)
+                    out += RenderShape.Poly(part, xs, ys, System.identityHashCode(body))
                 }
                 is Circle -> {
                     val c = t.getTransformed(shape.center)
-                    out += RenderShape.Disc(part, c.x, c.y, shape.radius)
+                    out += RenderShape.Disc(part, c.x, c.y, shape.radius, System.identityHashCode(body))
                 }
                 else -> Unit
             }

@@ -33,6 +33,8 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
+import com.rein4ce.roadcollector.ui.common.Daypart
+import com.rein4ce.roadcollector.ui.common.PiecePalette
 import com.rein4ce.roadcollector.ui.collect.drawStartGoalFlags
 import com.rein4ce.roadcollector.ui.collect.drawWalkingFootprints
 import com.rein4ce.roadcollector.ui.common.drawPart
@@ -70,17 +72,11 @@ object Fieldbook {
     val RoadCasing: Color get() = c(0xFF6E2A10, 0xFF5E2610)
 
     /**
-     * 歩いたときの天気で変える道の色（本体と縁取り）。雨のなかまは青、雪は水色、くもり・霧は灰色。
-     * 晴れ・天気が分からないときは、いつものオレンジ（[Road]）。
-     * 白い紙片の上でも道の形が見えるよう、縁取りはどれも濃い色にする（雪の水色も、縁で形が分かる）
+     * 天気の色（面と線）。積み木の配色（[PiecePalette]。決定 74）の昼の色：晴れはオレンジ、くもりは薄い紫がかった灰色、雨は青、雪はほぼ白の水色。
+     * 天気の印（コレクションの絞り込みの丸・天気のアイコン・積む画面のすべりやすさの札や天気のボーナスの札）に使い、積み木の色と合わせる。
+     * 積み木そのものは、歩いた時間帯で明るさも変わる（[PiecePalette.colors]）
      */
-    fun roadColors(sky: Sky?): Pair<Color, Color> = when (sky?.shown) {
-        // 画面に出す 4 つの天気で決める（決定 73。霧はくもり、霧雨と雷雨は雨）
-        Sky.RAIN -> Color(0xFF3F7FC4) to Color(0xFF1B3A60)
-        Sky.SNOW -> Color(0xFF8CCBEA) to Color(0xFF235777)
-        Sky.CLOUDY -> Color(0xFF8D959C) to Color(0xFF3B4247)
-        else -> Road to RoadCasing
-    }
+    fun roadColors(sky: Sky?): Pair<Color, Color> = PiecePalette.colors(sky, Daypart.DAY).let { it.fill to it.outline }
     /** 測量の青。字やボタンの色。ボタンの地にも使い、その上の字は白（ダークでも白い字が読める明るさにしてある） */
     val Survey: Color get() = c(0xFF1F5FA8, 0xFF4A8BD6)
 
@@ -196,8 +192,9 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
 /**
  * パーツを野帳の図として描く：四隅の見当、北、縁取りの道、縮尺。
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
- * @param sky 歩いたときの空のようす。道の色が変わり（[Fieldbook.roadColors]）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
- *   分からなければ null（いつもの色で、アイコンなし）
+ * @param sky 歩いたときの空のようす。道の色が変わり（積み木の配色 [PiecePalette]。決定 74）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
+ *   分からなければ null（晴れの色で、アイコンなし）
+ * @param startedAt 歩き始めた時刻（`PartPlace.startedAt`）。歩いた時間帯（[Daypart]）で道の明るさが変わる。無ければ歩き終えた時刻で決める
  * @param trace 歩いた順になぞっているところ（拡大表示の「もう一度歩く」。WalkReplay.kt）を返す関数。null か、null を返せばなぞらない（ふつうの図）。
  *   なぞっている間は、歩き始めに赤い旗・終わりに青い旗を立て、まだ歩いていない道をうすく、歩いたところまでを濃く出し、
  *   いま歩いているところに、歩いている向きに回した足跡を出す。
@@ -205,8 +202,15 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
  *   （外で読むと、毎コマ図のまわり全体（拡大表示の地図も）を組み立て直すことになり重い。#94 の A のレビュー）
  */
 @Composable
-fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, trace: (() -> WalkTraceFrame?)? = null) {
-    val (road, casing) = Fieldbook.roadColors(sky)
+fun FieldbookPart(
+    part: Part,
+    modifier: Modifier = Modifier,
+    sky: Sky? = null,
+    startedAt: Long? = null,
+    trace: (() -> WalkTraceFrame?)? = null,
+) {
+    // 面の色と、それを暗くした縁取りの線（積み木と同じ配色。決定 74）
+    val (road, casing) = PiecePalette.colors(sky, Daypart.of(part, startedAt)).let { it.fill to it.outline }
     val measurer = rememberTextMeasurer()
     // 図の中の字（縮尺・北）は図の一部なので、図と同じ大きさのままにする（文字の大きさの設定では大きくしない）。
     // 図の大きさは決まっているので、字だけ大きくすると四隅の見当や道にぶつかる。
