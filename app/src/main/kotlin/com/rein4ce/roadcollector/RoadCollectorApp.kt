@@ -10,6 +10,7 @@ import com.rein4ce.roadcollector.data.MyTowers
 import com.rein4ce.roadcollector.data.OwnerId
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.data.PartRepository
+import com.rein4ce.roadcollector.data.DailyTowerStore
 import com.rein4ce.roadcollector.data.StackRecords
 import com.rein4ce.roadcollector.data.WeatherService
 import com.rein4ce.roadcollector.ui.gallery.TowerGallery
@@ -53,6 +54,9 @@ class RoadCollectorApp : Application() {
 
     /** 積む画面の、モードごとの自分の記録（モードを選ぶ画面に出す） */
     val stackRecords: StackRecords by lazy { StackRecords(this) }
+
+    /** 「毎日 1 つずつ積む」の塔（スマホの中だけ。決定 61） */
+    val dailyTower: DailyTowerStore by lazy { DailyTowerStore(filesDir) }
 
     override fun onCreate() {
         super.onCreate()
