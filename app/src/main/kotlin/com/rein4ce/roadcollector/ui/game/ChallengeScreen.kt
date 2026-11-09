@@ -303,21 +303,26 @@ private fun AimControls(vm: ChallengeViewModel) {
             modifier = Modifier.width(ARROW_BUTTON_WIDTH).semantics { contentDescription = "左へ 10cm" },
             contentPadding = PaddingValues(0.dp),
         ) { Text("◀") }
-        PressOutlinedButton(
-            onClick = { vm.rotate(15.0) },
+        // 回転は押し続けると回り続ける（#114。15° きざみのままなので、決まり（記録の ID）は変わらない）
+        RotateButton(
+            RotateDirection.LEFT,
+            sessionKey = vm.generation,
+            onRotate = { vm.rotate(it.toDouble()) },
             modifier = Modifier.weight(1.2f),
             contentPadding = AimButtonPadding,
-        ) { Text("⟲ 15°") }
+        )
         PressButton(
             onClick = { vm.place() },
             modifier = Modifier.weight(1f),
             contentPadding = AimButtonPadding,
         ) { Text("置く") }
-        PressOutlinedButton(
-            onClick = { vm.rotate(-15.0) },
+        RotateButton(
+            RotateDirection.RIGHT,
+            sessionKey = vm.generation,
+            onRotate = { vm.rotate(it.toDouble()) },
             modifier = Modifier.weight(1.2f),
             contentPadding = AimButtonPadding,
-        ) { Text("⟳ 15°") }
+        )
         PressOutlinedButton(
             onClick = { vm.move(MOVE_STEP_CHALLENGE_M) },
             modifier = Modifier.width(ARROW_BUTTON_WIDTH).semantics { contentDescription = "右へ 10cm" },
