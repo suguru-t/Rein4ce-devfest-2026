@@ -76,13 +76,13 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.WalkDistance
+import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.partSizeText
-import com.rein4ce.roadcollector.ui.gallery.Pop
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow

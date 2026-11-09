@@ -91,6 +91,13 @@ class AppSettingsTest {
         assertTrue(settings.aiNaming.value)
         assertTrue(settings.haptics.value)
         assertEquals("", settings.nickname.value)
+        // BGM は初めからオンで、音量はまん中
+        assertTrue(settings.bgmOn.value)
+        assertEquals(AppSettings.DEFAULT_BGM_VOLUME, settings.bgmVolume.value)
+        // 効果音も初めからオン
+        assertTrue(settings.sfxOn.value)
+        // BGM の曲は、はじめからある「トコトコ」
+        assertEquals(BgmTrack.MARIMBA, settings.bgmTrack.value)
     }
 
     @Test
@@ -102,6 +109,10 @@ class AppSettingsTest {
             setAiNaming(false)
             setHaptics(false)
             setNickname("みちつみ太郎")
+            setBgmOn(false)
+            setBgmVolume(8)
+            setSfxOn(false)
+            setBgmTrack(BgmTrack.UKULELE)
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
@@ -109,6 +120,24 @@ class AppSettingsTest {
         assertFalse(again.aiNaming.value)
         assertFalse(again.haptics.value)
         assertEquals("みちつみ太郎", again.nickname.value)
+        // BGM をオフにしても、音量は覚えている（オンに戻したときに同じ大きさで流れる）
+        assertFalse(again.bgmOn.value)
+        assertEquals(8, again.bgmVolume.value)
+        // 効果音は BGM と別に覚えている
+        assertFalse(again.sfxOn.value)
+        assertEquals(BgmTrack.UKULELE, again.bgmTrack.value)
+    }
+
+    @Test
+    fun `the bgm volume stays between 1 and the top`() {
+        val settings = AppSettings(MapStore())
+        settings.setBgmVolume(0)
+        assertEquals(1, settings.bgmVolume.value)
+        settings.setBgmVolume(99)
+        assertEquals(AppSettings.MAX_BGM_VOLUME, settings.bgmVolume.value)
+        // 前の版の値など、範囲の外の値が保存されていても、範囲に収める
+        val store = MapStore().apply { put("bgm_volume", "42") }
+        assertEquals(AppSettings.MAX_BGM_VOLUME, AppSettings(store).bgmVolume.value)
     }
 
     @Test
@@ -136,9 +165,11 @@ class AppSettingsTest {
             map["weather_motion"] = "TURBO"
             map["keep_screen_on"] = "maybe"
             map["ai_naming"] = ""
+            map["bgm_track"] = "DISCO"
         }
         val settings = AppSettings(store)
         assertEquals(WeatherMotion.NORMAL, settings.weatherMotion.value)
+        assertEquals(BgmTrack.MARIMBA, settings.bgmTrack.value)
         assertFalse(settings.keepScreenOn.value)
         assertTrue(settings.aiNaming.value)
     }

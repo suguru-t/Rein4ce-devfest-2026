@@ -40,10 +40,15 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,13 +84,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.CameraMoveStartedReason
+import com.google.maps.android.compose.Circle
+import com.google.maps.android.compose.CameraPositionState
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
@@ -105,14 +116,20 @@ import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import com.rein4ce.roadcollector.ui.settings.SettingsDialog
+import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.LinearEasing
 
 /**
  * A 担当：GPS 採集画面。見た目は手持ち画面と同じ「測量野帳」（Fieldbook.kt）。
@@ -189,6 +206,17 @@ fun CollectScreen(
                 val footScope = rememberCoroutineScope()
                 val footJob = remember { mutableStateOf<Job?>(null) }
                 val haptics = rememberHaptics()
+                // 記録中（デモ散歩の再生中も）は、足跡がずっと歩き続ける（地図には足跡を出さず、ここで「歩いている」を見せる）。
+                // 止めたら、アイコンと同じ並びに戻す
+                LaunchedEffect(isRecording) {
+                    footJob.value?.cancel()
+                    if (isRecording) {
+                        footJob.value = footScope.launch { footSteps.keepWalking() }
+                    } else {
+                        footJob.value = null
+                        footSteps.snapTo(0f)
+                    }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.pointerInput(Unit) {
@@ -266,9 +294,9 @@ fun CollectScreen(
                     .then(if (hasMap) Modifier.border(1.dp, Fieldbook.GridMajor, RoundedCornerShape(4.dp)) else Modifier),
             ) {
                 if (hasMap) {
-                    TrackMap(points)
+                    TrackMap(points, recording = isRecording, playingDemo = playing != null)
                 } else {
-                    TrackCanvas(points, modifier = Modifier.fillMaxSize())
+                    TrackCanvas(points, recording = isRecording, modifier = Modifier.fillMaxSize())
                     Text(
                         "MAPS_API_KEY 未設定：軌跡のみ",
                         fontFamily = Fieldbook.Data,
@@ -317,6 +345,15 @@ fun CollectScreen(
         // 設定・拡大表示と同じ形：灰色の帯の見出し、枠の中のいちばん下に「コレクションを見る」、枠の下の丸い「×」で閉じる。
         // 見出しは「パーツができました」だと機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
         is CollectViewModel.Outcome.Created -> FramedDialog(title = "道を 1 本集めました", onDismiss = { vm.dismissOutcome() }) {
+            // 窓が出たときに 1 回だけ、ごほうびの音（ド・ミ・ソ・ド）。名前が届いて中身が変わっても、画面を回しても鳴らし直さない
+            val sfx = rememberSfx()
+            var cheered by rememberSaveable(o.part.id) { mutableStateOf(false) }
+            LaunchedEffect(o.part.id) {
+                if (!cheered) {
+                    cheered = true
+                    sfx.play(Sfx.DONE)
+                }
+            }
             // 天気は記録のあとに取ってくるので、届いたら図（道の色・左上のアイコン）と注記に出す（届くまではいつもの色）
             val sky = app.partRepository.weatherOf(o.part.id, weathers)?.sky
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -541,7 +578,7 @@ private fun Modifier.fieldbookCorners(): Modifier = drawBehind {
 
 /** Google Maps に軌跡を描く（API キーがある場合）。地図の道路のように、暗い縁取りの上にオレンジを重ねる */
 @Composable
-private fun TrackMap(points: List<TrackPoint>) {
+private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: Boolean) {
     val start = points.firstOrNull()?.let { LatLng(it.lat, it.lng) } ?: LatLng(35.7496, 139.8049)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(start, 16f)
@@ -550,6 +587,31 @@ private fun TrackMap(points: List<TrackPoint>) {
     LaunchedEffect(last) {
         if (last != null) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(last.lat, last.lng)))
     }
+    // 記録していない間（と、記録を始めて最初の点が届くまで）の今いる場所。デモ散歩の再生中は、本当の場所を混ぜない
+    val idleState = rememberIdleFix(enabled = !playingDemo && (!recording || last == null))
+    val idle = idleState.value
+    // 軌跡が無いときは、今いる場所へ地図を動かす（Google マップと同じく、開くと自分の所が出る）。
+    // まず、スマホが覚えている最後の位置で動かし（すぐ出る）、位置を聞き始めてから本当の位置が初めて届いたら、もう 1 回だけ動かす
+    // （最後の位置は、電車で移動してきたあとなどは古い場所のことがあり、そのままだと青い点が画面の外に出てしまうため）。
+    // その間に指で地図を動かしていたら、追いかけない。0：まだ、1：最後の位置で動かした、2：本当の位置で動かした（以後は動かさない）
+    var centeredOnIdle by remember { mutableIntStateOf(0) }
+    LaunchedEffect(idle != null, idle?.live) {
+        if (idle == null || points.isNotEmpty()) return@LaunchedEffect
+        val step = if (idle.live) 2 else 1
+        if (centeredOnIdle >= step) return@LaunchedEffect
+        val movedByHand = centeredOnIdle == 1 && cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE
+        centeredOnIdle = step
+        if (!movedByHand) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(idle.lat, idle.lng)))
+    }
+    // 人が今どちらを向いているか（記録していない間と記録中で同じものを使い、記録を始めたときに向きが飛ばないように）
+    val facing = remember { WalkerFacing() }
+    // 向いている方位（人のまわりの三角）。デモ散歩の再生中は、スマホの向きと見本の道は関係がないので出さない
+    val showIdleDot = idle != null && !playingDemo && (!recording || last == null)
+    val heading = rememberCompassHeading(
+        enabled = !playingDemo && (showIdleDot || (recording && last != null)),
+        lat = last?.lat ?: idle?.lat,
+        lng = last?.lng ?: idle?.lng,
+    )
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
@@ -561,25 +623,164 @@ private fun TrackMap(points: List<TrackPoint>) {
             Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
             Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
         }
-        // 今いる場所（最後の点）：青い点
+        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く。
+        // 近いかどうかは、今の地図の拡大で旗の幅が何 m になるかと比べる（拡大を変えると開いたり閉じたりする）。
+        // 地図を動かすたびに中身を組み立て直さないよう、開くかどうかが変わったときだけ読み直す
+        val firstPt = points.firstOrNull()
+        val spread by remember(recording, firstPt, last, points.size) {
+            derivedStateOf {
+                !recording && firstPt != null && last != null && points.size >= 2 &&
+                    roughMeters(firstPt, last) < flagWidthMeters(firstPt.lat, cameraPositionState.position.zoom)
+            }
+        }
+        if (firstPt != null) {
+            val startState = rememberMarkerState()
+            startState.position = LatLng(firstPt.lat, firstPt.lng)
+            val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+            MarkerComposable(Fieldbook.dark, tilt, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
+                FlagMarker(StartFlagColor, tilt = tilt)
+            }
+        }
         if (last != null) {
-            Circle(
-                center = LatLng(last.lat, last.lng),
-                radius = 4.0,
-                fillColor = Fieldbook.Survey,
-                strokeColor = Color.White,
-                strokeWidth = 4f,
-                zIndex = 3f,
+            if (recording) {
+                // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
+                // 位置は、点から点へ飛ばさず、なめらかに動かす
+                val target = LatLng(last.lat, last.lng)
+                var shown by remember { mutableStateOf(target) }
+                LaunchedEffect(target) {
+                    val from = shown
+                    animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
+                        shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
+                    }
+                }
+                // 黄色の人が歩いている向きを向いて歩き、まわりの三角がスマホの向いている方位を指す（デモ散歩の再生中は三角を出さない）
+                HereMarker(
+                    at = shown,
+                    heading = heading,
+                    showPointer = !playingDemo,
+                    walking = true,
+                    walkingEast = movingEast(points),
+                    camera = cameraPositionState,
+                    facing = facing,
+                    zIndex = 5f,
+                )
+            } else if (points.size >= 2) {
+                // 止めたあと：最後の点に青い旗（ゴール）
+                // （歩き始めの近くなら、左右を反転して左へ傾ける）
+                val goalState = rememberMarkerState()
+                goalState.position = LatLng(last.lat, last.lng)
+                MarkerComposable(Fieldbook.dark, spread, state = goalState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
+                    FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
+                }
+            }
+        }
+        // 記録していない間：今いる場所に止まった黄色の人と、向いている方位の三角。位置のずれの大きさを薄い青緑の円で
+        if (showIdleDot && idle != null) {
+            val here = LatLng(idle.lat, idle.lng)
+            if (idle.accuracyM > 0f) {
+                Circle(
+                    center = here,
+                    radius = idle.accuracyM.toDouble(),
+                    fillColor = Pop.Teal.copy(alpha = 0.12f),
+                    strokeColor = Pop.Teal.copy(alpha = 0.35f),
+                    strokeWidth = 2f,
+                    zIndex = 3f,
+                )
+            }
+            HereMarker(
+                at = here,
+                heading = heading,
+                showPointer = true,
+                walking = false,
+                walkingEast = null,
+                camera = cameraPositionState,
+                facing = facing,
+                zIndex = 4.5f,
             )
         }
     }
 }
 
 /**
+ * [at] に、今いる場所の黄色の人（[rememberWalkerIcon]）と、向いている方位の三角（[HeadingPointer]）を出す。
+ * 方位は 1 秒に何度も変わるので、ここだけで読む（地図の中身全体を組み立て直さないように）。
+ * - 三角は [showPointer] で、方位が分かる（センサーがある）ときだけ。地図に寝かせた印なので、地図を回しても方位のまま
+ * - 人の向き：記録中（[walking]）で歩いている向き [walkingEast] が決まるときは、そちらを向く（人は「歩いている人」なので、
+ *   スマホを横に向けて持って歩いても、歩いている向きと逆を向かないように）。そうでなければ、方位から地図の回転を引いた
+ *   「画面の上の向き」で、東寄りなら右・西寄りなら左。どれも決まらなければ前の向き（[facing]）のまま
+ * - [walking] なら 0.5 秒ごとに足を入れ替えて歩く（見出しの足跡と同じ速さ）。そうでないとき、端末で「動きを減らす」にしているときは、
+ *   一歩踏み出した姿のまま止まる
+ */
+@Composable
+private fun HereMarker(
+    at: LatLng,
+    heading: State<Float?>,
+    showPointer: Boolean,
+    walking: Boolean,
+    walkingEast: Boolean?,
+    camera: CameraPositionState,
+    facing: WalkerFacing,
+    zIndex: Float,
+) {
+    val deg = if (showPointer) heading.value else null
+    // 地図の回転は、変わったときだけ読み直す（地図を動かす・拡大するたびに、毎コマ組み立て直さないように）
+    val bearing by remember(camera) { derivedStateOf { camera.position.bearing } }
+    val right = when {
+        walking && walkingEast != null -> walkingEast
+        deg != null -> facingRight(deg - bearing, facing.right)
+        walkingEast != null -> walkingEast
+        else -> facing.right
+    }
+    facing.right = right
+    val reduceMotion = rememberReduceMotion()
+    val step by produceState(0, walking && !reduceMotion) {
+        value = 0
+        if (walking && !reduceMotion) while (true) { delay(WALKER_STEP_MS); value++ }
+    }
+    val pose = if (step % 2 == 0) WalkerPose.STEP_A else WalkerPose.STEP_B
+    if (deg != null) {
+        val pointerState = rememberMarkerState()
+        pointerState.position = at
+        MarkerComposable(
+            Fieldbook.dark,
+            state = pointerState,
+            anchor = Offset(0.5f, 0.5f),
+            flat = true,
+            rotation = deg,
+            zIndex = POINTER_Z,
+            title = "向いている方向",
+        ) {
+            HeadingPointer()
+        }
+    }
+    // 人の印（絵は向きと姿ごとに 1 回だけ描いて使い回す。rememberWalkerIcon）
+    val figureState = rememberMarkerState()
+    figureState.position = at
+    Marker(
+        state = figureState,
+        icon = rememberWalkerIcon(facingRight = right, pose = pose),
+        anchor = WalkerAnchor,
+        zIndex = zIndex,
+        title = "いまの場所",
+    )
+}
+
+/** 方位の三角の重なり順（道 1・2 より上、旗 4・人より下。人の頭や旗に隠れても、三角の先は外に出る） */
+private const val POINTER_Z = 3.5f
+
+/** 人が今どちらを向いているか（北・南のあたりで前の向きのままにするために覚えておく。描き直しの合図にはしない） */
+private class WalkerFacing {
+    var right = true
+}
+
+/** 記録中に、地図の人が足を入れ替える間隔 [ms]（見出しの足跡の 1 歩と同じくらい） */
+private const val WALKER_STEP_MS = 500L
+
+/**
  * API キーが無いときの代替：軌跡をメートル座標にして枠に収め、野帳の図として描く（縁取りの道・始点・北・縮尺）。
  */
 @Composable
-fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
+fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier, recording: Boolean = false) {
     val measurer = rememberTextMeasurer()
     val label = TextStyle(fontFamily = Fieldbook.Data, fontSize = 10.sp, color = Fieldbook.Ink)
     Canvas(modifier = modifier) {
@@ -616,14 +817,20 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
         val casing = road + 2 * 1.5.dp.toPx()
         drawPath(path, color = Fieldbook.RoadCasing, style = Stroke(width = casing, cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(path, color = Fieldbook.Road, style = Stroke(width = road, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        // 始点：測量の基準点のように、二重丸
+        // スタート（最初の点）：赤い旗。止めたあとは、最後の点に青い旗（ゴール）。記録中は今いる場所に青い点
         val first = xy.first()
-        drawCircle(Fieldbook.Ink, radius = 5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
-        drawCircle(Fieldbook.Paper, radius = 2.5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
-        // 今いる場所（最後の点）：青い点（地図あり版と同じ）
         val lastPt = xy.last()
-        drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
-        drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+        val startAt = Offset(sx(first.x), sy(first.y))
+        val goalAt = Offset(sx(lastPt.x), sy(lastPt.y))
+        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く
+        val spread = !recording && (goalAt - startAt).getDistance() < FlagWidth.toPx()
+        val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+        if (!recording) drawFlag(goalAt, GoalFlagColor, mirrored = spread, tilt = -tilt)
+        drawFlag(startAt, StartFlagColor, tilt = tilt)
+        if (recording) {
+            drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+            drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+        }
 
         // 縮尺：幅の 1/4 くらいを切りのいい長さに
         val barM = niceLength(size.width * 0.25f / scale)
@@ -636,3 +843,6 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
         drawText(measurer, if (barM >= 1000) "${barM / 1000} km" else "$barM m", topLeft = Offset(x0 + barPx + 4.dp.toPx(), y0 - 8.dp.toPx()), style = label)
     }
 }
+
+/** 記録中に、地図の今いる場所の点が、点から点へなめらかに動く時間 [ms] */
+private const val WALK_GLIDE_MS = 400

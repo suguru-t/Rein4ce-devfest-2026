@@ -32,6 +32,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rein4ce.roadcollector.audio.Sfx
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -59,10 +61,17 @@ internal fun FavoriteToggle(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(if (pressed) 0.8f else 1f, label = "favoriteStarPress")
-    // 押した瞬間に、ほかのボタン（ui/common/PressFeel）と同じ軽い振動を返す（#75 のレビュー）
+    // ほかのボタン（ui/common/PressFeel）と同じく、押した瞬間に軽い振動（#75 のレビュー）、
+    // 離して押したことになったときに「ぽこっ」（スクロールなどで取り消されたときは鳴らさない。#93 の A のレビュー）
     val haptics = rememberHaptics()
+    val sfx = rememberSfx()
     LaunchedEffect(interaction) {
-        interaction.interactions.collect { if (it is PressInteraction.Press) haptics.performHapticFeedback(HapticFeedbackType.VirtualKey) }
+        interaction.interactions.collect {
+            when (it) {
+                is PressInteraction.Press -> haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                is PressInteraction.Release -> sfx.play(Sfx.PRESS)
+            }
+        }
     }
     val pop = remember { Animatable(1f) }
     // 光の進み具合（0 → 1）。1 は何も描かない

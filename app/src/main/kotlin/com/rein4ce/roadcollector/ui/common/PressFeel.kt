@@ -39,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.rein4ce.roadcollector.audio.Sfx
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -89,15 +90,21 @@ private class PressMotion {
 private fun rememberPressMotion(interactionSource: InteractionSource): PressMotion {
     val motion = remember { PressMotion() }
     val haptics = rememberHaptics()
+    val sfx = rememberSfx()
     LaunchedEffect(interactionSource) {
         var pressing: Job? = null
         interactionSource.interactions.collect { interaction ->
             when (interaction) {
                 is PressInteraction.Press -> {
+                    // 押した瞬間に、軽い振動（設定で切れる）
                     haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
                     pressing = launch { motion.press.animateTo(1f, PressIn) }
                 }
                 is PressInteraction.Release, is PressInteraction.Cancel -> {
+                    // 「ぽこっ」は、指を離して押したことになったとき（Release）だけ鳴らす（設定で切れる）。
+                    // 一覧のカードに指を置いてからスクロールしたときなど、取り消された（Cancel）ときは鳴らさない
+                    // （押していないのに「何か押した」ように聞こえるため。#93 の A のレビュー）
+                    if (interaction is PressInteraction.Release) sfx.play(Sfx.PRESS)
                     val pressed = pressing
                     launch {
                         pressed?.join()

@@ -2,6 +2,9 @@
 # （local.properties は git に含めない）
 
 # Maps SDK for Android の API キー。空のままでも動く（地図の代わりに軌跡を Canvas で描く）
+# ふつうはここではなく、パソコンのユーザーの ~/.gradle/gradle.properties（Windows は C:\Users\<ユーザー名>\.gradle\gradle.properties）に
+# 1 回だけ書く。そうすると、どのクローン・作業フォルダ（git worktree）でも読まれる（README の「地図（Maps API キー）」）。
+# ここに書いた場合は、こちらが先に読まれる
 MAPS_API_KEY=
 
 # サーバの URL。既定は本番サーバ（Cloud Run）。この行がなくても本番につながる

@@ -68,10 +68,18 @@ import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopTag
+import com.rein4ce.roadcollector.ui.common.PopRefreshButton
+import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
  * みんなのタワー（C）。地は「測量野帳」（Fieldbook.kt）の方眼紙で、画面の部品は題字「ミチツミ」の積み木に合わせた
- * ポップな見た目（Pop.kt：太い丸ゴシック、アイコンの 4 色、下に濃い色がのぞくブロックの面）。記憶に残る要素は**断面図**（TowerSection.kt）：
+ * ポップな見た目（ui/common/Pop.kt：太い丸ゴシック、アイコンの 4 色、下に濃い色がのぞくブロックの面）。記憶に残る要素は**断面図**（TowerSection.kt）：
  * 物差し（高い順＝高さ、多い順＝パーツ数）ごとに、**1 番のタワーと自分のいちばん良いタワーの 2 基**を同じ縮尺で
  * 1 本の台に並べ、左に標尺、いちばん高い記録に赤鉛筆の線。絵がそのまま差を語る。
  *
