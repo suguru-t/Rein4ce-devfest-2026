@@ -22,7 +22,7 @@ import kotlin.math.min
  * - v4：パーツの回転の減衰を 0.3 から 3.0 にした（着地で跳ねすぎないように。#110・決定 63）。積み方が変わるので、v3 までの記録とは混ぜない
  * - v5：台を通常と同じ 2.8 m にした（[PLATFORM_WIDTH_M]。決定 69）。画面で遊べるのは自分で落とすだけ（自動で落ちるの決まりは core に残す）
  * - v6：回転の 15° のきざみをやめた（「回す」を押している間なめらかに回る。決定 71）。狙える向きが変わるので、v5 までの記録とは混ぜない
- * - manual-90-v1：時間を 3 分（180 秒）から 90 秒にし、形を 1.4 倍の大きさにした（[PIECE_SCALE]。決定 75）。3 分の記録とは混ぜない
+ * - manual-90-v1：時間を 3 分（180 秒）から 90 秒にした（決定 75）。ほかは manual-180-v6 と同じ。3 分の記録とは混ぜない
  */
 object ChallengeRules {
     const val ID = "manual-90-v1"
@@ -53,12 +53,6 @@ object ChallengeRules {
      * 前は StackWorld の既定（1.4 m）だった
      */
     const val PLATFORM_WIDTH_M = 2.8
-
-    /**
-     * 形の大きさ（長辺 [m]）。前は 1 m で、台（2.8 m）や画面に比べて小さく見えたので、通常の積む画面でいちばん大きいパーツ
-     * （2 km 以上歩いた道。PartSize の上限）と同じ 1.4 倍にした（決定 75）
-     */
-    const val PIECE_SCALE = 1.4
 
     /** 「自動で落ちる」で、狙っている形が下がる速さ [m/s]。出てくる高さ（塔の上 1.3 m）から塔に着くまで 2〜3 秒 */
     const val AUTO_FALL_SPEED_M_S = 0.4
@@ -262,7 +256,7 @@ class ChallengeRun(
 
     /** 自動で落ちる形を、塔や台に重なる位置・向きには動かさない（自分で落とすときは、出てくる高さで重ならないので見ない） */
     private fun blocked(x: Double, angle: Double): Boolean =
-        style == ChallengeStyle.AUTO && world.overlaps(current, x, ghostY, Math.toRadians(angle), ChallengeRules.PIECE_SCALE)
+        style == ChallengeStyle.AUTO && world.overlaps(current, x, ghostY, Math.toRadians(angle))
 
     /**
      * 自動で落ちる形を、[dt] 秒ぶん下げる。下げた位置で塔か台に重なるなら、今の位置から物理で落とす（触れた）。
@@ -271,7 +265,7 @@ class ChallengeRun(
     private fun descend(dt: Double) {
         val nextY = ghostY - ChallengeRules.AUTO_FALL_SPEED_M_S * dt
         when {
-            world.overlaps(current, x, nextY, Math.toRadians(angle), ChallengeRules.PIECE_SCALE) -> drop()
+            world.overlaps(current, x, nextY, Math.toRadians(angle)) -> drop()
             nextY < LOST_BELOW_M -> {
                 ghostY = nextY
                 drop()
@@ -282,7 +276,7 @@ class ChallengeRun(
 
     /** 今の位置（[ghostY]）から物理で落とす。自動で落ちるときは、下がっていた速さのまま落ち始める */
     private fun drop() {
-        val body = world.place(current, x, ghostY, Math.toRadians(angle), scale = ChallengeRules.PIECE_SCALE)
+        val body = world.place(current, x, ghostY, Math.toRadians(angle))
         if (style == ChallengeStyle.AUTO) body.linearVelocity.y = -ChallengeRules.AUTO_FALL_SPEED_M_S
         phase = Phase.FALLING
         settling = 0.0
@@ -312,10 +306,10 @@ class ChallengeRun(
         /** 左右に動かせる範囲 [m]。台（2.8 m）の端から 0.8 m 外まで（通常と同じ。決定 69。台が 1.4 m のころは 1.5） */
         const val MOVE_LIMIT_M = ChallengeRules.PLATFORM_WIDTH_M / 2 + 0.8
 
-        /** 形の原点から、いちばん遠い点までの距離 [m]。どう回しても、この半径の円に収まる（チャレンジの形は [ChallengeRules.PIECE_SCALE] 倍） */
+        /** 形の原点から、いちばん遠い点までの距離 [m]。どう回しても、この半径の円に収まる（チャレンジの形は大きさ 1 倍） */
         fun reachOf(part: Part): Double {
             var reach = 0.0
-            for (poly in PartGeometry.shapes(part, ChallengeRules.PIECE_SCALE)) {
+            for (poly in PartGeometry.shapes(part)) {
                 for (v in poly.points) reach = max(reach, hypot(v.x, v.y))
             }
             return reach

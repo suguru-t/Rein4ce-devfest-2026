@@ -64,7 +64,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
 import com.rein4ce.roadcollector.core.model.Part
@@ -387,8 +386,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
         }
         if (frame.phase == ChallengeRun.Phase.AIMING) {
             // 狙っている形の高さ（vm.ghostY）は描画の中だけで読む。自分で落とすときは出てくる高さのまま
-            // 置いたときと同じ大きさ（1.4 倍。決定 75）
-            drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale * ChallengeRules.PIECE_SCALE.toFloat(), Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
+            drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale, Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
         }
     }
 }
