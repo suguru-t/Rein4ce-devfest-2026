@@ -40,6 +40,8 @@ SOURCES = [
     APP / "ui/settings/SettingsDialog.kt",
     APP / "ui/settings/HowToContent.kt",
     APP / "data/AppSettings.kt",
+    # 積む画面の情報の字（高さ・残り・落下・歩いた道の大きさ・置き方の一言。決定 59）
+    APP / "ui/game/StackScreen.kt",
     # 名前を付ける窓（「保存」「AI に考えてもらう」。パーツの名前とニックネーム）
     APP / "ui/common/NameField.kt",
     # 積む画面のモードを選ぶ画面（画面名「みちをつむ」・モードの名前と一言・記録・「‹ 戻る」）

@@ -45,7 +45,6 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackTab
-import com.rein4ce.roadcollector.ui.game.StackTabState
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import com.rein4ce.roadcollector.ui.settings.HowToDialog
@@ -151,8 +150,7 @@ fun AppNav(collectRequests: Int = 0) {
                 null, HOME_ROUTE -> BackdropScreen.HOME
                 Dest.Collect.route -> BackdropScreen.COLLECT
                 Dest.Inventory.route -> BackdropScreen.COLLECTION
-                // 積むは、モードを選ぶ画面のときだけ今の天気（ui/game/ModeSelect.kt の StackTabState）
-                Dest.Stack.route -> if (StackTabState.selecting) BackdropScreen.STACK else BackdropScreen.OTHER
+                Dest.Stack.route -> BackdropScreen.STACK
                 Dest.Gallery.route -> BackdropScreen.GALLERY
                 else -> BackdropScreen.OTHER
             }

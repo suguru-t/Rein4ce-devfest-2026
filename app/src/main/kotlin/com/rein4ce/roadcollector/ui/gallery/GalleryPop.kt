@@ -1,30 +1,21 @@
 package com.rein4ce.roadcollector.ui.gallery
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
-// 「みんな」だけで使うポップな部品（物差しの色・タワーの注記の行）。コレクションと共通の部品は ui/common/Pop.kt
+// 「みんな」だけで使うポップな部品（物差しの色・タワーの注記の行）。コレクションと共通の部品は ui/common/Pop.kt、天気の上に直接書く字は ui/common/SkyText.kt
 
 /** 物差しの色の面（白い字を載せる）：高い順はオレンジ、多い順は青緑、新しい順は紺 */
 internal fun sortFace(sort: TowerSort): Color = when (sort) {
@@ -38,40 +29,6 @@ internal fun sortInk(sort: TowerSort): Color = if (!Fieldbook.dark) sortFace(sor
     TowerSort.HEIGHT -> Pop.Orange
     TowerSort.PARTS -> Pop.Teal
     TowerSort.NEWEST -> Color(0xFFB9BCD0)
-}
-
-/**
- * 背景（方眼紙と天気）の上に直接書く字：字のまわりに紙の色の縁取り（ステッカーの白い縁のような）を付けて描く。
- * ダークモードのくもり・霧の雲は明るい灰色で、その上では薄い色の字（「全部で ○ 個」など）やオレンジの数字が沈んで読めないため
- * （#90・#102 のレビュー）。札で囲むと見出しより目立つので、囲まずに字の形のまま浮かせる。ライトでも、明るい雲や太陽の光の上ではっきりする。
- * 縁取りは同じ字を太い線で先に描いて作る（その字は読み上げから外す）
- */
-@Composable
-internal fun SkyText(
-    text: String,
-    color: Color,
-    fontSize: TextUnit,
-    modifier: Modifier = Modifier,
-    fontFamily: FontFamily? = Pop.Rounded,
-    fontWeight: FontWeight = FontWeight.Black,
-    maxLines: Int = Int.MAX_VALUE,
-    softWrap: Boolean = true,
-) {
-    val outline = with(LocalDensity.current) { 4.dp.toPx() }
-    Box(modifier) {
-        Text(
-            text,
-            color = Fieldbook.Paper,
-            fontSize = fontSize,
-            fontFamily = fontFamily,
-            fontWeight = fontWeight,
-            maxLines = maxLines,
-            softWrap = softWrap,
-            style = LocalTextStyle.current.copy(drawStyle = Stroke(width = outline, join = StrokeJoin.Round)),
-            modifier = Modifier.clearAndSetSemantics {},
-        )
-        Text(text, color = color, fontSize = fontSize, fontFamily = fontFamily, fontWeight = fontWeight, maxLines = maxLines, softWrap = softWrap)
-    }
 }
 
 /**

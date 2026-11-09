@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -405,6 +406,9 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                     // ブロックの大きさは決まっているので、文字の大きさの設定では大きくしない（はみ出すため）
                     fontSize = with(density) { (blockDp * 0.66f).toSp() },
                     color = Pop.Letter,
+                    // 行の高さは字の形どおりにする。まわりの本文の行の高さ（24sp）は文字の大きさの設定で伸びるので、それを使うと、
+                    // 小さい積み木（積む画面の小さい画面の 20dp）では行がブロックより高くなり、字が下にずれて切れる（#116）
+                    style = LocalTextStyle.current.copy(lineHeight = TextUnit.Unspecified),
                 )
             }
         }
