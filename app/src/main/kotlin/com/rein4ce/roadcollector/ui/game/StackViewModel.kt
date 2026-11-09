@@ -12,9 +12,10 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
+import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.data.PartOrigin
 import com.rein4ce.roadcollector.data.WalkDistance
 import com.rein4ce.roadcollector.data.walkDistance
-import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -52,8 +53,15 @@ class StackViewModel(
      * @property usedCount   このゲームで置いたパーツの数
      * @property fallenCount 落ちたパーツの数（置いたあとに崩れて落ちたものも含む）
      * @property settled     最後のパーツのあと、塔全体が止まったのを確かめられたか
+     * @property walked      使ったパーツ（落ちたものも含む）のうち、本当に歩いた道の距離。ゲームを始めたときに数えて固定する
      */
-    data class StackResult(val tower: Tower, val usedCount: Int, val fallenCount: Int, val settled: Boolean, val walked: WalkDistance = WalkDistance(0, 0)) {
+    data class StackResult(
+        val tower: Tower,
+        val usedCount: Int,
+        val fallenCount: Int,
+        val settled: Boolean,
+        val walked: WalkDistance = WalkDistance.NONE,
+    ) {
         /** 台の上に残ったパーツの数 */
         val remainingCount: Int get() = tower.parts.size
 
@@ -67,6 +75,12 @@ class StackViewModel(
     var sessionParts: List<Part> = emptyList()
         private set
     private var queue: List<Part> = emptyList()
+
+    /**
+     * このゲームのパーツの、本当に歩いた道の距離。始めたときに数えておき、結果にそのまま入れる
+     * （途中でコレクションのパーツを消したり名前を変えたりしても、始めたゲームの距離は変わらない）
+     */
+    private var sessionWalked = WalkDistance.NONE
 
     var runId: Long by mutableStateOf(0L)
         private set
@@ -142,14 +156,21 @@ class StackViewModel(
      *
      * - 新しい開始要求：IDを今のコレクションで解決して始める（要求ごとに1回だけ）
      * - 要求がない、または前に遊んだ要求のパーツがすべて消えた：まだ一度も始めていなければ、先頭の最大5個で始める
+     *
+     * @param origins パーツの出どころ（PartRepository.origins）。始めるときに「使った道」を数えるのに使う
      */
-    fun updateInventory(inventory: List<Part>, isLoaded: Boolean, request: GameSession.StartRequest?) {
+    fun updateInventory(
+        inventory: List<Part>,
+        isLoaded: Boolean,
+        request: GameSession.StartRequest?,
+        origins: Map<String, PartOrigin> = emptyMap(),
+    ) {
         if (!isLoaded) return
         if (request != null && request.id != handledRequestId) {
             handledRequestId = request.id
             val parts = resolve(request.partIds, inventory)
             if (parts.isNotEmpty()) {
-                start(parts, implicit = false)
+                start(parts, implicit = false, origins = origins)
                 GameSession.markStarted(request.id)
                 return
             }
@@ -162,7 +183,7 @@ class StackViewModel(
             // 前に遊んだ要求（積む画面が作り直された）で、パーツがすべて消えていた：選択なしと同じに扱う
         }
         if (runId == 0L && !waitingForReselect && inventory.isNotEmpty()) {
-            start(inventory.take(GameSession.MAX_PARTS), implicit = true)
+            start(inventory.take(GameSession.MAX_PARTS), implicit = true, origins = origins)
         }
     }
 
@@ -170,8 +191,9 @@ class StackViewModel(
      * 「やり直す」「もう一度」。選んで始めたゲームは同じパーツの最新の値で、
      * 選択なしで始めたゲームは今のコレクションの先頭の最大5個で始め直す。
      * 使えるパーツがなければ、いまのゲームはそのままにして案内を出す。
+     * @param origins パーツの出どころ（[updateInventory] と同じ）
      */
-    fun restart(inventory: List<Part>) {
+    fun restart(inventory: List<Part>, origins: Map<String, PartOrigin> = emptyMap()) {
         if (phase == Phase.Idle) return
         val ids = if (implicitRun) inventory.map { it.id } else sessionParts.map { it.id }
         val parts = resolve(ids, inventory)
@@ -179,7 +201,7 @@ class StackViewModel(
             startMessage = if (implicitRun) MESSAGE_COLLECTION_EMPTY else MESSAGE_RETRY_MISSING
             return
         }
-        start(parts, implicitRun)
+        start(parts, implicitRun, origins)
     }
 
     /** IDを今のコレクションのPartに置き換える。消えたものは除き、重複を除いて最大5個、元の順番のまま */
@@ -192,7 +214,7 @@ class StackViewModel(
         startMessage = null
     }
 
-    private fun start(parts: List<Part>, implicit: Boolean) {
+    private fun start(parts: List<Part>, implicit: Boolean, origins: Map<String, PartOrigin>) {
         runId++
         implicitRun = implicit
         waitingForReselect = false
@@ -204,6 +226,7 @@ class StackViewModel(
         startMessage = null
         world = StackWorld()
         sessionParts = parts.toList()
+        sessionWalked = walkDistance(sessionParts, origins)
         queue = sessionParts
         height = 0f
         fallenCount = 0
@@ -233,7 +256,7 @@ class StackViewModel(
                 usedCount = sessionParts.size,
                 fallenCount = fallenCount,
                 settled = settled,
-                walked = walkDistance(sessionParts),
+                walked = sessionWalked,
             )
             phase = if (settled) Phase.Finished else Phase.Unresolved
         } else {
