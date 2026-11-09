@@ -63,8 +63,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.foundation.layout.sizeIn
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
@@ -77,7 +75,10 @@ import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.PopBackButton
+import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.zoomOrigin
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -404,65 +405,16 @@ private fun ModePlayPage(
     content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
-    val narrow = LocalConfiguration.current.screenWidthDp < NARROW_WIDTH_DP
+    val narrow = isNarrowScreen()
     content { compact ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BackButton(onBack, small = compact || narrow)
+            // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
+            PopBackButton(onBack, small = compact || narrow, onClickLabel = "遊び方を選ぶ画面に戻る")
             // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした
-            if (!compact) ModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
+            if (!compact) PopModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
         }
     }
 }
-
-/**
- * モードで遊ぶ画面の「‹ 戻る」（モードを選ぶ画面へ）。「みんな」のランキングと同じ黄色い積み木。
- * 前は小さな札（字 14sp・見た目の高さ 28dp ほど）で押しにくかったので（B の希望）、字を大きくし（16dp。[small] なら 15dp）、
- * 見た目の高さ 42dp・幅 88dp 以上の積み木にした（押せる範囲も同じ大きさ）。上の行に収めるため、文字の大きさの設定では大きくしない
- *
- * @param onBack 押したとき。ボタンのまん中（アプリの画面の左上から）を渡す。選ぶ画面はここから大きくなって出てくる（決定 78）
- * @param small 小さい画面か、幅の狭い端末。一回り小さくする
- */
-@Composable
-private fun BackButton(onBack: (center: Offset) -> Unit, small: Boolean) {
-    val source = remember { MutableInteractionSource() }
-    val size = with(LocalDensity.current) { (if (small) 15.dp else 16.dp).toSp() }
-    // 置かれた所のまん中。押したときに渡すだけなので、変わっても描き直さない（State にしない）
-    val center = remember { arrayOf(Offset.Unspecified) }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
-            .pressFeel(source)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る") { onBack(center[0]) }
-            .popBlock(face = Pop.Yellow, corner = 50.dp, depth = 3.dp)
-            .sizeIn(minWidth = if (small) 80.dp else 88.dp, minHeight = if (small) 40.dp else 42.dp)
-            .padding(horizontal = 14.dp),
-    ) {
-        Text("‹ 戻る", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.InkOnYellow, maxLines = 1)
-    }
-}
-
-/**
- * 遊んでいるモードの札（「通常」「90 秒チャレンジ」「毎日 1 つずつ積む」）。モードの色の積み木に白い字で、少し傾ける。
- * 「‹ 戻る」と同じ高さ・同じ字の大きさ（[small] なら一回り小さく）。押すものではないので、読み上げでは字だけ
- */
-@Composable
-private fun ModeTag(label: String, face: Color, small: Boolean) {
-    val size = with(LocalDensity.current) { (if (small) 14.dp else 16.dp).toSp() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .graphicsLayer { rotationZ = 2f }
-            .popBlock(face = face, corner = 10.dp, depth = 3.dp)
-            .heightIn(min = if (small) 36.dp else 42.dp)
-            .padding(horizontal = 8.dp),
-    ) {
-        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.Letter, maxLines = 1)
-    }
-}
-
-/** これより幅の狭い端末では、モードで遊ぶ画面の「‹ 戻る」と札を一回り小さくする [dp] */
-private const val NARROW_WIDTH_DP = 400
 
 /**
  * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き・遊んでいるときの札の色。

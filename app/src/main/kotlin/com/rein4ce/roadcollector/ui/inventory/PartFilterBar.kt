@@ -163,7 +163,8 @@ private fun FilterTag(
             color = if (active) activeText else Pop.TealLine,
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
-            fontSize = 12.sp,
+            // 前は 12sp。大きくすると 3 つが 1 行に入らなくなるので 13sp まで（決定 80）
+            fontSize = 13.sp,
             maxLines = 1,
             modifier = Modifier
                 .graphicsLayer { rotationZ = if (active) -2f else 0f }
@@ -204,7 +205,7 @@ private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky
                         selected -> Fieldbook.Survey
                         else -> Fieldbook.Ink
                     },
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 )
             }

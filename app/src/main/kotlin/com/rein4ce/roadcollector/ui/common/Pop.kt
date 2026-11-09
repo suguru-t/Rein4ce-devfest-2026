@@ -419,6 +419,12 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
  * 画面名の積み木の動きの大きさ（ui/common/BlockMotion.kt。題字と同じ動きで、大きさだけ違う）。
  * ブロックが題字より小さいので跳ねる高さを少し低く（題字の 32dp のときの 26/32）、題字より下にあって落ちる距離が長いので、落ちる時間を少し長くする
  */
+/**
+ * 記録とコレクションの画面名（[BlockWord]）のブロックの大きさ。ほかの画面名（26dp）より一回り大きくした（B の希望。決定 80）。
+ * ランキングの一覧の画面名は、右に個数とリロードが並んで幅が足りないので 26dp のまま
+ */
+internal val SCREEN_TITLE_BLOCK = 30.dp
+
 private val WordMotion = BlockMotionSpec(hopDp = 10f, hopBounceDp = 3f, fallMs = 220, landDxDp = 10f, landBounceDp = 6f)
 
 /** ブロックの色：アイコンの 4 色を順に */
