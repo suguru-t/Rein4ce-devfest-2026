@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector
 
 import android.app.Application
 import android.content.Context
+import com.rein4ce.roadcollector.audio.BgmPlayer
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.MyTowers
@@ -35,6 +36,9 @@ class RoadCollectorApp : Application() {
     lateinit var gallery: TowerGallery
         private set
 
+    /** BGM（全部の画面で同じ曲）。流すかどうかは MainActivity が、アプリが前に出ているかと設定から決める */
+    val bgm: BgmPlayer by lazy { BgmPlayer(this) }
+
     /** このスマホから送信したタワーの id（「みんな」で「あなた」の札を出す） */
     lateinit var myTowers: MyTowers
         private set
@@ -48,7 +52,11 @@ class RoadCollectorApp : Application() {
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
         // 送信できたタワーは、自分のものとして端末に覚えておく（サーバが落ちていても印が出る）
         myTowers = MyTowers(this)
-        ApiClient.onPosted = { myTowers.add(it.id) }
+        ApiClient.onPosted = { created ->
+            myTowers.add(created.id)
+            // 送れたら一覧も取り直す（送ってすぐ「みんな」を開いても、新しいタワーが出る。取っている最中なら 1 回だけ取り直す）
+            gallery.refresh()
+        }
         // 持ち主の印（端末ごと）。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。入れ直しても残る（端末を替えると変わる）
         val owner = OwnerId.of(this)
         ApiClient.ownerId = { owner }

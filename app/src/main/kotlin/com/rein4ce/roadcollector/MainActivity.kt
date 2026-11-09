@@ -7,6 +7,7 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.content.res.Resources
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -18,14 +19,21 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.ui.AppNav
+import com.rein4ce.roadcollector.ui.TitleIntro
+import com.rein4ce.roadcollector.ui.TitleIntroState
+import com.rein4ce.roadcollector.ui.common.animationsOff
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.theme.JapaneseText
 import com.rein4ce.roadcollector.ui.theme.RoadCollectorTheme
@@ -38,9 +46,22 @@ class MainActivity : ComponentActivity() {
         // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐって採集画面に入るように見せる
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash -> enterThroughGate(splash) }
+        } else {
+            TitleIntroState.splashGone = true
         }
+        // 開いたときのタイトル（ui/TitleIntro.kt）を出すか。アプリを新しく開いたときだけ出す。
+        // 記録中（通知から戻ったときなど）、画面の作り直し（回転・ダークの切り替え）、端末で動きを減らしているときは出さない
+        val showIntro = savedInstanceState == null && !introShown && !TrackRecorder.isRecording.value && !animationsOff(this)
+        // 出したときだけ「出した」にする（記録中に開いて出さなかったあと、アイコンから開き直したときは出す。#82 のレビュー）
+        if (showIntro) introShown = true
+        introThisTime = showIntro
+        if (!showIntro) TitleIntroState.done = true
         enableEdgeToEdge()
         val settings = RoadCollectorApp.from(this).settings
+        // BGM：設定は、画面ができる前に渡しておく（オフにしている人に、開いた瞬間だけ鳴らないように）
+        volumeControlStream = volumeStreamFor(settings.bgmOn.value)
+        val bgm = RoadCollectorApp.from(this).bgm
+        bgm.setSettings(settings.bgmOn.value, settings.bgmVolume.value)
         setContent {
             // 画面の明るさ：設定（採集画面の歯車）と、端末のダークテーマから決める
             val mode by settings.themeMode.collectAsStateWithLifecycle()
@@ -60,6 +81,13 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 LaunchedEffect(mode) { splashScreen.setSplashScreenTheme(splashThemeFor(mode)) }
             }
+            // BGM のオン・オフと音量が変わったら、すぐに効かせる（設定の画面で動かしながら聞ける）
+            val bgmOn by settings.bgmOn.collectAsStateWithLifecycle()
+            val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
+            LaunchedEffect(bgmOn, bgmVolume) {
+                bgm.setSettings(bgmOn, bgmVolume)
+                volumeControlStream = volumeStreamFor(bgmOn)
+            }
             // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
             val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()
             val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
@@ -69,9 +97,34 @@ class MainActivity : ComponentActivity() {
                 onDispose { view.keepScreenOn = false }
             }
             RoadCollectorTheme(dark = dark) {
-                AppNav()
+                Box {
+                    // タイトルを出している間は、下の記録画面を読み上げから外す（読み上げで、見えないボタンを押せないように）
+                    Box(modifier = if (TitleIntroState.done) Modifier else Modifier.clearAndSetSemantics {}) {
+                        AppNav()
+                    }
+                    // 開いたときのタイトル。終わったら何も描かない
+                    if (showIntro) TitleIntro()
+                }
             }
         }
+    }
+
+    /**
+     * 音量ボタンで動かす音量。BGM がオンなら、メディアの音量（曲の音と音のあいだに押しても、BGM の大きさが変わる）。
+     * オフなら端末にまかせる（ほかのアプリと同じく、着信音などの音量が動く。#86 の C のレビュー）
+     */
+    private fun volumeStreamFor(bgmOn: Boolean) =
+        if (bgmOn) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
+
+    // BGM は、アプリが前に出ている間だけ流す（ほかのアプリを見ているとき・記録中に画面を消したときは止める）
+    override fun onStart() {
+        super.onStart()
+        RoadCollectorApp.from(this).bgm.setForeground(true)
+    }
+
+    override fun onStop() {
+        RoadCollectorApp.from(this).bgm.setForeground(false)
+        super.onStop()
     }
 
     /** 起動画面のテーマ。「端末に合わせる」なら決めない（マニフェストのテーマのまま、端末のダークテーマで地の色が決まる） */
@@ -81,8 +134,12 @@ class MainActivity : ComponentActivity() {
         ThemeMode.DARK -> R.style.Theme_RoadCollector_SplashNight
     }
 
+    /** このあと開いたときのタイトルを出すか（出すなら、起動画面は門をくぐらずに、題字をタイトルへ渡して消える） */
+    private var introThisTime = false
+
     /**
      * 起動画面のアイコン（splash_icon）を、積み木の門の形の穴に向かって大きくしながら、起動画面ごとうすくして消す。
+     * 開いたときのタイトルを出すときは、門をくぐらず、アイコンの題字の段の場所をタイトルに渡して、うすくして消す（[handTitleOver]）。
      * 穴をくぐると採集画面が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
      */
     @RequiresApi(Build.VERSION_CODES.S)
@@ -90,6 +147,12 @@ class MainActivity : ComponentActivity() {
         val icon = splash.iconView
         if (icon == null) {
             splash.remove()
+            TitleIntroState.splashGone = true
+            return
+        }
+        // タイトルを出すときは、門をくぐらずに題字をタイトルへ渡す
+        if (introThisTime) {
+            handTitleOver(splash, icon)
             return
         }
         // 起動画面のアイコンは、部品のまん中に絵のまん中が来るように、そのままの大きさ（1dp = 1dp）で描かれる。
@@ -110,26 +173,70 @@ class MainActivity : ComponentActivity() {
             startDelay = 180
             duration = 140
         }
-        // 起動画面のアイコンの動き（最後の「ミ」が右の外から落ちてきて、1 回はねて収まる）が終わるまで待ってから、門をくぐる
-        val animStart = splash.iconAnimationStart
-        val animDuration = splash.iconAnimationDuration
-        val wait = if (animStart != null && animDuration != null) {
-            // 収まってから、一瞬（PAUSE_MS）置いてからくぐる
-            (animStart.toEpochMilli() + animDuration.toMillis() + PAUSE_MS - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
-        } else {
-            0L
-        }
         AnimatorSet().apply {
-            startDelay = wait
+            // 起動画面のアイコンの動き（最後の「ミ」が右の外から落ちてきて、1 回はねて収まる）が終わるまで待ってから、門をくぐる
+            startDelay = iconSettleWaitMs(splash)
             playTogether(zoom, fade)
             addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) = splash.remove()
+                override fun onAnimationEnd(animation: Animator) {
+                    splash.remove()
+                    TitleIntroState.splashGone = true
+                }
             })
             start()
         }
     }
 
+    /**
+     * 開いたときのタイトルを出すとき：起動画面の積み木の塔は大きくせず、そのままうすくして消す。
+     * アイコンの中の題字「ミチツミ」の段のまん中（画面の上の位置）は、待つ前にタイトルに渡しておく
+     * （起動が遅くて、タイトルが待ちきれずに先へ進んでも、起動画面の題字の場所から大きくなれるように。#82 のレビュー）。
+     * タイトルの題字は、起動画面が消えきってから、そこに同じ大きさで出て、まん中へ大きくなる（ui/TitleIntro.kt）
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun handTitleOver(splash: SplashScreenView, icon: View) {
+        val at = IntArray(2)
+        icon.getLocationInWindow(at)
+        val dp = resources.displayMetrics.density
+        TitleIntroState.splashTitle = Offset(at[0] + icon.width / 2f, at[1] + icon.height / 2f + TITLE_DY_DP * dp)
+        ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply {
+            duration = HANDOVER_FADE_MS
+            startDelay = iconSettleWaitMs(splash)
+            // 起動画面が消えきってから、タイトルの題字を出す（消えかけの起動画面と、タイトルの題字が二重に見えないように）
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    splash.remove()
+                    TitleIntroState.splashGone = true
+                }
+            })
+            start()
+        }
+    }
+
+    /** 起動画面のアイコンの動きが収まって、一瞬（PAUSE_MS）置くまでの待ち時間 [ms]。長くても MAX_WAIT_MS */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun iconSettleWaitMs(splash: SplashScreenView): Long {
+        val animStart = splash.iconAnimationStart ?: return 0L
+        val animDuration = splash.iconAnimationDuration ?: return 0L
+        return (animStart.toEpochMilli() + animDuration.toMillis() + PAUSE_MS - System.currentTimeMillis()).coerceIn(0L, MAX_WAIT_MS)
+    }
+
     private companion object {
+        /**
+         * 起動画面のアイコン（288×288dp の絵）のまん中から見た、題字「ミチツミ」の段のまん中 [dp]（絵の中では y 188.2）。
+         * tools/make_splash_icon.py の大きさ・位置で決まるので、作り直したら合わせる
+         */
+        const val TITLE_DY_DP = 44.2f
+
+        /**
+         * タイトルに題字を渡すときに、起動画面をうすくして消す時間 [ms]。タイトルの題字は、消えきってから出る。
+         * 長いと、消えかけの積み木の塔とタイトルの題字が重なって見えたので短くした
+         */
+        const val HANDOVER_FADE_MS = 120L
+
+        /** このプロセスで、開いたときのタイトルをもう出したか（画面を作り直しても、もう一度は出さない） */
+        var introShown = false
+
         /**
          * 起動画面のアイコン（288×288dp の絵）のまん中から見た、門の形の穴のまん中 [dp]（絵の中では x 144・y 108）。
          * tools/make_splash_icon.py の大きさ・位置で決まるので、作り直したら合わせる

@@ -1,6 +1,8 @@
 package com.rein4ce.roadcollector.data
 
 import android.content.Context
+import com.rein4ce.roadcollector.core.model.NicknameHints
+import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.core.weather.WalkWeather
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,16 +31,16 @@ enum class ThemeMode(val label: String) {
  */
 enum class WeatherMotion(val label: String, val note: String) {
     /** 背景に天気を出さない（道の色は天気で変わる） */
-    OFF("出さない", "背景に天気を出しません。道の色は、歩いたときの天気で変わります。"),
+    OFF("出さない", "背景に天気を出しません。"),
 
     /** 止まった絵にする（電池にやさしい） */
-    STILL("止める", "天気を、止まった絵で出します。動かさないので、電池にやさしい設定です。"),
+    STILL("止める", "止まった絵で出します。電池にやさしい設定です。"),
 
     /** ゆっくりな空（くもり・霧・晴れ）は 30 回、雨・雪は 60 回。初めはこれ */
-    NORMAL("ふつう", "雲や太陽はゆっくり（1 秒に 30 回）、雨と雪はなめらか（60 回）に動かします。"),
+    NORMAL("ふつう", "雲や太陽はゆっくり、雨や雪はなめらかに動かします。"),
 
     /** どの天気も 1 秒に 60 回描き直す */
-    SMOOTH("なめらか", "どの天気も 1 秒に 60 回描き直します。電池を少し多く使います。"),
+    SMOOTH("なめらか", "どの天気もなめらかに動かします。電池を少し多く使います。"),
 }
 
 /**
@@ -138,6 +140,42 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _aiNaming.value = on
     }
 
+    private val _haptics = MutableStateFlow(readBoolean(KEY_HAPTICS, true))
+
+    /**
+     * 押したときなどに端末を軽く振動させるか。初めはオン。
+     * アプリの振動は、すべて ui/common/Haptics.kt の rememberHaptics() を通して、ここがオフなら鳴らさない
+     */
+    val haptics: StateFlow<Boolean> = _haptics
+
+    fun setHaptics(on: Boolean) {
+        store.put(KEY_HAPTICS, on.toString())
+        _haptics.value = on
+    }
+
+    private val _bgmOn = MutableStateFlow(readBoolean(KEY_BGM_ON, true))
+
+    /** BGM を流すか。初めはオン。オフなら、音量（[bgmVolume]）に関係なく流さない（audio/BgmPlayer.kt） */
+    val bgmOn: StateFlow<Boolean> = _bgmOn
+
+    fun setBgmOn(on: Boolean) {
+        store.put(KEY_BGM_ON, on.toString())
+        _bgmOn.value = on
+    }
+
+    private val _bgmVolume = MutableStateFlow(
+        store.get(KEY_BGM_VOLUME)?.toIntOrNull()?.coerceIn(1, MAX_BGM_VOLUME) ?: DEFAULT_BGM_VOLUME,
+    )
+
+    /** BGM の音量（1〜[MAX_BGM_VOLUME]）。端末のメディアの音量に、さらにこの割合を掛ける */
+    val bgmVolume: StateFlow<Int> = _bgmVolume
+
+    fun setBgmVolume(level: Int) {
+        val v = level.coerceIn(1, MAX_BGM_VOLUME)
+        store.put(KEY_BGM_VOLUME, v.toString())
+        _bgmVolume.value = v
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -162,6 +200,24 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _demoSky.value = sky
     }
 
+    private val _partFilter = MutableStateFlow(
+        PartFilter(
+            sort = readEnum(KEY_PART_SORT, PartSort.CUSTOM),
+            sky = readEnumOrNull<Sky>(KEY_PART_SKY),
+            favoritesOnly = readBoolean(KEY_PART_FAVORITES_ONLY, false),
+        ),
+    )
+
+    /** コレクションと「パーツを選ぶ」の窓の並びと絞り込み（共通）。初めは、いつもの順で絞り込みなし */
+    val partFilter: StateFlow<PartFilter> = _partFilter
+
+    fun setPartFilter(filter: PartFilter) {
+        store.put(KEY_PART_SORT, filter.sort.name)
+        store.put(KEY_PART_SKY, filter.sky?.name.orEmpty())
+        store.put(KEY_PART_FAVORITES_ONLY, filter.favoritesOnly.toString())
+        _partFilter.value = filter
+    }
+
     private val _howToSeen = MutableStateFlow(readBoolean(KEY_HOWTO_SEEN, false))
 
     /** 開いたときに出す「使い方」で「次回から表示しない」を選んだか（true なら出さない。設定の「使い方」ではいつでも見られる） */
@@ -173,22 +229,35 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
     }
 
     /** 保存した値が読めない（前の版の値など）ときは [fallback] */
-    private inline fun <reified E : Enum<E>> readEnum(key: String, fallback: E): E =
-        store.get(key)?.let { saved -> enumValues<E>().firstOrNull { it.name == saved } } ?: fallback
+    private inline fun <reified E : Enum<E>> readEnum(key: String, fallback: E): E = readEnumOrNull<E>(key) ?: fallback
+
+    /** 保存した列挙の値。保存していない・知らない名前なら null（「すべて」のように、無いことに意味がある値に使う） */
+    private inline fun <reified E : Enum<E>> readEnumOrNull(key: String): E? =
+        store.get(key)?.let { saved -> enumValues<E>().firstOrNull { it.name == saved } }
 
     private fun readBoolean(key: String, fallback: Boolean): Boolean = store.get(key)?.toBooleanStrictOrNull() ?: fallback
 
     companion object {
         /** ニックネームの長さの上限。「みんな」の一覧の 1 行に収まる長さ */
-        const val MAX_NICKNAME_LENGTH = 12
+        const val MAX_NICKNAME_LENGTH = NicknameHints.MAX_NICKNAME_LENGTH
+
+        /** BGM の音量の段階の数と、初めの音量（まん中） */
+        const val MAX_BGM_VOLUME = 10
+        const val DEFAULT_BGM_VOLUME = 5
 
         private const val KEY_THEME = "theme_mode"
         private const val KEY_WEATHER_MOTION = "weather_motion"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_AI_NAMING = "ai_naming"
+        private const val KEY_HAPTICS = "haptics"
+        private const val KEY_BGM_ON = "bgm_on"
+        private const val KEY_BGM_VOLUME = "bgm_volume"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"
+        private const val KEY_PART_SORT = "part_sort"
+        private const val KEY_PART_SKY = "part_sky"
+        private const val KEY_PART_FAVORITES_ONLY = "part_favorites_only"
 
         /** 前後の空白・改行を落とし、上限の文字数で切る（絵文字を途中で切らないよう、コードポイント単位） */
         fun cleanNickname(name: String): String {

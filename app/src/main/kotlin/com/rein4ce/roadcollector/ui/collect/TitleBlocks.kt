@@ -31,7 +31,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -53,7 +53,19 @@ private val TitleLetter = Color(0xFFF3F6F0)
  */
 private val TitleRounded = FontFamily(Font(R.font.mplus_rounded_michitsumi, FontWeight.Black))
 
-/** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
+/** 題字のブロック 1 つの大きさ [dp]。間・字・角の丸み・持ち上げ・跳ね方は、これに合わせて同じ割合で大きくなる */
+internal const val TITLE_BLOCK_DP = 38f
+
+/** 32dp のブロックで決めた寸法を、[TITLE_BLOCK_DP] の大きさに直す倍率 */
+private const val K = TITLE_BLOCK_DP / 32f
+
+/** ブロックの間 [dp]。ブロック 1 つ分の送り（[TITLE_BLOCK_DP] + これ）は、開いたときのタイトルが起動画面の題字に合わせるのに使う */
+internal const val TITLE_GAP_DP = 4f * K
+
+/** 題字の上の余白 [dp]（浮かせた最後の「ミ」と、傾けた角が見出しの外にはみ出さないように） */
+internal const val TITLE_TOP_PAD_DP = 10f * K
+
+/** 題字のブロック 1 つ。[tiltDeg] は傾き、[liftDp] は持ち上げ（負で上。32dp のブロックでの値）。色はアプリのアイコン（ic_launcher_foreground）の 4 色 */
 private class TitleBlock(val char: Char, val color: Color, val tiltDeg: Float, val liftDp: Float)
 
 /** 最後の 1 つは浮かせて（影も濃く）「置く直前」に見せる */
@@ -81,13 +93,15 @@ private class BlockMotion {
  * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。押せる場所はふだんの位置のままなので、
  * 動いている途中に同じ場所を押すと、初めから動き直す。題字は飾りなので、読み上げではボタンにしない。
  * 端末で「動きを減らす」（アニメーションの速度 0）にしていれば、動きは飛ばされてすぐ元の位置に戻る
+ *
+ * @param interactive 押すと動くか。開いたときのタイトル（ui/TitleIntro.kt）では、押すと飛ばすので false
  */
 @Composable
-internal fun TitleBlocks(modifier: Modifier = Modifier) {
+internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = true) {
     val density = LocalDensity.current
-    val shape = RoundedCornerShape(7.dp)
+    val shape = RoundedCornerShape((7f * K).dp)
     val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     val motions = remember { List(Blocks.size) { BlockMotion() } }
     val running = remember { arrayOfNulls<Job>(Blocks.size) }
     // 最後の「ミ」をカメラの穴のあたりから落とすための、ブロックのまん中（画面の左上から [px]。傾け・持ち上げの前）
@@ -96,17 +110,18 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
         verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(TITLE_GAP_DP.dp),
     ) {
         Blocks.forEachIndexed { i, block ->
             val motion = motions[i]
             val isLast = i == Blocks.lastIndex
             val lifted = block.liftDp < 0f
+            val liftDp = block.liftDp * K
             Box(
                 modifier = Modifier
                     // 浮かせた分の場所を上に取っておく（傾けた角が見出しの外にはみ出さないように少し余裕も）
-                    .padding(top = 10.dp)
-                    .size(32.dp)
+                    .padding(top = TITLE_TOP_PAD_DP.dp)
+                    .size(TITLE_BLOCK_DP.dp)
                     .onGloballyPositioned {
                         if (isLast) {
                             val p = it.positionInRoot()
@@ -114,7 +129,8 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                             lastCenter[1] = p.y + it.size.height / 2f
                         }
                     }
-                    .pointerInput(Unit) {
+                    // 押すと動く（開いたときのタイトルでは押しを受けない）
+                    .then(if (!interactive) Modifier else Modifier.pointerInput(Unit) {
                         detectTapGestures {
                             running[i]?.cancel()
                             running[i] = scope.launch {
@@ -122,7 +138,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
                                     val camera = cameraPoint(view, offscreenPx = OFFSCREEN_DP * density.density)
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
-                                    val fromDy = (camera.y - lastCenter[1]) / density.density - block.liftDp
+                                    val fromDy = (camera.y - lastCenter[1]) / density.density - liftDp
                                     motion.dropIn(fromDx, fromDy) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
@@ -130,11 +146,11 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                                 }
                             }
                         }
-                    }
+                    })
                     .graphicsLayer {
                         rotationZ = block.tiltDeg + motion.turn.value
                         translationX = motion.dx.value.dp.toPx()
-                        translationY = (block.liftDp + motion.dy.value).dp.toPx()
+                        translationY = (liftDp + motion.dy.value).dp.toPx()
                     }
                     .shadow(if (lifted) 6.dp else 2.dp, shape, clip = false)
                     .background(block.color, shape),
@@ -144,7 +160,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier) {
                     block.char.toString(),
                     fontFamily = TitleRounded,
                     fontWeight = FontWeight.Black,
-                    fontSize = with(density) { 21.dp.toSp() },
+                    fontSize = with(density) { (21f * K).dp.toSp() },
                     // 題字はロゴなので、ダークモードでも白い字のまま（紙の色に合わせて暗くしない）
                     color = TitleLetter,
                 )
@@ -164,9 +180,9 @@ private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
         turn.animateTo(-3f * sign, tween(BOUNCE_MS, easing = EaseOutQuad))
         turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
     }
-    dy.animateTo(-12f, tween(HOP_UP_MS, easing = EaseOutQuad))
+    dy.animateTo(-12f * K, tween(HOP_UP_MS, easing = EaseOutQuad))
     dy.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
-    dy.animateTo(-4f, tween(BOUNCE_MS, easing = EaseOutQuad))
+    dy.animateTo(-4f * K, tween(BOUNCE_MS, easing = EaseOutQuad))
     dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
 }
 
@@ -187,7 +203,8 @@ private fun cameraPoint(view: View, offscreenPx: Float): Offset {
 /**
  * カメラの穴のあたり（ふだんの位置から [fromDx], [fromDy] [dp] ずれた所）から回りながら斜めに落ちてきて、
  * 止まる位置の少し右に着き、左へ弧を描いて 1 回はねて収まる。はね方は起動画面（splash_icon_animated）の「ミ」と同じで、
- * 起動画面の絵は題字の 1.55 倍なので、着く位置のずれ・はねる高さはその分小さくする。[onLand] は着いたとき（手ごたえの振動）
+ * 着く位置のずれ・はねる高さは、起動画面の絵と題字の大きさの比で小さくする（32dp のブロックのとき 1.55 倍として決め、
+ * 題字の大きさ [TITLE_BLOCK_DP] に合わせて同じ割合で大きくする）。[onLand] は着いたとき（手ごたえの振動）
  */
 private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () -> Unit) = coroutineScope {
     dx.snapTo(fromDx)
@@ -195,7 +212,7 @@ private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () 
     turn.snapTo(60f)
     val fallMs = 160
     launch {
-        dx.animateTo(13f, tween(fallMs, easing = LinearEasing))
+        dx.animateTo(13f * K, tween(fallMs, easing = LinearEasing))
         dx.animateTo(0f, tween(BOUNCE_MS * 2, easing = LinearEasing))
     }
     launch {
@@ -205,15 +222,15 @@ private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () 
     }
     dy.animateTo(0f, tween(fallMs, easing = EaseInQuad))
     onLand()
-    dy.animateTo(-8f, tween(BOUNCE_MS, easing = EaseOutQuad))
+    dy.animateTo(-8f * K, tween(BOUNCE_MS, easing = EaseOutQuad))
     dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
 }
 
 /**
  * 穴のない端末で、落ち始めにブロックのまん中を画面の上の端からどれだけ上に置くか [dp]。
- * 32dp のブロックを 60° 傾けても、角が画面に出ない長さ（対角線の半分 ≈ 22.6dp より少し長く）
+ * ブロックを 60° 傾けても、角が画面に出ない長さ（対角線の半分 ≈ 0.71 倍より少し長く）
  */
-private const val OFFSCREEN_DP = 24f
+private const val OFFSCREEN_DP = TITLE_BLOCK_DP * 0.75f
 
 /** 跳ねるときの、上がる（下がる）時間 [ms] */
 private const val HOP_UP_MS = 120

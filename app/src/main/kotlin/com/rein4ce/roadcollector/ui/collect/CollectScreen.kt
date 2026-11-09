@@ -58,9 +58,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -90,11 +92,15 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
+import com.rein4ce.roadcollector.ui.TitleIntroState
+import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
+import com.rein4ce.roadcollector.ui.common.MenuHeading
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
@@ -157,7 +163,16 @@ fun CollectScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
-            TitleBlocks(modifier = Modifier.zIndex(1f).padding(start = 4.dp, end = 12.dp))
+            // 開いたときのタイトル（ui/TitleIntro.kt）が、ここに飛んできて収まる。そのために場所を知らせ、
+            // 収まるまでは隠しておく（飛んでくる題字と、ここの題字が二重に見えないように）
+            TitleBlocks(
+                modifier = Modifier
+                    .zIndex(1f)
+                    .padding(start = 4.dp, end = 12.dp)
+                    // タイトルが終わったら、もう知らせない（余計な更新をしない）
+                    .onGloballyPositioned { if (!TitleIntroState.done) TitleIntroState.anchor = it.boundsInRoot() }
+                    .graphicsLayer { alpha = if (TitleIntroState.done) 1f else 0f },
+            )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
             Row(
@@ -173,7 +188,7 @@ fun CollectScreen(
                 val footSteps = remember { Animatable(0f) }
                 val footScope = rememberCoroutineScope()
                 val footJob = remember { mutableStateOf<Job?>(null) }
-                val haptics = LocalHapticFeedback.current
+                val haptics = rememberHaptics()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.pointerInput(Unit) {
@@ -272,24 +287,21 @@ fun CollectScreen(
         // 操作：コレクションの「積むパーツを選ぶ」と同じ青・形（両端が丸い）・高さ（48dp）。
         // 文字を大きくして片方だけ 2 行になっても、並んだ 2 つの高さをそろえる（高い方に合わせる）
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isRecording) {
-                SurveyButton(
-                    text = "停止してパーツ化",
-                    onClick = { vm.stopAndConvert() },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            } else {
-                SurveyButton(
-                    text = "記録開始",
-                    onClick = {
-                        if (LocationRecordingService.hasLocationPermission(context)) {
-                            vm.startRecording()
-                        } else {
-                            permissionLauncher.launch(LocationRecordingService.requiredPermissions())
-                        }
-                    },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
+            // 「記録開始」と「停止してパーツ化」は 1 つのボタンで、文字と押したときの動作だけを切り替える。
+            // 別々のボタンにすると、押した瞬間に記録が始まって（止まって）ボタンが入れ替わり、
+            // 離したあとの押し心地（バネで戻る動き。ui/common/PressFeel）が途中で消えてしまう
+            SurveyButton(
+                text = if (isRecording) "停止してパーツ化" else "記録開始",
+                onClick = {
+                    when {
+                        isRecording -> vm.stopAndConvert()
+                        LocationRecordingService.hasLocationPermission(context) -> vm.startRecording()
+                        else -> permissionLauncher.launch(LocationRecordingService.requiredPermissions())
+                    }
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            if (!isRecording) {
                 DemoMenuButton(
                     enabled = !vm.isDemoPlaying,
                     onPick = { vm.playDemo(it) },
@@ -437,31 +449,21 @@ private fun DemoMenuButton(
             Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
-        // 見本は 1 本ずつ小さな図を添えて、名札（棒・L字…）と名前で選べるようにする
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            shape = RoundedCornerShape(6.dp),
-            containerColor = Fieldbook.Paper,
-            tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Fieldbook.CardEdge),
-        ) {
-            MenuHeading("見本の散歩")
+        // 見本は 1 本ずつ小さな図を添えて、形の名前（棒・L字…）で選ぶ。名前の下に、パーツにしたときの長さを小さく添える
+        // （棒と L字は 2 本ずつあり、図は同じ大きさにそろえて描くので、長さで見分ける。下の「ファイル」の行と同じ 2 段。#84 のレビュー）
+        FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "見本の散歩") {
             SampleTracks.all.forEach { track ->
                 val part = SampleParts.byId(track.id)
                 DropdownMenuItem(
                     leadingIcon = { if (part != null) PartThumb(part, size = 30.dp) },
                     text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                track.expectedKind.label,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Fieldbook.Muted,
-                                modifier = Modifier.width(56.dp),
-                            )
-                            Text(track.name, fontSize = 15.sp, color = Fieldbook.Ink)
+                        // 読み上げでは、見本の名前も言う（「棒、まっすぐ北へ、420 メートル」）
+                        val spoken = listOfNotNull(track.expectedKind.label, track.name, part?.let { "${it.distanceM} メートル" })
+                        Column(modifier = Modifier.clearAndSetSemantics { contentDescription = spoken.joinToString("、") }) {
+                            Text(track.expectedKind.label, fontSize = 15.sp, color = Fieldbook.Ink)
+                            if (part != null) {
+                                Text("${part.distanceM} m", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                            }
                         }
                     },
                     colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
@@ -492,28 +494,22 @@ private fun DemoMenuButton(
                         }
                     }
                 },
-                text = { Text("ファイルから再生", fontSize = 15.sp, color = Fieldbook.Ink) },
-                trailingIcon = { Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted) },
-                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink, trailingIconColor = Fieldbook.Muted),
-                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                // 「ファイル」の下に、読める形式を小さく添える（横に並べると、メニューの幅はいちばん長い行で決まるので、
+                // 上の見本の行の右が空きすぎる。2 行にすれば、幅は見本の行と同じくらいに収まる）
+                text = {
+                    Column {
+                        Text("ファイル", fontSize = 15.sp, color = Fieldbook.Ink)
+                        Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                    }
+                },
+                colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),
+                contentPadding = PaddingValues(start = 12.dp, end = 20.dp),
                 onClick = { open = false; onPickFile() },
             )
         }
     }
 }
 
-/** メニューの小さな見出し（野帳の注記の字。コレクションの「コレクション」と同じ作り） */
-@Composable
-private fun MenuHeading(text: String) {
-    Text(
-        text,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 1.sp,
-        color = Fieldbook.Muted,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
-    )
-}
 
 /** パーツの小さな図（メニューの見本用）。コレクションのカードと同じ、縁取りした道の色 */
 @Composable

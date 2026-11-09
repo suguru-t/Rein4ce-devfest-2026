@@ -44,6 +44,20 @@ class AppSettingsTest {
     }
 
     @Test
+    fun `the part filter starts as the usual order and is saved`() {
+        val store = MapStore()
+        assertEquals(PartFilter(), AppSettings(store).partFilter.value)
+        val filter = PartFilter(sort = PartSort.OLDEST, sky = Sky.SNOW, favoritesOnly = true)
+        AppSettings(store).setPartFilter(filter)
+        assertEquals(filter, AppSettings(store).partFilter.value)
+        // 「すべて」の天気に戻したのも覚える。読めない値（前の版など）は、いつもの順・すべての天気
+        AppSettings(store).setPartFilter(filter.copy(sky = null))
+        assertEquals(null, AppSettings(store).partFilter.value.sky)
+        val broken = MapStore().apply { map["part_sort"] = "RANDOM"; map["part_sky"] = "HAIL" }
+        assertEquals(PartFilter(), AppSettings(broken).partFilter.value)
+    }
+
+    @Test
     fun `first it follows the phone`() {
         assertEquals(ThemeMode.SYSTEM, AppSettings(MapStore()).themeMode.value)
     }
@@ -75,7 +89,11 @@ class AppSettingsTest {
         assertEquals(WeatherMotion.NORMAL, settings.weatherMotion.value)
         assertFalse(settings.keepScreenOn.value)
         assertTrue(settings.aiNaming.value)
+        assertTrue(settings.haptics.value)
         assertEquals("", settings.nickname.value)
+        // BGM は初めからオンで、音量はまん中
+        assertTrue(settings.bgmOn.value)
+        assertEquals(AppSettings.DEFAULT_BGM_VOLUME, settings.bgmVolume.value)
     }
 
     @Test
@@ -85,13 +103,32 @@ class AppSettingsTest {
             setWeatherMotion(WeatherMotion.STILL)
             setKeepScreenOn(true)
             setAiNaming(false)
+            setHaptics(false)
             setNickname("みちつみ太郎")
+            setBgmOn(false)
+            setBgmVolume(8)
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
         assertTrue(again.keepScreenOn.value)
         assertFalse(again.aiNaming.value)
+        assertFalse(again.haptics.value)
         assertEquals("みちつみ太郎", again.nickname.value)
+        // BGM をオフにしても、音量は覚えている（オンに戻したときに同じ大きさで流れる）
+        assertFalse(again.bgmOn.value)
+        assertEquals(8, again.bgmVolume.value)
+    }
+
+    @Test
+    fun `the bgm volume stays between 1 and the top`() {
+        val settings = AppSettings(MapStore())
+        settings.setBgmVolume(0)
+        assertEquals(1, settings.bgmVolume.value)
+        settings.setBgmVolume(99)
+        assertEquals(AppSettings.MAX_BGM_VOLUME, settings.bgmVolume.value)
+        // 前の版の値など、範囲の外の値が保存されていても、範囲に収める
+        val store = MapStore().apply { put("bgm_volume", "42") }
+        assertEquals(AppSettings.MAX_BGM_VOLUME, AppSettings(store).bgmVolume.value)
     }
 
     @Test
