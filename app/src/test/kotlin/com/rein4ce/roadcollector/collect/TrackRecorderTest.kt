@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.collect
 import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.TrackPoint
+import com.rein4ce.roadcollector.data.PartOrigin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -26,7 +27,7 @@ class TrackRecorderTest {
 
     @Test
     fun `a walk keeps recording`() {
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         east(1.3, 120).forEach { TrackRecorder.add(it) }
         assertTrue(TrackRecorder.isRecording.value)
         assertNull(TrackRecorder.tooFast.value)
@@ -35,7 +36,7 @@ class TrackRecorderTest {
 
     @Test
     fun `a jog keeps recording`() {
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         east(3.3, 120).forEach { TrackRecorder.add(it) } // 時速 12 km
         assertTrue(TrackRecorder.isRecording.value)
         assertNull(TrackRecorder.tooFast.value)
@@ -43,7 +44,7 @@ class TrackRecorderTest {
 
     @Test
     fun `a bicycle ride stops the recording and keeps the walk before it`() {
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         val walk = east(1.3, 120)
         walk.forEach { TrackRecorder.add(it) }
         val ride = east(4.4, 120, fromX = 1.3 * 120, fromT = walk.last().timeMs).drop(1) // 時速 16 km
@@ -73,7 +74,7 @@ class TrackRecorderTest {
     fun `a single gps spike does not stop the recording`() {
         // 歩きの途中で、GPS が 1 点だけ 90 m 北に飛ぶ（高架やビルの近くで起きる）。次の点で元に戻るので止めない。
         // 飛んだ点が 30 秒後に窓の始点になったときも、1〜2 点だけ速く見えるが続かないので止めない
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         val before = east(1.3, 60)
         before.forEach { TrackRecorder.add(it) }
         val last = before.last()
@@ -88,7 +89,7 @@ class TrackRecorderTest {
 
     @Test
     fun `a car ride stops the recording even though the spike filter would drop its points`() {
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         east(10.0, 60).forEach { TrackRecorder.add(it) } // 時速 36 km。飛びの上限 5 m/s を超え続ける
         assertFalse(TrackRecorder.isRecording.value)
         assertTrue(requireNotNull(TrackRecorder.tooFast.value).speedMps > 9.0)
@@ -96,17 +97,40 @@ class TrackRecorderTest {
 
     @Test
     fun `start clears the reason and consume clears it too`() {
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         east(10.0, 60).forEach { TrackRecorder.add(it) }
         assertNotNull(TrackRecorder.tooFast.value)
         TrackRecorder.consumeTooFast()
         assertNull(TrackRecorder.tooFast.value)
 
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         east(10.0, 60).forEach { TrackRecorder.add(it) }
         assertNotNull(TrackRecorder.tooFast.value)
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         assertNull(TrackRecorder.tooFast.value)
         assertTrue(TrackRecorder.isRecording.value)
+    }
+
+    @Test
+    fun `出どころは記録の側が覚えていて、止めたときに点と一緒に返す`() {
+        // 画面（ViewModel）が作り直されても、本当に歩いた記録は「歩いた」のまま（#87 のレビュー）
+        TrackRecorder.start(PartOrigin.WALK)
+        val walk = east(1.3, 20)
+        walk.forEach { TrackRecorder.add(it) }
+        assertEquals(TrackRecorder.Recording(walk, PartOrigin.WALK), TrackRecorder.stop())
+
+        // 次の記録は、前の出どころを持ち越さない
+        TrackRecorder.start(PartOrigin.DEMO)
+        assertEquals(PartOrigin.DEMO, TrackRecorder.stop().origin)
+        TrackRecorder.start(PartOrigin.FILE)
+        assertEquals(PartOrigin.FILE, TrackRecorder.stop().origin)
+    }
+
+    @Test
+    fun `速すぎて自動で止めたときも、出どころを一緒に渡す`() {
+        TrackRecorder.start(PartOrigin.DEMO)
+        east(10.0, 60).forEach { TrackRecorder.add(it) }
+        assertEquals(PartOrigin.DEMO, requireNotNull(TrackRecorder.tooFast.value).origin)
+        TrackRecorder.consumeTooFast()
     }
 }

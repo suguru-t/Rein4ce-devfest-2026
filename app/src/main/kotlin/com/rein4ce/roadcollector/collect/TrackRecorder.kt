@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.geo.ConversionParams
 import com.rein4ce.roadcollector.core.geo.TrackFilter
 import com.rein4ce.roadcollector.core.geo.TrackSpeed
 import com.rein4ce.roadcollector.core.model.TrackPoint
+import com.rein4ce.roadcollector.data.PartOrigin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -18,11 +19,20 @@ import kotlinx.coroutines.flow.update
  *
  * 「続いたら」にしているのは、GPS が 1 点だけ大きく飛んだときに止めないため（飛びのフィルタは通さないので、1 点の飛びでも
  * 最近 30 秒の速さは一瞬上限を超える。次の点で元に戻るので、続かない）。自転車や車は超え続けるので、10 秒遅れて止まる
+ *
+ * 記録の出どころ（本当に歩いた・デモ散歩・ファイル。[PartOrigin]）もここで持ち、止めたときに点と一緒に返す（[Recording]・[TooFast]）。
+ * 記録はアプリを閉じても続くので、画面（ViewModel）に持たせると、開き直したときに本当に歩いた道が「分からない」になるため（#87 のレビュー）
  */
 object TrackRecorder {
 
-    /** 速すぎて自動で止めた理由。[speedMps] は止めたときの最近 30 秒の速さ、[keptPoints] は速くなる前までの点列 */
-    data class TooFast(val speedMps: Double, val keptPoints: List<TrackPoint>)
+    /** 止めた記録：点列と、記録を始めたときに決めた出どころ */
+    data class Recording(val points: List<TrackPoint>, val origin: PartOrigin)
+
+    /**
+     * 速すぎて自動で止めた理由。[speedMps] は止めたときの最近 30 秒の速さ、[keptPoints] は速くなる前までの点列、
+     * [origin] は記録の出どころ
+     */
+    data class TooFast(val speedMps: Double, val keptPoints: List<TrackPoint>, val origin: PartOrigin)
 
     private val _points = MutableStateFlow<List<TrackPoint>>(emptyList())
     val points: StateFlow<List<TrackPoint>> = _points
@@ -32,13 +42,18 @@ object TrackRecorder {
 
     private val _tooFast = MutableStateFlow<TooFast?>(null)
 
+    /** いま（または最後）の記録の出どころ。[start] で決まる */
+    private var origin: PartOrigin = PartOrigin.WALK
+
     /** 上限を超え始めた時刻。超えている間だけ持つ（下回ったら null に戻す） */
     private var overSince: Long? = null
 
     /** 速すぎて自動で止めたとき、その理由。画面（CollectViewModel）が受け取って [consumeTooFast] で消す */
     val tooFast: StateFlow<TooFast?> = _tooFast
 
-    fun start() {
+    /** 記録を始める。[origin] は、本当に歩く（記録開始）か、デモ散歩・ファイルを流すか */
+    fun start(origin: PartOrigin) {
+        this.origin = origin
         _points.value = emptyList()
         _tooFast.value = null
         overSince = null
@@ -58,13 +73,13 @@ object TrackRecorder {
         // 超え始めた時刻の 30 秒前より後は、速かった分が混ざるので切り落とす
         val cutoff = since - ConversionParams.DEFAULT.walkSpeedWindowMs
         _isRecording.value = false
-        _tooFast.value = TooFast(speed, pts.filter { it.timeMs < cutoff })
+        _tooFast.value = TooFast(speed, pts.filter { it.timeMs < cutoff }, origin)
     }
 
-    /** 記録を止めて、点列を返す。 */
-    fun stop(): List<TrackPoint> {
+    /** 記録を止めて、点列と出どころを返す */
+    fun stop(): Recording {
         _isRecording.value = false
-        return _points.value
+        return Recording(_points.value, origin)
     }
 
     /** 自動停止の理由を受け取ったら消す（同じ理由で 2 回動かないように） */
