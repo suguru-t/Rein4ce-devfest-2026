@@ -65,4 +65,49 @@ class DailyTowerTest {
         val text = AppJson.encodeToString(DailyTower.serializer(), tower)
         assertEquals(tower, AppJson.decodeFromString(DailyTower.serializer(), text))
     }
+
+    @Test
+    fun `今日のパーツが落ちた回数を数え、置き直しは 1 日 3 回まで（決定 70）`() {
+        val day = "2026-11-10"
+        var tower = DailyTower(listOf(block("a", "2026-11-09")))
+        assertEquals(0, tower.fallsOn(day))
+        assertEquals(DailyTower.MAX_RETRIES, tower.retriesLeft(day))
+        assertTrue(tower.canPlaceOn(day))
+        // 1〜3 回落ちても、まだ置き直せる
+        for (n in 1..DailyTower.MAX_RETRIES) {
+            tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f)), height = 0.2)
+            assertEquals(n, tower.fallsOn(day))
+            assertTrue("$n 回落ちたあと", tower.canPlaceOn(day))
+        }
+        assertEquals(1, tower.retriesLeft(day))
+        // 4 回目に落ちたら、その日はもう積めない
+        tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f)), height = 0.2)
+        assertEquals(0, tower.retriesLeft(day))
+        assertFalse(tower.canPlaceOn(day))
+        assertEquals("昨日までの塔はそのまま", listOf("a"), tower.blocks.map { it.part.id })
+        // 次の日は数え直す
+        assertEquals(0, tower.fallsOn("2026-11-11"))
+        assertTrue(tower.canPlaceOn("2026-11-11"))
+    }
+
+    @Test
+    fun `置き直して台に残ったら、今日の 1 つは積んだことになり、落ちた回数は増えない`() {
+        val day = "2026-11-10"
+        val fell = DailyTower(listOf(block("a", "2026-11-09"))).settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f)), height = 0.2)
+        val kept = fell.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f), Placement("b", 0f, 0.3f, 0f)), height = 0.5)
+        assertTrue(kept.placedOn(day))
+        assertFalse(kept.canPlaceOn(day))
+        assertEquals(1, kept.fallsOn(day))
+        assertEquals(listOf("a", "b"), kept.blocks.map { it.part.id })
+    }
+
+    @Test
+    fun `落ちた回数も保存し、前の形式（落ちた回数が無い）のファイルも読める`() {
+        val tower = DailyTower(listOf(block("a", "2026-11-09")), height = 0.3, fellDay = "2026-11-10", fellCount = 2)
+        val text = AppJson.encodeToString(DailyTower.serializer(), tower)
+        assertEquals(tower, AppJson.decodeFromString(DailyTower.serializer(), text))
+        val old = AppJson.decodeFromString(DailyTower.serializer(), """{"blocks":[],"height":0.0}""")
+        assertEquals(0, old.fallsOn("2026-11-10"))
+        assertTrue(old.canPlaceOn("2026-11-10"))
+    }
 }

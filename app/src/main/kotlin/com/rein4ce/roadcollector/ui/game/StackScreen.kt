@@ -364,7 +364,7 @@ fun StackScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             // 操作のボタンは「回す」の 1 つだけ（決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる（aimByDrag）。
-                            // 回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114 の RotateButton）
+                            // 回すのは時計回りだけで、押している間なめらかに回る（きざみは無い。決定 71 の RotateButton）
                             RotateButton(
                                 RotateDirection.RIGHT,
                                 sessionKey = vm.runId,
@@ -890,7 +890,7 @@ internal fun StackTitle(compact: Boolean) {
  * @param compact 小さい画面。数字を一回り小さくする
  */
 @Composable
-private fun HeightMeter(height: Float, compact: Boolean, follow: Boolean = false) {
+internal fun HeightMeter(height: Float, compact: Boolean, follow: Boolean = false) {
     val density = LocalDensity.current
     // dp で決めた大きさを、文字の大きさの設定に左右されない sp に直す
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }

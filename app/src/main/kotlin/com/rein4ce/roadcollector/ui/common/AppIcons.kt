@@ -413,6 +413,29 @@ object AppIcons {
         }
     }
 
+    /**
+     * 今いる場所（記録画面の地図の「今いる場所へ戻る」ボタン。ui/collect/HereButton.kt・#112）：Google マップの現在地のボタンと同じ形の、
+     * 輪と、まん中の点と、上下左右へ伸びる短い線（照準）。地図のボタンの上で読めるよう、ほかの線画より太い線で描く
+     */
+    val MyLocation: ImageVector by lazy {
+        icon("MyLocation") {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2.2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            ) {
+                ellipse(12f, 12f, 7f, 7f)
+                moveTo(12f, 1.8f); lineTo(12f, 5f)
+                moveTo(12f, 19f); lineTo(12f, 22.2f)
+                moveTo(1.8f, 12f); lineTo(5f, 12f)
+                moveTo(19f, 12f); lineTo(22.2f, 12f)
+            }
+            filled { ellipse(12f, 12f, 3.3f, 3.3f) }
+        }
+    }
+
     // ---- 動かすアイコン用の形（下のタブで、選ばれたときに部品ごとに動かす。ui/TabIcons.kt） ----
 
     private fun shape(build: PathBuilder.() -> Unit): Path = PathBuilder().apply(build).nodes.toPath()
