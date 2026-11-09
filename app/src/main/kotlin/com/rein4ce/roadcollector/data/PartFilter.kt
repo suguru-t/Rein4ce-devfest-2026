@@ -16,7 +16,7 @@ enum class PartSort(val label: String) {
 /**
  * パーツの並びと絞り込み。コレクションで使い、設定に保存する（アプリを閉じても覚えておく）。
  *
- * @property sky この天気の日に歩いたパーツだけ。null なら全部
+ * @property sky この天気の日に歩いたパーツだけ（画面に出す 4 つの天気で比べる。くもりを選ぶと霧の日も、雨を選ぶと霧雨・雷雨の日も入る。決定 73）。null なら全部
  * @property favoritesOnly お気に入りに登録したパーツだけ
  */
 data class PartFilter(
@@ -40,7 +40,7 @@ data class PartFilter(
  */
 fun applyPartFilter(arranged: List<Part>, filter: PartFilter, skyOf: (Part) -> Sky?, favorites: Set<String>): List<Part> {
     val narrowed = arranged.filter { part ->
-        (filter.sky == null || skyOf(part) == filter.sky) && (!filter.favoritesOnly || part.id in favorites)
+        (filter.sky == null || skyOf(part)?.shown == filter.sky.shown) && (!filter.favoritesOnly || part.id in favorites)
     }
     return when (filter.sort) {
         PartSort.CUSTOM -> narrowed

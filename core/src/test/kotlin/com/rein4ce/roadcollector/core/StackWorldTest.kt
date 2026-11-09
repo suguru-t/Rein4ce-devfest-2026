@@ -105,17 +105,19 @@ class StackWorldTest {
         assertEquals(Grip.NORMAL, Grip.of(null))
         assertEquals(Grip.NORMAL, Grip.of(Sky.CLEAR))
         assertEquals(Grip.CLOUDY, Grip.of(Sky.CLOUDY))
-        assertEquals(Grip.FOGGY, Grip.of(Sky.FOG))
-        assertEquals(Grip.DAMP, Grip.of(Sky.DRIZZLE))
+        // 画面に出す天気は 4 つ（決定 73）：霧はくもり、霧雨と雷雨は雨と同じ滑り方
+        assertEquals(Grip.CLOUDY, Grip.of(Sky.FOG))
+        assertEquals(Grip.WET, Grip.of(Sky.DRIZZLE))
         assertEquals(Grip.WET, Grip.of(Sky.RAIN))
         assertEquals(Grip.WET, Grip.of(Sky.THUNDER))
         assertEquals(Grip.ICY, Grip.of(Sky.SNOW))
-        // 晴れ → くもり → 霧 → 霧雨 → 雨 → 雪 の順に滑りやすい（摩擦が小さい）。晴れは前と同じ値
-        val order = listOf(Grip.NORMAL, Grip.CLOUDY, Grip.FOGGY, Grip.DAMP, Grip.WET, Grip.ICY)
+        // 晴れ → くもり → 雨 → 雪 の順に滑りやすい（摩擦が小さい）。晴れは前と同じ値
+        val order = listOf(Grip.NORMAL, Grip.CLOUDY, Grip.WET, Grip.ICY)
+        assertEquals(order, Grip.entries.toList())
         assertTrue(order.zipWithNext().all { (a, b) -> a.friction > b.friction })
         assertEquals(PartBodyFactory.DEFAULT_MATERIAL.friction, Grip.NORMAL.friction, 0.0)
-        // 一言を出すのは、はっきり滑る霧雨・雨・雪だけ
-        assertEquals(listOf(Grip.DAMP, Grip.WET, Grip.ICY), order.filter { it.label != null })
+        // 一言を出すのは、はっきり滑る雨・雪だけ
+        assertEquals(listOf(Grip.WET, Grip.ICY), order.filter { it.label != null })
 
         // 止まった棒を、横に同じ速さで押す。
         // 晴れの棒の上に乗せた棒なら、雪の日の棒のほうが遠くまで滑る。台の上に直接置いた棒なら、雪の日でも晴れと同じ（台は滑らない）
@@ -217,6 +219,28 @@ class StackWorldTest {
         val shapes = world.renderShapes()
         assertEquals(1, shapes.size)
         assertTrue(shapes.first() is StackWorld.RenderShape.Poly)
+    }
+
+    @Test
+    fun `描く図形のボディの番号：台は 0、置いたパーツは同じパーツでも 1 つずつ違い、落ちたあとも使い回さない`() {
+        val world = StackWorld()
+        val bar = SampleParts.all.first { it.kind.name == "BAR" }
+        world.place(bar, 0.0, 0.5, 0.0)
+        world.place(bar, 0.0, 1.0, 0.0)
+        val first = world.renderShapes()
+        assertTrue("台", first.first().body == StackWorld.PLATFORM_BODY_ID)
+        val ids = first.drop(1).map { it.body }.distinct()
+        assertEquals("同じパーツを 2 つ置いたら 2 つの積み木", 2, ids.size)
+        assertTrue("置いたパーツは台と別の番号", StackWorld.PLATFORM_BODY_ID !in ids)
+        // 台の外へ落として外し、もう一度置く
+        world.place(bar, 10.0, -50.0, 0.0)
+        val third = world.renderShapes().drop(1).map { it.body }.distinct() - ids.toSet()
+        assertEquals(1, third.size)
+        world.removeFallen()
+        world.place(bar, 0.0, 2.0, 0.0)
+        val now = world.renderShapes().drop(1).map { it.body }.distinct()
+        assertEquals(3, now.size)
+        assertTrue("外したパーツの番号は使い回さない", third.single() !in now)
     }
 
     @Test

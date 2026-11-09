@@ -320,7 +320,7 @@ fun CollectScreen(
             // 天気は記録のあとに取ってくるので、届いたら図（道の色・左上のアイコン）と注記に出す（届くまではいつもの色）
             val sky = app.partRepository.weatherOf(o.part.id, weathers)?.sky
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(o.part, modifier = Modifier.size(180.dp), sky = sky)
+                FieldbookPart(o.part, modifier = Modifier.size(180.dp), sky = sky, startedAt = app.partRepository.placeOf(o.part.id)?.startedAt)
                 Spacer(Modifier.height(4.dp))
                 PartNameLine(o)
                 o.note?.let { note ->

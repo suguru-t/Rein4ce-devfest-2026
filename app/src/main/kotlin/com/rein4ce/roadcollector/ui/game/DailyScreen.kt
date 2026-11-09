@@ -68,6 +68,13 @@ import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
+import com.rein4ce.roadcollector.ui.common.Daypart
+import com.rein4ce.roadcollector.ui.common.PIECE_OUTLINE_DP
+import com.rein4ce.roadcollector.ui.common.PieceColors
+import com.rein4ce.roadcollector.ui.common.PiecePalette
+import com.rein4ce.roadcollector.ui.common.drawPiece
+import com.rein4ce.roadcollector.ui.common.drawWorldShapes
+import com.rein4ce.roadcollector.ui.common.shownSky
 import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
@@ -98,6 +105,19 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
     val repository = app.partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
+    val places by repository.places.collectAsStateWithLifecycle()
+    // 積み木の色（決定 74）：色相は歩いたときの天気、明るさは歩いた時間帯。コレクションから消したパーツで天気が分からなければ、
+    // 積んだときのすべりやすさ（塔に残っている）から天気を戻す
+    val pieceColorsOf: (Part) -> PieceColors = remember(weathers, places, vm.tower) {
+        val known = HashMap<String, PieceColors>()
+        val lookup: (Part) -> PieceColors = { part ->
+            known.getOrPut(part.id) {
+                val sky = repository.weatherOf(part.id, weathers)?.sky ?: vm.tower.blocks.firstOrNull { it.part.id == part.id }?.grip?.shownSky
+                PiecePalette.colors(sky, Daypart.of(part, repository.placeOf(part.id, places)?.startedAt))
+            }
+        }
+        lookup
+    }
 
     // 画面に戻るたびに今日の日付を見直す（0 時をまたいで開いたままでも、次の日の 1 つを積めるように）
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -138,7 +158,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
             }
 
             // 2 段目：キャンバス
-            DailyCanvas(vm, Modifier.fillMaxWidth().weight(1f).clipToBounds())
+            DailyCanvas(vm, pieceColorsOf, Modifier.fillMaxWidth().weight(1f).clipToBounds())
 
             // 3 段目：操作
             Column(
@@ -163,7 +183,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                             if (vm.fallsToday > 0) // 1 行に収まるように短く（前は「今日は…（置き直しは 1 日 3 回まで）」で、最後の 2 字だけ次の行に落ちていた）
                             Note("台から ${vm.fallsToday} 回落ちました（置き直しは ${DailyTower.MAX_RETRIES} 回まで）")
                             Note("今日歩いた道から 1 つ選んで積みましょう（1 日に 1 つ）")
-                            TodayChoices(todays, onPick = { part -> vm.choose(part, gripOf(part)) })
+                            TodayChoices(todays, colorsOf = pieceColorsOf, onPick = { part -> vm.choose(part, gripOf(part)) })
                         }
                     }
                     DailyViewModel.Phase.Aiming -> {
@@ -244,7 +264,7 @@ private val CARD_GAP = 10.dp
  * （決定 70。最後まで行ったら最初に戻る。前は横に流して見る列だった）。並びは新しい順のまま
  */
 @Composable
-private fun TodayChoices(todays: List<Part>, onPick: (Part) -> Unit) {
+private fun TodayChoices(todays: List<Part>, colorsOf: (Part) -> PieceColors, onPick: (Part) -> Unit) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     val pages = (todays.size + CHOICES_PER_PAGE - 1) / CHOICES_PER_PAGE
     // 道が減ったとき（積んだ・コレクションから消した）にページが無くならないよう、今の数で回す
@@ -256,7 +276,7 @@ private fun TodayChoices(todays: List<Part>, onPick: (Part) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(CARD_GAP, Alignment.CenterHorizontally),
         ) {
-            for (part in shown) key(part.id) { TodayPartCard(part, width, onClick = { onPick(part) }) }
+            for (part in shown) key(part.id) { TodayPartCard(part, colorsOf(part), width, onClick = { onPick(part) }) }
         }
     }
     if (pages > 1) {
@@ -295,7 +315,7 @@ private fun DailyHeight(height: Float, compact: Boolean) {
  * 名前は人や AI が付けた字なので端末の字体
  */
 @Composable
-private fun TodayPartCard(part: Part, width: Dp, onClick: () -> Unit) {
+private fun TodayPartCard(part: Part, colors: PieceColors, width: Dp, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -306,7 +326,8 @@ private fun TodayPartCard(part: Part, width: Dp, onClick: () -> Unit) {
             .padding(8.dp),
     ) {
         Canvas(Modifier.size(56.dp)) {
-            drawPart(part, Offset(size.width / 2, size.height / 2), size.width * 0.8f)
+            // 積んだときと同じ色と線（決定 74）
+            drawPiece(part, Offset(size.width / 2, size.height / 2), size.width * 0.8f, colors, outlinePx = PIECE_OUTLINE_DP.dp.toPx())
         }
         Spacer(Modifier.height(4.dp))
         Text(part.displayName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Fieldbook.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -319,7 +340,7 @@ private fun TodayPartCard(part: Part, width: Dp, onClick: () -> Unit) {
  * 狙っている間は、これから置くパーツ（ゴースト）をうすく出し、横のドラッグで動かして、指を離すと落とす（決定 67。ui/game/AimGestures.kt）
  */
 @Composable
-private fun DailyCanvas(vm: DailyViewModel, modifier: Modifier = Modifier) {
+private fun DailyCanvas(vm: DailyViewModel, colorsOf: (Part) -> PieceColors, modifier: Modifier = Modifier) {
     val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val target = when (val camera = vm.camera) {
@@ -359,28 +380,20 @@ private fun DailyCanvas(vm: DailyViewModel, modifier: Modifier = Modifier) {
         val viewport = StackViewport(size.width, size.height, zoom.value, cameraY.value)
         fun sx(x: Double) = viewport.toScreenX(x.toFloat())
         fun sy(y: Double) = viewport.toScreenY(y.toFloat())
-        for (s in vm.shapes) {
-            val color = s.part?.kind?.color() ?: platform
-            when (s) {
-                is StackWorld.RenderShape.Poly -> {
-                    val path = Path()
-                    for (i in s.xs.indices) {
-                        if (i == 0) path.moveTo(sx(s.xs[i]), sy(s.ys[i])) else path.lineTo(sx(s.xs[i]), sy(s.ys[i]))
-                    }
-                    path.close()
-                    drawPath(path, color)
-                }
-                is StackWorld.RenderShape.Disc -> drawCircle(color, radius = s.r.toFloat() * viewport.scale, center = Offset(sx(s.cx), sy(s.cy)))
-            }
-        }
+        // 積み木は、天気と時間帯の色で塗り、自分の色を暗くした線で囲む（通常の積む画面と同じ。決定 74）
+        val outlinePx = PIECE_OUTLINE_DP.dp.toPx()
+        drawWorldShapes(vm.shapes, platform, outlinePx, { sx(it) }, { sy(it) }, viewport.scale, colorsOf)
         val current = vm.current
         if (vm.phase == DailyViewModel.Phase.Aiming && current != null) {
-            drawPart(
+            drawPiece(
                 part = current,
                 center = Offset(sx(vm.ghostX.toDouble()), sy(vm.spawnY().toDouble())),
                 scalePx = viewport.scale * PartSize.of(current.distanceM).toFloat(),
+                colors = colorsOf(current),
+                outlinePx = outlinePx,
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
-                alpha = 0.45f,
+                // うすい影。雪の道はほぼ白いので濃くする（PieceColors.ghostAlpha）
+                alpha = colorsOf(current).ghostAlpha,
             )
         }
     }

@@ -14,23 +14,43 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 /**
- * 空のようす。道の色と、背景の方眼紙に降らせるもの（雨・雪など）を決める。
+ * 空のようす。背景の方眼紙に降らせるもの（雨・雪など）を決める。
  * 細かい天気（世界気象機関の天気コード）を、見た目が変わる単位にまとめたもの。
+ *
+ * 画面に出す天気は **晴れ・くもり・雨・雪の 4 つ**（[shown]。決定 73）。霧はくもり、霧雨と雷雨は雨にまとめる。
+ * 名前（[label]）・道の色・アイコン・絞り込み・すべりやすさは 4 つで決め、背景の降り方（雨粒の数・霧雨の細かい雨・
+ * 雷雨の暗さ・霧のもや）だけは、今までどおり 7 つの空のようすで描く
+ *
+ * @property label 画面に出す名前（4 つのどれか）
  */
 enum class Sky(val label: String) {
     CLEAR("晴れ"),
     CLOUDY("くもり"),
-    FOG("霧"),
-    DRIZZLE("霧雨"),
+    /** 霧。画面ではくもり（背景はもや） */
+    FOG("くもり"),
+    /** 霧雨。画面では雨（背景は細かい雨） */
+    DRIZZLE("雨"),
     RAIN("雨"),
     SNOW("雪"),
-    THUNDER("雷雨"),
+    /** 雷雨。画面では雨（背景は強い雨と少し暗い紙） */
+    THUNDER("雨"),
     ;
 
     /** 雨のなかま（霧雨・雨・雷雨）か。道の色を青くする */
     val isRainy: Boolean get() = this == DRIZZLE || this == RAIN || this == THUNDER
 
+    /** 画面に出す天気（晴れ・くもり・雨・雪のどれか。決定 73）。霧はくもり、霧雨と雷雨は雨 */
+    val shown: Sky
+        get() = when (this) {
+            FOG -> CLOUDY
+            DRIZZLE, THUNDER -> RAIN
+            else -> this
+        }
+
     companion object {
+        /** 画面に出す天気の 4 つ（絞り込み・デモの天気の選択肢に並べる順） */
+        val SHOWN: List<Sky> = listOf(CLEAR, CLOUDY, RAIN, SNOW)
+
         /**
          * 世界気象機関（WMO）の天気コードを空のようすにする。Open-Meteo が返す `weather_code` はこのコード。
          * 0 快晴・1 晴れ・2 一部くもり・3 くもり・45/48 霧・51〜57 霧雨・61〜67 雨・71〜77 雪・80〜82 にわか雨・85/86 にわか雪・95〜99 雷雨

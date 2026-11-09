@@ -91,8 +91,10 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
                     onChange(filter.copy(sky = null))
                     open = false
                 }
-                for (sky in Sky.entries) {
-                    MenuRow(label = sky.label, selected = sky == filter.sky, enabled = sky in skies || sky == filter.sky, sky = sky) {
+                // 画面に出す天気の 4 つ（晴れ・くもり・雨・雪。決定 73）。霧のパーツはくもり、霧雨・雷雨のパーツは雨で出る
+                val shownSkies = skies.mapTo(HashSet()) { it.shown }
+                for (sky in Sky.SHOWN) {
+                    MenuRow(label = sky.label, selected = sky == filter.sky?.shown, enabled = sky in shownSkies || sky == filter.sky?.shown, sky = sky) {
                         onChange(filter.copy(sky = sky))
                         open = false
                     }

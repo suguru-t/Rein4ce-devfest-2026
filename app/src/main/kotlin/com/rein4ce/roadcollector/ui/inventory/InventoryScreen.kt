@@ -294,6 +294,7 @@ fun InventoryScreen() {
                     PartCard(
                         part = part,
                         sky = repository.weatherOf(part.id, weathers)?.sky,
+                        startedAt = repository.placeOf(part.id, places)?.startedAt,
                         isSample = SampleParts.byId(part.id) != null,
                         favorite = part.id in favorites,
                         onToggleFavorite = { repository.setFavorite(part.id, part.id !in favorites) },
@@ -386,6 +387,7 @@ fun InventoryScreen() {
         DeleteDialog(
             part = part,
             sky = repository.weatherOf(part.id, weathers)?.sky,
+            startedAt = repository.placeOf(part.id, places)?.startedAt,
             onConfirm = {
                 repository.remove(part.id)
                 pendingDelete = null
@@ -629,7 +631,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                                     // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
                                     if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
                                     // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
-                                    FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
+                                    FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, startedAt = place?.startedAt, trace = { replay.frame })
                                 }
                                 if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                             }
@@ -711,7 +713,7 @@ private fun FitFigureLayout(
 }
 
 @Composable
-private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun DeleteDialog(part: Part, sky: Sky?, startedAt: Long?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
     // 採集画面の結果ダイアログと同じ、野帳の紙のダイアログ。どれを消すのか分かるように図も出す
     AlertDialog(
@@ -723,7 +725,7 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
         title = { Text("パーツを削除", fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                FieldbookPart(part, modifier = Modifier.size(132.dp), sky = sky)
+                FieldbookPart(part, modifier = Modifier.size(132.dp), sky = sky, startedAt = startedAt)
                 Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -753,6 +755,7 @@ private fun DeleteDialog(part: Part, sky: Sky?, onConfirm: () -> Unit, onDismiss
 private fun PartCard(
     part: Part,
     sky: Sky?,
+    startedAt: Long?,
     isSample: Boolean,
     favorite: Boolean,
     onToggleFavorite: () -> Unit,
@@ -810,13 +813,14 @@ private fun PartCard(
             .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
     ) {
         Box {
-            // 道の色は歩いたときの天気で変わる。読み上げでは天気を言葉で伝える
+            // 道の色は歩いたときの天気（色相）と時間帯（明るさ）で変わる（決定 74）。読み上げでは天気を言葉で伝える
             FieldbookPart(
                 part,
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f).semantics {
                     if (sky != null) contentDescription = "${sky.label}の日に歩いた道"
                 },
                 sky = sky,
+                startedAt = startedAt,
             )
             if (editing && !isDragging) {
                 // 左上の「×」：押すと削除の確認（iPhone の並べ替え中と同じ位置）

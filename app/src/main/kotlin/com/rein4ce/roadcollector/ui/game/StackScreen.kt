@@ -84,6 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.WeatherBonus
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -104,6 +105,13 @@ import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.partSizeText
 import com.rein4ce.roadcollector.ui.common.SkyText
+import com.rein4ce.roadcollector.ui.common.Daypart
+import com.rein4ce.roadcollector.ui.common.PIECE_OUTLINE_DP
+import com.rein4ce.roadcollector.ui.common.PieceColors
+import com.rein4ce.roadcollector.ui.common.PiecePalette
+import com.rein4ce.roadcollector.ui.common.drawPiece
+import com.rein4ce.roadcollector.ui.common.drawWorldShapes
+import com.rein4ce.roadcollector.ui.common.shownSky
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow
@@ -137,6 +145,17 @@ fun StackScreen(
     val inventory by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
+    val places by repository.places.collectAsStateWithLifecycle()
+    // 積み木の色（決定 74）：色相は歩いたときの天気、明るさは歩いた時間帯。パーツごとに 1 回だけ決めて覚える（天気や場所が届いたら決め直す）
+    val pieceColorsOf: (Part) -> PieceColors = remember(weathers, places) {
+        val known = HashMap<String, PieceColors>()
+        val lookup: (Part) -> PieceColors = { part ->
+            known.getOrPut(part.id) {
+                PiecePalette.colors(repository.weatherOf(part.id, weathers)?.sky, Daypart.of(part, repository.placeOf(part.id, places)?.startedAt))
+            }
+        }
+        lookup
+    }
 
     // 出すパーツは、コレクションに見えている全部（arrangedNow。見本は設定の「見本のパーツを出す」に合わせて入る）
     LaunchedEffect(inventory, isLoaded) {
@@ -300,7 +319,7 @@ fun StackScreen(
 
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                StackCanvas(vm = vm, bonusShow = bonusShow, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
+                StackCanvas(vm = vm, bonusShow = bonusShow, colorsOf = pieceColorsOf, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
                 // 終わったときの天気のボーナスの倍率（札が出るたびに数え上がる。決定 68）
                 BonusBanner(bonusShow, compact, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
                 // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
@@ -541,7 +560,13 @@ private fun ResultCard(
  * 動くときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで動く
  */
 @Composable
-private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease: () -> Unit, modifier: Modifier = Modifier) {
+private fun StackCanvas(
+    vm: StackViewModel,
+    bonusShow: BonusShowState,
+    colorsOf: (Part) -> PieceColors,
+    onRelease: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     // 落下ラインと台の色。ダークモード（地が暗い）では、暗い地の上でも見える明るさにする
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
@@ -594,7 +619,7 @@ private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease
     val bonusResult = bonusShow.result
     val tags = remember(bonusResult, tagStyle) {
         bonusResult?.bonusMarks.orEmpty().map { mark ->
-            val sky = mark.grip.sky
+            val sky = mark.grip.shownSky
             BonusTag(mark, textMeasurer.measure("${sky.label} ${bonusText(mark.grip.bonusPercent)}", tagStyle), Fieldbook.roadColors(sky))
         }
     }
@@ -633,25 +658,11 @@ private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease
         // 目盛は大きくしないので、大きくなった塔のてっぺんが、ボーナスをかけた高さ（メーターの数字）の目盛に届く
         val grow = bonusShow.growth
         val pivot = Offset(sx(0.0), sy(0.0))
+        // 積み木は、色相が歩いたときの天気、明るさが歩いた時間帯の色で塗り、自分の色を暗くした線で囲む（決定 74。前は形の種類ごとの色だった）
+        val outlinePx = PIECE_OUTLINE_DP.dp.toPx()
         withTransform({ if (grow != 1f) scale(grow, grow, pivot = pivot) }) {
-        for (s in vm.shapes) {
-            val color = s.part?.kind?.color() ?: platform
-            when (s) {
-                is StackWorld.RenderShape.Poly -> {
-                    val path = Path()
-                    for (i in s.xs.indices) {
-                        val px = sx(s.xs[i])
-                        val py = sy(s.ys[i])
-                        if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
-                    }
-                    path.close()
-                    drawPath(path, color)
-                }
-                is StackWorld.RenderShape.Disc -> {
-                    drawCircle(color, radius = s.r.toFloat() * scalePx, center = Offset(sx(s.cx), sy(s.cy)))
-                }
-            }
-        }
+            // 線は大きくした分だけ細くして描き、画面の上ではほかの積み木と同じ太さにする（#129 の C のレビュー）
+            drawWorldShapes(vm.shapes, platform, outlinePx / grow, { sx(it) }, { sy(it) }, scalePx, colorsOf)
         }
 
         // 天気のボーナスの札。ボーナスの付いたパーツの上に、低い順に 1 つずつポンと出し、塔と一緒に動かす（字は大きくしない）。
@@ -673,12 +684,16 @@ private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease
         val current = vm.current
         if (vm.phase == StackViewModel.Phase.Placing && current != null) {
             // 置いたときと同じ大きさで見せる（長く歩いた道ほど大きい。PartSize）
-            drawPart(
+            // 置いたあとと同じ色と線で、うすく出す（雪のほぼ白い面も、線で形が分かる）
+            drawPiece(
                 part = current,
                 center = Offset(sx(vm.ghostX.toDouble()), sy(vm.spawnY().toDouble())),
                 scalePx = scalePx * PartSize.of(current.distanceM).toFloat(),
+                colors = colorsOf(current),
+                outlinePx = outlinePx,
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
-                alpha = 0.45f,
+                // うすい影。雪の道はほぼ白いので濃くする（PieceColors.ghostAlpha）
+                alpha = colorsOf(current).ghostAlpha,
             )
         }
     }
@@ -823,7 +838,7 @@ private fun WeatherBonusLines(result: StackViewModel.StackResult, revealed: Bool
 /** 天気のボーナスの札 1 つ（「● 雪 2 個 +0.40」）。形は置く前のすべりやすさの札（[SlipperyNote]）と同じ */
 @Composable
 private fun BonusChip(grip: Grip, count: Int) {
-    val sky = grip.sky
+    val sky = grip.shownSky
     val (road, casing) = Fieldbook.roadColors(sky)
     Row(
         modifier = Modifier
@@ -844,16 +859,6 @@ private fun BonusChip(grip: Grip, count: Int) {
     }
 }
 
-/** すべりやすさを、その元になった天気に戻す（札の色と名前に使う。雷雨は雨と同じすべりやすさなので「雨」） */
-private val Grip.sky: Sky
-    get() = when (this) {
-        Grip.NORMAL -> Sky.CLEAR
-        Grip.CLOUDY -> Sky.CLOUDY
-        Grip.FOGGY -> Sky.FOG
-        Grip.DAMP -> Sky.DRIZZLE
-        Grip.WET -> Sky.RAIN
-        Grip.ICY -> Sky.SNOW
-    }
 
 /**
  * 完成カードの「使った道」の行。

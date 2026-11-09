@@ -69,7 +69,7 @@ class StackViewModel(
      * @property walked      置いたパーツ（落ちたものも含む。同じパーツは 1 回）のうち、本当に歩いた道の距離
      * @property tower       物理で積んだままの塔（大きくする前。画面の物理の形と同じ）
      * @property bonus       天気のボーナス（台の上に残っていたパーツの天気から。決定 68）
-     * @property bonusMarks  ボーナスの付いたパーツ（くもり・霧・霧雨・雨・雪）の、すべりやすさと位置。低い順。
+     * @property bonusMarks  ボーナスの付いたパーツ（くもり・雨・雪）の、すべりやすさと位置。低い順。
      *   終わったときに、1 つずつ上に「雪 +0.20」の札を出してから塔を大きくする（なぜ大きくなったか分かるように）
      */
     data class StackResult(
@@ -296,7 +296,7 @@ class StackViewModel(
         val halfWidth = (world.platformWidth / 2).toFloat()
         val bottom = -world.platformThickness.toFloat()
         var focus = WorldRect(-halfWidth, halfWidth, bottom, 0f)
-        world.renderShapes().filter { it.part != null }.groupBy { it.part }.values.forEach { shapesOfPart ->
+        world.renderShapes().filter { it.part != null }.groupBy { it.body }.values.forEach { shapesOfPart ->
             val bounds = shapesOfPart.map { it.bounds() }.reduce(WorldRect::union)
             if (bounds.maxY >= bottom) focus = focus.union(bounds)
         }
