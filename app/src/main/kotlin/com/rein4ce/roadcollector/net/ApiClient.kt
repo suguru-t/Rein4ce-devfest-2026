@@ -23,6 +23,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /**
  * Cloud Run 上のサーバ（:server モジュール）を呼ぶ。
@@ -73,11 +76,14 @@ object ApiClient {
      */
     var onPosted: (TowerCreated) -> Unit = {}
 
-    /** タワーを送る。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる */
+    /**
+     * タワーを送る。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる。
+     * 送ったタワーは誰でも読めるので、パーツを歩いた時刻は日付までに丸めてから送る（[withDayOnlyWalkTimes]）
+     */
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
-            setBody(withOwner(withAuthor(tower, authorName()), ownerId()))
+            setBody(withOwner(withAuthor(withDayOnlyWalkTimes(tower), authorName()), ownerId()))
         }.body<TowerCreated>().also(onPosted)
 
     /**
@@ -127,6 +133,25 @@ internal fun withAuthor(tower: Tower, author: String?): Tower =
 /** 送るタワーに持ち主の印を入れる。[owner] が無ければ入れない（サーバは印なしとして保存する） */
 internal fun withOwner(tower: Tower, owner: String?): Tower =
     if (owner.isNullOrBlank()) tower else tower.copy(ownerId = owner)
+
+/**
+ * 送るタワーの、パーツを歩いた時刻を日付まで（日本時間の 0 時）に丸める。送ったタワーは誰でも読める（GET /towers/{id}）ので、
+ * 何時何分に歩いたか（ふだん家を出る時刻など）が分からないようにする。時刻はどの画面にも共有ページにも出していないので、見た目は変わらない。
+ * 分からない時刻（0）はそのまま。AI の名前付け（[namingRequest]）は「夕方」などを手がかりにするので、こちらは丸めない（決定 47）
+ */
+internal fun withDayOnlyWalkTimes(tower: Tower, zone: ZoneId = JAPAN): Tower =
+    tower.copy(
+        parts = tower.parts.map { p ->
+            if (p.walkedAt <= 0L) {
+                p
+            } else {
+                p.copy(walkedAt = Instant.ofEpochMilli(p.walkedAt).atZone(zone).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli())
+            }
+        },
+    )
+
+/** 歩いた時刻を日付に丸めるときの時間帯（日本時間） */
+private val JAPAN: ZoneId = ZoneId.of("Asia/Tokyo")
 
 /** 一覧を取るときに持ち主の印を送るヘッダ（サーバの TowerValidation.kt の OWNER_HEADER と同じ） */
 internal const val OWNER_HEADER = "X-Owner-Id"
