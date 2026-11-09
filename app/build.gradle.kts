@@ -52,7 +52,7 @@ android {
     buildTypes {
         release {
             // 発表・実機テスト用に、release もチーム共通の鍵（debug と同じ）で署名する。
-            // debug ビルドは Compose が遅く、エミュレータで測ると起動が約 4.5 秒 → release で約 1.7 秒になった。
+            // debug ビルドは Compose が遅く、エミュレータで測ると起動が約 4.5 秒 → release で約 2 秒になった。
             // 同じ鍵なので、Maps API キーの制限（この鍵の SHA-1）のまま地図が出て、debug ビルドの上にそのまま入れ替えられる。
             // ストアに出すときは、ここを本番用の鍵に替える
             signingConfig = signingConfigs.getByName("debug")
