@@ -142,8 +142,10 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
     LaunchedEffect(vm.generation, lifecycle, confirming) {
         if (vm.frame == null || confirming) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            // 新しい回は、始まる前に「3・2・1」を 1 秒ずつ出してから時計を動かす（決定 75）。数えている途中で裏に回ったら、戻ったときに 3 から数え直す
+            // 新しい回は、始まる前に「3・2・1」を 1 秒ずつ出してから時計を動かす（決定 76）。数えている途中で裏に回ったら、戻ったときに 3 から数え直す。
+            // 画面が切り替わってすぐに「3」が出ると早すぎるので、一呼吸（[COUNTDOWN_LEAD_MS]）置いてから数え始める（その間も時計と操作は止めたまま）
             if (vm.needsCountdown) {
+                delay(COUNTDOWN_LEAD_MS)
                 for (n in COUNTDOWN_FROM downTo 1) {
                     vm.showCountdown(n)
                     delay(COUNTDOWN_STEP_MS)
@@ -284,6 +286,9 @@ private const val COUNTDOWN_FROM = 3
 
 /** 「3・2・1」の 1 つの数を出しておく時間 [ms] */
 private const val COUNTDOWN_STEP_MS = 1000L
+
+/** 画面が切り替わってから「3」を出すまでの間 [ms]（前は切り替わってすぐに出ていて早すぎた。B の希望） */
+private const val COUNTDOWN_LEAD_MS = 1000L
 
 /**
  * 「次」の形の札（決定 69・75）。塔を描く所の右上に重ねる、紙のカード（「みんな」・コレクションのカードと同じ面・縁・側面）に、
