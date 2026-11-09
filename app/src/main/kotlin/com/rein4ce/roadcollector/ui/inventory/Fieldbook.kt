@@ -208,12 +208,14 @@ fun DrawScope.drawCompassNeedle(measurer: TextMeasurer, center: Offset, length: 
  * 寸法は「150 マスの正方形」で決めてあり、実際の大きさに合わせて拡大縮小する。
  * @param sky 歩いたときの空のようす。道の色が変わり（[Fieldbook.roadColors]）、左上に天気のアイコンが出る（[drawWeatherIcon]）。
  *   分からなければ null（いつもの色で、アイコンなし）
- * @param trace 歩いた順になぞっているところ（拡大表示の「もう一度歩く」。WalkReplay.kt）。null ならなぞらない（ふつうの図）。
+ * @param trace 歩いた順になぞっているところ（拡大表示の「もう一度歩く」。WalkReplay.kt）を返す関数。null か、null を返せばなぞらない（ふつうの図）。
  *   なぞっている間は、歩き始めに赤い旗・終わりに青い旗を立て、まだ歩いていない道をうすく、歩いたところまでを濃く出し、
- *   いま歩いているところに、歩いている向きに回した足跡を出す
+ *   いま歩いているところに、歩いている向きに回した足跡を出す。
+ *   なぞるところは 1 秒に 60 回変わるので、値ではなく関数で受け取り、描くとき（Canvas の中）だけで読む
+ *   （外で読むと、毎コマ図のまわり全体（拡大表示の地図も）を組み立て直すことになり重い。#94 の A のレビュー）
  */
 @Composable
-fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, trace: WalkTraceFrame? = null) {
+fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, trace: (() -> WalkTraceFrame?)? = null) {
     val (road, casing) = Fieldbook.roadColors(sky)
     val measurer = rememberTextMeasurer()
     // 図の中の字（縮尺・北）は図の一部なので、図と同じ大きさのままにする（文字の大きさの設定では大きくしない）。
@@ -245,14 +247,17 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, t
         val scalePx = s * FIGURE_ROAD_RATIO
         val center = Offset(ox + s / 2, oy + s / 2)
         val edgePx = 1.8f * u
-        if (trace == null) {
+        val frame = trace?.invoke()
+        if (frame == null) {
             drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
             drawPart(part, center, scalePx, color = road)
         } else {
             // まだ歩いていない道はうすく（どこへ向かうか見えるように）、歩いたところまでを濃く重ねる
             drawPart(part.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing, alpha = TRACE_AHEAD_ALPHA)
             drawPart(part, center, scalePx, color = road, alpha = TRACE_AHEAD_ALPHA)
-            val now = PartTrace.at(part, trace.progress)
+            // なぞった途中の形・いま歩いているところ・歩いている向きを、1 回の計算で出す
+            val traced = PartTrace.frame(part, frame.progress)
+            val now = traced.progress
             drawPart(now.walked.copy(thickness = part.thickness + 2 * edgePx / scalePx), center, scalePx, color = casing)
             drawPart(now.walked, center, scalePx, color = road)
             fun onFigure(p: Pt) = Offset(center.x + p.x * scalePx, center.y - p.y * scalePx)
@@ -263,14 +268,14 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, t
                 val goal = if (part.closed) start else onFigure(part.points.last())
                 drawStartGoalFlags(start, goal)
             }
-            // いま歩いているところに、歩いている向きに回した足跡（記録画面の地図の足跡と同じ絵）
+            // いま歩いているところに、歩いている向きに回した足跡（記録画面の見出しの足跡と同じ絵）
             val head = onFigure(now.head)
             val walker = TRACE_WALKER_SIZE.toPx()
             withTransform({
-                rotate(PartTrace.headingAt(part, trace.progress), pivot = head)
+                rotate(traced.heading, pivot = head)
                 translate(head.x - walker / 2f, head.y - walker / 2f)
             }) {
-                drawWalkingFootprints(trace.steps, Fieldbook.Ink, sizePx = walker)
+                drawWalkingFootprints(frame.steps, Fieldbook.Ink, sizePx = walker)
             }
         }
 

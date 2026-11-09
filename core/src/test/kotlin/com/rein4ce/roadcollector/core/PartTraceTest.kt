@@ -76,4 +76,26 @@ class PartTraceTest {
         val corner = PartTrace.headingAt(l, 0.6f)
         assertEquals(45f, corner, 1e-3f)
     }
+
+    @Test
+    fun `going out and coming back the same way does not face north at the turn`() {
+        // 東へ行って、同じ道を西へ戻る（A → B → A）。折り返す所（ちょうどまん中）で、手前と先の点が重なる
+        val back = Part(id = "back", points = listOf(Pt(-0.5f, 0f), Pt(0.5f, 0f), Pt(-0.5f, 0f)))
+        // 行きは東（90°）、帰りは西（-90°）
+        assertEquals(90f, PartTrace.headingAt(back, 0.3f), 1e-3f)
+        assertEquals(-90f, PartTrace.headingAt(back, 0.7f), 1e-3f)
+        // 折り返す所では、北（0°）ではなく、来た向き（東）のまま
+        assertEquals(90f, PartTrace.headingAt(back, 0.5f), 1e-3f)
+    }
+
+    @Test
+    fun `frame gives the same place and heading as at and headingAt`() {
+        for (f in listOf(0f, 0.2f, 0.6f, 0.9f, 1f)) {
+            val frame = PartTrace.frame(l, f)
+            val at = PartTrace.at(l, f)
+            assertPt(at.head, frame.progress.head)
+            assertEquals(at.walked.points.size, frame.progress.walked.points.size)
+        }
+        assertEquals(90f, PartTrace.frame(l, 0.2f).heading, 1e-3f)
+    }
 }

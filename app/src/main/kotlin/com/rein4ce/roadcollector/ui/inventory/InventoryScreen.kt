@@ -606,7 +606,8 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                         // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
                         if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = replay.frame)
+                        // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
+                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
                     }
                     if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                 }
@@ -623,7 +624,10 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     distanceM = part.distanceM,
                     date = if (isSample) "見本" else walkDate(part.walkedAt),
                     weather = weather?.sky?.label,
-                    modifier = Modifier.graphicsLayer { alpha = if (showSpeed) 0f else 1f },
+                    // 再生中は見えなくするだけでなく、読み上げからも外す（見えている「約 ○ 倍速」とそろえる。#94 の A のレビュー）
+                    modifier = Modifier
+                        .graphicsLayer { alpha = if (showSpeed) 0f else 1f }
+                        .then(if (showSpeed) Modifier.clearAndSetSemantics {} else Modifier),
                 )
                 if (showSpeed) {
                     Text(
