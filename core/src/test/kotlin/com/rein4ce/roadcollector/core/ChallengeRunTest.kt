@@ -120,7 +120,7 @@ class ChallengeRunTest {
         run.resume(); now = ChallengeRules.DURATION_NS; run.tick()
         repeat(20) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRules.ID, run.score!!.rule)
-        assertEquals("manual-180-v4", ChallengeRules.ID)
+        assertEquals("manual-180-v5", ChallengeRules.ID)
     }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L
@@ -230,7 +230,7 @@ class ChallengeRunTest {
         val run = ChallengeRun(1, style = ChallengeStyle.AUTO, clock = { now })
         run.resume()
         val first = run.current.id
-        repeat(20) { run.move(0.1) } // 台（幅 1.4 m）の外まで寄せる
+        repeat(30) { run.move(0.1) } // 台（幅 2.8 m）の外まで寄せる
         assertEquals(ChallengeRun.MOVE_LIMIT_M, run.x, 1e-9)
         var ticks = 0
         while (run.current.id == first && ticks < 400) { now += 50_000_000; run.tick(); ticks++ }
