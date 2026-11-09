@@ -1,7 +1,6 @@
 package com.rein4ce.roadcollector.ui.game
 
 import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.data.GameSession
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
 import org.junit.Assert.*
@@ -31,7 +30,7 @@ class MoveButtonsTest {
     @Test fun `button and drag share coordinates and clamp at both edges`() {
         val part = SampleParts.all.first()
         val vm = StackViewModel()
-        vm.updateInventory(listOf(part), true, GameSession.StartRequest(1,listOf(part.id)))
+        vm.updateInventory(listOf(part), true)
         vm.dragBy(.12f); vm.dragBy(MOVE_STEP_M)
         assertEquals(.17f, vm.ghostX, .0001f)
         vm.dragBy(-.07f)
@@ -43,13 +42,17 @@ class MoveButtonsTest {
     }
     @Test fun `falling and terminal states refuse further movement`() {
         val part = SampleParts.all.first()
-        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(0.0,.01))
-        vm.updateInventory(listOf(part), true, GameSession.StartRequest(1,listOf(part.id)))
-        vm.dragBy(.2f); vm.place()
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(part), true)
+        // 台の外に置く（通常モードは、台から落ちたら終わり）
+        vm.dragBy(10f); vm.place()
         val fallingX = vm.ghostX
-        vm.dragBy(MOVE_STEP_M)
+        vm.dragBy(-MOVE_STEP_M)
         assertEquals(fallingX, vm.ghostX, 0f)
-        vm.tick(.05)
+        repeat(20 * 60) {
+            if (vm.phase == StackViewModel.Phase.Finished || vm.phase == StackViewModel.Phase.Unresolved) return@repeat
+            vm.tick(1.0 / 60)
+        }
         assertTrue(vm.phase == StackViewModel.Phase.Finished || vm.phase == StackViewModel.Phase.Unresolved)
         val finalX = vm.ghostX
         vm.dragBy(-MOVE_STEP_M)

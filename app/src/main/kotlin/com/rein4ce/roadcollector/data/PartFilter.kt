@@ -3,7 +3,7 @@ package com.rein4ce.roadcollector.data
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.weather.Sky
 
-/** コレクションと「パーツを選ぶ」の窓の並び */
+/** コレクションの並び */
 enum class PartSort(val label: String) {
     /** 自分で並べ替えた順（並べ替えていなければ、新しく歩いた順 → 見本。ui/inventory/InventoryOrder.kt） */
     CUSTOM("いつもの順"),
@@ -14,7 +14,7 @@ enum class PartSort(val label: String) {
 }
 
 /**
- * パーツの並びと絞り込み。コレクションと「パーツを選ぶ」の窓で共通にして、設定に保存する（アプリを閉じても覚えておく）。
+ * パーツの並びと絞り込み。コレクションで使い、設定に保存する（アプリを閉じても覚えておく）。
  *
  * @property sky この天気の日に歩いたパーツだけ。null なら全部
  * @property favoritesOnly お気に入りに登録したパーツだけ

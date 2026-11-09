@@ -51,7 +51,7 @@ import com.rein4ce.roadcollector.ui.common.popBlock
 
 /**
  * 並びと絞り込みの行：［並び：いつもの順 ▾］［天気：すべて ▾］［☆ お気に入り］。
- * コレクションと「パーツを選ぶ」の窓の上に置き、どちらでも同じ選び方になる（[PartFilter] は設定に保存して共通）。
+ * コレクションの上に置く（[PartFilter] は設定に保存して、アプリを閉じても覚えておく）。
  *
  * - 並び：いつもの順・新しい順・古い順・長い順・短い順
  * - 天気：すべてか、1 つの天気。持っているパーツに無い天気は選べない（選んでも何も出ないため）
@@ -225,26 +225,5 @@ internal fun ScrollToTopOnChange(filter: PartFilter, state: LazyGridState) {
         val before = last[0]
         last[0] = filter
         if (before != null && before != filter) state.scrollToItem(0)
-    }
-}
-
-/**
- * 選んだパーツのうち、絞り込みで隠れているものがあるときの一言と「外す」。コレクションの選択中と、選ぶ窓で使う。
- * 見えないパーツが数に入ったまま、外せず・ほかも選べなくなるのを防ぐ（#75 のレビュー）
- *
- * @param hidden 隠れている選んだパーツの数（0 なら何も出さない）
- */
-@Composable
-internal fun HiddenSelectionNote(hidden: Int, onRemove: () -> Unit, modifier: Modifier = Modifier) {
-    if (hidden <= 0) return
-    Row(modifier = modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            notes("選んだうち $hidden 本は、絞り込みで隠れています"),
-            style = noteStyle,
-            fontSize = 12.sp,
-            color = Fieldbook.Muted,
-            modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start),
-        )
-        PressTextButton(onClick = onRemove) { Text("外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) }
     }
 }

@@ -247,7 +247,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         ),
     )
 
-    /** コレクションと「パーツを選ぶ」の窓の並びと絞り込み（共通）。初めは、いつもの順で絞り込みなし */
+    /** コレクションの並びと絞り込み。初めは、いつもの順で絞り込みなし */
     val partFilter: StateFlow<PartFilter> = _partFilter
 
     fun setPartFilter(filter: PartFilter) {
