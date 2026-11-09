@@ -75,8 +75,9 @@ sealed class Dest(val route: String, val label: String, val iconOutline: ImageVe
     data object Collect : Dest("collect", "記録", AppIcons.FootprintsOutline)
     data object Inventory : Dest("inventory", "コレクション", AppIcons.NotebookOutline)
     data object Stack : Dest("stack", "積む", AppIcons.BlocksOutline)
-    // 「みんな」は、高さを競うランキングなのでトロフィー（前は共有の印）
-    data object Gallery : Dest("gallery", "みんな", AppIcons.TrophyOutline)
+    // 高さを競うランキングなのでトロフィー（前は共有の印）。名前は前は「みんな」で、何の画面か分かりにくかったので「ランキング」にした
+    // （ホームの行・タブの読み上げ・使い方。B の希望。画面の中の「みんなのタワー」はそのまま。route とコードの名前もそのまま）
+    data object Gallery : Dest("gallery", "ランキング", AppIcons.TrophyOutline)
 
     companion object {
         // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
