@@ -10,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineDispatcher
 
 /**
  * 「毎日 1 つずつ積む」の塔の保存先（filesDir/daily_tower.json。決定 61）。スマホの中だけで、サーバには送らない。
@@ -19,11 +20,14 @@ import kotlinx.coroutines.withContext
  * @param read  ファイルの中身（無ければ null）。テストではただの変数
  * @param write ファイルに書く
  * @param quarantine 読めなかった中身を別の名前で残す
+ * @param io 読み書きするスレッド。アプリは IO。テストでは同じスレッドで終わらせる（Dispatchers.Unconfined）。
+ *   裏のスレッドで読み書きすると、テストが終わったあとに保存が残り、次のテストに例外を持ち込むことがあった
  */
 class DailyTowerStore(
     private val read: () -> String?,
     private val write: (String) -> Unit,
     private val quarantine: () -> Unit,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     /** アプリからはこちら */
     constructor(directory: File) : this(AtomicFile(File(directory, FILE_NAME)), directory)
@@ -59,7 +63,7 @@ class DailyTowerStore(
     val tower: StateFlow<DailyTower?> = _tower
 
     /** ファイルから読む（読めなければ退避して空の塔） */
-    suspend fun load(): DailyTower = withContext(Dispatchers.IO) {
+    suspend fun load(): DailyTower = withContext(io) {
         synchronized(lock) {
             val tower = try {
                 read()?.let { AppJson.decodeFromString(DailyTower.serializer(), it) } ?: DailyTower()
@@ -73,7 +77,7 @@ class DailyTowerStore(
     }
 
     /** 塔を保存する。画面を離れても、書き終えるまで止めない */
-    suspend fun save(tower: DailyTower) = withContext(Dispatchers.IO + NonCancellable) {
+    suspend fun save(tower: DailyTower) = withContext(io + NonCancellable) {
         synchronized(lock) {
             write(AppJson.encodeToString(DailyTower.serializer(), tower))
             _tower.value = tower
