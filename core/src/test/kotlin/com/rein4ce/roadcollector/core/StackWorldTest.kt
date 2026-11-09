@@ -218,4 +218,17 @@ class StackWorldTest {
         assertEquals(1, shapes.size)
         assertTrue(shapes.first() is StackWorld.RenderShape.Poly)
     }
+
+    @Test
+    fun `重なりの問い合わせ：台や置いたパーツに重なるかだけを答え、ワールドは変えない`() {
+        val world = StackWorld()
+        val bar = SampleParts.all.first { it.kind.name == "BAR" }
+        assertTrue("台にめり込む高さ", world.overlaps(bar, 0.0, 0.0, 0.0))
+        assertTrue("台の上に浮いている", !world.overlaps(bar, 0.0, 1.0, 0.0))
+        assertTrue("台の外の横", !world.overlaps(bar, 3.0, 0.0, 0.0))
+        world.place(bar, 0.0, 0.5, 0.0)
+        assertTrue("置いたパーツと同じ所", world.overlaps(bar, 0.0, 0.5, 0.0))
+        assertTrue("置いたパーツよりずっと上", !world.overlaps(bar, 0.0, 3.0, 0.0))
+        assertEquals("問い合わせではパーツは増えない", 1, world.placedParts.size)
+    }
 }

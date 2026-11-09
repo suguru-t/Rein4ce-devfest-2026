@@ -11,6 +11,7 @@ import java.util.Random
 import java.util.UUID
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 3分チャレンジの決まり。形・摩擦・時間の決まりを変えたら [ID] も変える（違う決まりの記録が同じランキングに混ざらないように）。
@@ -31,6 +32,12 @@ object ChallengeRules {
     /** 締切のあと、塔が止まるのを待つ上限 [s]。止まらなければ記録に残さない（浮いている高さを記録しない。#41） */
     const val FINAL_WAIT_S = 6.0
 
+    /** 「自動で落ちる」（A 案）の決まりの ID。自分で落とす（[ID]）とは記録を混ぜない（#45・決定 65） */
+    const val AUTO_ID = "auto-180-v1"
+
+    /** 「自動で落ちる」で、狙っている形が下がる速さ [m/s]。出てくる高さ（塔の上 1.3 m）から塔に着くまで 2〜3 秒 */
+    const val AUTO_FALL_SPEED_M_S = 0.4
+
     val parts = listOf(
         Part("bar", listOf(Pt(-.5f, 0f), Pt(.5f, 0f)), kind = Kind.BAR, name = "棒"),
         Part("l", listOf(Pt(-.5f, .5f), Pt(-.5f, -.5f), Pt(.5f, -.5f)), kind = Kind.L, name = "L字"),
@@ -38,6 +45,20 @@ object ChallengeRules {
         Part("ring", listOf(Pt(-.5f, .5f), Pt(-.5f, -.5f), Pt(.5f, -.5f), Pt(.5f, .5f)), closed = true, kind = Kind.RING, name = "輪"),
         Part("zigzag", listOf(Pt(-.5f, .5f), Pt(.5f, .5f), Pt(-.5f, -.5f), Pt(.5f, -.5f)), kind = Kind.ZIGZAG, name = "ジグザグ"),
     )
+}
+
+/**
+ * 3分チャレンジの遊び方（#45）。決まりが違うので、記録は [ruleId] で分けて混ぜない
+ */
+enum class ChallengeStyle(val ruleId: String) {
+    /** B 案：狙っている間、形は出てきた高さで止まっていて、「置く」で落とす */
+    MANUAL(ChallengeRules.ID),
+
+    /**
+     * A 案：狙っている間も、形が [ChallengeRules.AUTO_FALL_SPEED_M_S] で下がっていき、塔か台に触れたら、その位置から物理で落ちる。
+     * 下がっている間に ◀▶ と回転で合わせる（塔や台に重なる向き・位置には動かせない）。「置く」を押すと、その場ですぐ落とす（決定 65）
+     */
+    AUTO(ChallengeRules.AUTO_ID),
 }
 
 /** 5 種類を 1 回ずつ入れた袋から順に出す。種が同じなら同じ順番になる（java.util.Random） */
@@ -78,6 +99,7 @@ data class ChallengeScore(
  */
 class ChallengeRun(
     val seed: Long,
+    val style: ChallengeStyle = ChallengeStyle.MANUAL,
     val runId: String = UUID.randomUUID().toString(),
     private val clock: () -> Long = System::nanoTime,
     private val wallClock: () -> Long = System::currentTimeMillis,
@@ -97,6 +119,9 @@ class ChallengeRun(
 
     /** 次の形が出てくる高さ [m]（塔の上 [SPAWN_ABOVE_M]） */
     var spawnY = SPAWN_ABOVE_M; private set
+
+    /** いま狙っている形の高さ [m]。自分で落とすときは、いつも [spawnY]。自動で落ちるときは、ここから下がっていく */
+    var ghostY = spawnY; private set
 
     /** 止まった塔の高さ [m]。次の形に進むときと、終わったときに測り直す（画面の「模型の高さ」）。狙っている間に崩れて低くなったら下げる */
     var towerHeight = 0.0; private set
@@ -141,6 +166,7 @@ class ChallengeRun(
         world.removeFallen()
         shapes = world.renderShapes()
         if (phase == Phase.AIMING) lowerToTower()
+        if (style == ChallengeStyle.AUTO && phase == Phase.AIMING && remainingNs > 0) descend(dt)
         if (phase == Phase.FALLING || phase == Phase.FINALIZING) {
             val waitDelta = if (crossedDeadline) (elapsed - beforeDeadline) / 1e9 else elapsed / 1e9
             settling += if (crossedDeadline) minOf(dt, waitDelta) else dt
@@ -148,7 +174,7 @@ class ChallengeRun(
             if (settling >= ChallengeRules.MIN_SETTLE_S && world.isSettled()) {
                 if (phase == Phase.FINALIZING) {
                     towerHeight = world.height()
-                    score = ChallengeScore(runId, seed, towerHeight, wallClock(), ChallengeRules.ID)
+                    score = ChallengeScore(runId, seed, towerHeight, wallClock(), style.ruleId)
                     phase = Phase.FINISHED
                 } else {
                     nextPiece()
@@ -175,6 +201,8 @@ class ChallengeRun(
         if (height > towerHeight - LOWER_STEP_M) return
         towerHeight = height
         spawnY = towerHeight + SPAWN_ABOVE_M
+        // 自動で落ちる形は、下がっている途中の高さのまま（出てくる高さより上にはしない）
+        ghostY = if (style == ChallengeStyle.AUTO) min(ghostY, spawnY) else spawnY
         cameraTop = spawnY + reachOf(current)
     }
 
@@ -185,6 +213,7 @@ class ChallengeRun(
         angle = 0.0
         towerHeight = world.height()
         spawnY = towerHeight + SPAWN_ABOVE_M
+        ghostY = spawnY
         cameraTop = spawnY + reachOf(current)
         phase = Phase.AIMING
     }
@@ -195,19 +224,50 @@ class ChallengeRun(
     }
 
     fun move(dx: Double) {
-        if (canAct()) x = (x + dx).coerceIn(-MOVE_LIMIT_M, MOVE_LIMIT_M)
+        if (!canAct()) return
+        val nextX = (x + dx).coerceIn(-MOVE_LIMIT_M, MOVE_LIMIT_M)
+        if (!blocked(nextX, angle)) x = nextX
     }
 
     fun rotate(degrees: Double) {
-        if (canAct()) angle = (((angle + degrees) % 360) + 360) % 360
+        if (!canAct()) return
+        val nextAngle = (((angle + degrees) % 360) + 360) % 360
+        if (!blocked(x, nextAngle)) angle = nextAngle
     }
 
-    fun place(): Boolean {
-        if (!canAct()) return false
-        world.place(current, x, spawnY, Math.toRadians(angle))
+    /** 自動で落ちる形を、塔や台に重なる位置・向きには動かさない（自分で落とすときは、出てくる高さで重ならないので見ない） */
+    private fun blocked(x: Double, angle: Double): Boolean =
+        style == ChallengeStyle.AUTO && world.overlaps(current, x, ghostY, Math.toRadians(angle))
+
+    /**
+     * 自動で落ちる形を、[dt] 秒ぶん下げる。下げた位置で塔か台に重なるなら、今の位置から物理で落とす（触れた）。
+     * 台の外を下がって、台の下まで行ってしまったときも、そこで落とす（落ちて数えられる）
+     */
+    private fun descend(dt: Double) {
+        val nextY = ghostY - ChallengeRules.AUTO_FALL_SPEED_M_S * dt
+        when {
+            world.overlaps(current, x, nextY, Math.toRadians(angle)) -> drop()
+            nextY < LOST_BELOW_M -> {
+                ghostY = nextY
+                drop()
+            }
+            else -> ghostY = nextY
+        }
+    }
+
+    /** 今の位置（[ghostY]）から物理で落とす。自動で落ちるときは、下がっていた速さのまま落ち始める */
+    private fun drop() {
+        val body = world.place(current, x, ghostY, Math.toRadians(angle))
+        if (style == ChallengeStyle.AUTO) body.linearVelocity.y = -ChallengeRules.AUTO_FALL_SPEED_M_S
         phase = Phase.FALLING
         settling = 0.0
         settleWait = 0.0
+    }
+
+    /** 「置く」：今の位置から落とす（自動で落ちるときは、下がるのを待たずにすぐ落とす） */
+    fun place(): Boolean {
+        if (!canAct()) return false
+        drop()
         return true
     }
 
@@ -220,6 +280,9 @@ class ChallengeRun(
 
         /** 狙っている間に塔が崩れたとき、出てくる高さを下げ直す、いちばん小さい下がり幅 [m] */
         const val LOWER_STEP_M = 0.05
+
+        /** 自動で落ちる形が、塔にも台にも触れずにここまで下がったら（台の外を下がった）、そこで落とす [m] */
+        const val LOST_BELOW_M = -1.0
 
         /** 左右に動かせる範囲 [m] */
         const val MOVE_LIMIT_M = 1.5
