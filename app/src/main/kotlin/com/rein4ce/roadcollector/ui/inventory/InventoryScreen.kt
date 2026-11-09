@@ -19,6 +19,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -576,6 +577,8 @@ private val MeterInk: Color get() = if (Fieldbook.dark) Pop.Orange else Pop.Oran
 @Composable
 private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onRename: () -> Unit, onDismiss: () -> Unit) {
     val isSample = SampleParts.byId(part.id) != null
+    // 「もう一度歩く」：道を歩いた順になぞる（WalkReplay.kt）。窓を閉じると止まる
+    val replay = rememberWalkReplay()
     FramedDialog(
         title = part.displayName,
         onDismiss = onDismiss,
@@ -603,7 +606,8 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
                     Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                         // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
                         if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky)
+                        // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
+                        FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
                     }
                     if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
                 }
@@ -611,24 +615,51 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
             Spacer(Modifier.height(6.dp))
             // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
             // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
-            WalkNote(
-                distanceM = part.distanceM,
-                date = if (isSample) "見本" else walkDate(part.walkedAt),
-                weather = weather?.sky?.label,
-            )
+            // 再生している間は、この行に何倍速かを出す（図の中に出すと旗や道にかかる。注記は見えなくするだけで場所は残し、
+            // 下の「止める」ボタンが動かないようにする）
+            val speed = replaySpeed(part.distanceM)
+            val showSpeed = replay.playing && speed != null
+            Box(contentAlignment = Alignment.Center) {
+                WalkNote(
+                    distanceM = part.distanceM,
+                    date = if (isSample) "見本" else walkDate(part.walkedAt),
+                    weather = weather?.sky?.label,
+                    // 再生中は見えなくするだけでなく、読み上げからも外す（見えている「約 ○ 倍速」とそろえる。#94 の A のレビュー）
+                    modifier = Modifier
+                        .graphicsLayer { alpha = if (showSpeed) 0f else 1f }
+                        .then(if (showSpeed) Modifier.clearAndSetSemantics {} else Modifier),
+                )
+                if (showSpeed) {
+                    Text(
+                        "約 $speed 倍速",
+                        fontFamily = Fieldbook.Data,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Fieldbook.Survey,
+                        maxLines = 1,
+                    )
+                }
+            }
             // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
             if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
-            // 名前を付ける（付け直す）。「みんな」の紙片の「リンクをコピー」と同じ、白い面に青緑の縁のブロック。
-            // 閉じるのは、ほかの窓と同じく枠の下の「×」
-            PopButton(
-                label = "名前を付ける",
-                onClick = onRename,
-                face = Fieldbook.Card,
-                text = Pop.TealLine,
-                edge = Pop.TealLine,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(top = 12.dp),
-            )
+            // もう一度歩くと、名前を付ける（付け直す）。どちらも「みんな」と同じブロックのボタン。
+            // 主な操作の「もう一度歩く」は青緑の面、「名前を付ける」は白い面に青緑の縁（「リンクをコピー」と同じ）。
+            // 文字を大きくして 1 行に入らなければ、2 行に折り返す。閉じるのは、ほかの窓と同じく枠の下の「×」
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            ) {
+                ReplayButton(replay)
+                PopButton(
+                    label = "名前を付ける",
+                    onClick = onRename,
+                    face = Fieldbook.Card,
+                    text = Pop.TealLine,
+                    edge = Pop.TealLine,
+                    fontSize = 15.sp,
+                )
+            }
         }
     }
 }

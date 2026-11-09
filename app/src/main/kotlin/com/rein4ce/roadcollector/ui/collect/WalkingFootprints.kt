@@ -25,21 +25,28 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun WalkingFootprints(steps: () -> Float, tint: Color, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.clipToBounds()) {
-        val unit = size.minDimension / ICON_UNITS
-        val p = steps()
-        val n = floor(p).toInt()
-        // 今見えている足跡と、上から入ってくる足跡・下へ出ていく足跡
-        for (k in n - 1..n + 2) {
-            val top = restTop(k) + STEP * p
-            // 上の足跡の場所より上は入ってくる途中、下の足跡の場所より下は出ていく途中なので、薄くする
-            val alpha = when {
-                top < UPPER_TOP -> 1f - (UPPER_TOP - top) / STEP
-                top > LOWER_TOP -> 1f - (top - LOWER_TOP) / STEP
-                else -> 1f
-            }.coerceIn(0f, 1f)
-            if (alpha <= 0f) continue
-            footprint(cx = if (k % 2 == 0) RIGHT_X else LEFT_X, top = top, unit = unit, color = tint.copy(alpha = tint.alpha * alpha))
-        }
+        drawWalkingFootprints(steps(), tint, sizePx = size.minDimension)
+    }
+}
+
+/**
+ * [WalkingFootprints] の絵を、左上が原点の一辺 [sizePx] の正方形に描く（Canvas の中で、ほかの絵と一緒に描くとき。
+ * コレクションの拡大表示の「もう一度歩く」で、道をなぞる足跡に使う）。[steps] は進んだ歩数
+ */
+internal fun DrawScope.drawWalkingFootprints(steps: Float, tint: Color, sizePx: Float) {
+    val unit = sizePx / ICON_UNITS
+    val n = floor(steps).toInt()
+    // 今見えている足跡と、上から入ってくる足跡・下へ出ていく足跡
+    for (k in n - 1..n + 2) {
+        val top = restTop(k) + STEP * steps
+        // 上の足跡の場所より上は入ってくる途中、下の足跡の場所より下は出ていく途中なので、薄くする
+        val alpha = when {
+            top < UPPER_TOP -> 1f - (UPPER_TOP - top) / STEP
+            top > LOWER_TOP -> 1f - (top - LOWER_TOP) / STEP
+            else -> 1f
+        }.coerceIn(0f, 1f)
+        if (alpha <= 0f) continue
+        footprint(cx = if (k % 2 == 0) RIGHT_X else LEFT_X, top = top, unit = unit, color = tint.copy(alpha = tint.alpha * alpha))
     }
 }
 
