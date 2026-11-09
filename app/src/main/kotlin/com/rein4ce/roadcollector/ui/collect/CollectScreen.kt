@@ -822,11 +822,8 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier, recordi
         val lastPt = xy.last()
         val startAt = Offset(sx(first.x), sy(first.y))
         val goalAt = Offset(sx(lastPt.x), sy(lastPt.y))
-        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く
-        val spread = !recording && (goalAt - startAt).getDistance() < FlagWidth.toPx()
-        val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
-        if (!recording) drawFlag(goalAt, GoalFlagColor, mirrored = spread, tilt = -tilt)
-        drawFlag(startAt, StartFlagColor, tilt = tilt)
+        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く（StartGoalMarks.kt）
+        drawStartGoalFlags(startAt, goal = if (recording) null else goalAt)
         if (recording) {
             drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
             drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))

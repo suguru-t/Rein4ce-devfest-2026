@@ -33,12 +33,8 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.weather.Sky
-import com.rein4ce.roadcollector.ui.collect.FLAG_SPREAD_DEGREES
-import com.rein4ce.roadcollector.ui.collect.FlagWidth
 import com.rein4ce.roadcollector.ui.common.drawGridClearings
-import com.rein4ce.roadcollector.ui.collect.GoalFlagColor
-import com.rein4ce.roadcollector.ui.collect.StartFlagColor
-import com.rein4ce.roadcollector.ui.collect.drawFlag
+import com.rein4ce.roadcollector.ui.collect.drawStartGoalFlags
 import com.rein4ce.roadcollector.ui.collect.drawWalkingFootprints
 import com.rein4ce.roadcollector.ui.common.drawPart
 import kotlin.math.hypot
@@ -266,7 +262,7 @@ fun FieldbookPart(part: Part, modifier: Modifier = Modifier, sky: Sky? = null, t
                 val start = onFigure(part.points.first())
                 // 輪は歩き始めの所に戻ってくる（最後の点から始めの点へつながる）ので、ゴールもスタートと同じ所
                 val goal = if (part.closed) start else onFigure(part.points.last())
-                drawStartGoalFlags(start, goal)
+                drawStartGoalFlags(start, goal) // 記録画面と同じ立て方（ui/collect/StartGoalMarks.kt）
             }
             // いま歩いているところに、歩いている向きに回した足跡（記録画面の見出しの足跡と同じ絵）
             val head = onFigure(now.head)
@@ -336,18 +332,6 @@ internal fun niceLength(m: Float): Int = NICE_LENGTHS.firstOrNull { it >= m } ?:
 
 /** 縮尺の目盛りの長さの候補 [m] */
 private val NICE_LENGTHS = listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
-
-/**
- * スタートの赤い旗とゴールの青い旗を立てる。同じ所（輪、歩き始めの近くに戻ってきた道）では、そのまま立てると
- * 後の旗に隠れて 1 本に見えるので、赤い旗は右へ、青い旗は左向きにして左へ、根もとから開いて 2 本とも見えるようにする。
- * 開き方と、開くかどうかの決め方（旗の幅より近いか）は、記録画面の地図なしの軌跡（ui/collect/CollectScreen の TrackCanvas、#85）と同じ
- */
-private fun DrawScope.drawStartGoalFlags(start: Offset, goal: Offset) {
-    val spread = (goal - start).getDistance() < FlagWidth.toPx()
-    val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
-    drawFlag(goal, GoalFlagColor, mirrored = spread, tilt = -tilt)
-    drawFlag(start, StartFlagColor, tilt = tilt)
-}
 
 /** なぞっている間の、まだ歩いていない道の濃さ */
 private const val TRACE_AHEAD_ALPHA = 0.28f
