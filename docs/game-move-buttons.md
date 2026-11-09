@@ -1,5 +1,9 @@
 # 左右ボタン（#43 後半）
 
+> **決定 67 で ◀▶ はやめた**（キャンバスをドラッグして、指を離すと落ちる形にしたため。`ui/game/AimGestures.kt`）。
+> 長押しで続ける仕組み（`MoveRepeater`）は `ui/game/HoldRepeater.kt` に残し、「回す」のボタンで使っている（テストは `HoldRepeaterTest`）。
+> 下は ◀▶ があったころの記録。
+
 決めたことの要約は `docs/decisions.md` の 43。ここは細かい決め方。
 
 ## 並べ方

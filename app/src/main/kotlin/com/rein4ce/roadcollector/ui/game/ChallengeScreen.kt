@@ -24,9 +24,11 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -66,10 +71,21 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.rankOf
 import com.rein4ce.roadcollector.ui.common.PressButton
+import androidx.compose.ui.unit.sp
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.SkyText
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.isActive
 import java.util.Locale
 
@@ -129,36 +145,45 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
             }
             return@BoxWithConstraints
         }
-        val ink = MaterialTheme.colorScheme.onBackground
         // 操作の段は中身の高さだけ（上限は画面の 45%。超える中身はスクロール）。前は中身にかかわらず 45% を取っていて、
         // 台が画面のまん中あたりに来て、下が大きく空いていた（#78 のレビュー）。1 回の中では縮めない（キャンバスがガタつかないように）
         val controlsMaxHeight = maxHeight * CONTROLS_MAX_FRACTION
         val density = LocalDensity.current
         var controlsMinHeightDp by rememberSaveable(vm.generation) { mutableStateOf(0f) }
         Column(Modifier.fillMaxSize()) {
-            // 1 段目：情報。上の行の左に「‹ 戻る」（leading）、右に主役の残り時間（通常のモードの「模型の高さ」と同じ大きさ。headlineSmall）。
-            // 次の行に「模型の高さ」と「次」の形。「‹ 戻る」の行を別に足さず、残り時間と同じ行に置く（塔を描く所を狭くしないように）
+            // 1 段目：情報。上の行の左に「‹ 戻る」（leading）、右に主役の残り時間（通常のモードの「模型の高さ」と同じ形の、太い丸ゴシックの数字）。
+            // 次の行に「模型の高さ」と「次」の形。「‹ 戻る」の行を別に足さず、残り時間と同じ行に置く（塔を描く所を狭くしないように）。
+            // 字は通常のモードの情報の段と同じく、方眼紙の上に縁取りで浮かせる丸ゴシック（SkyText）。見出しは薄い墨、値は墨（決定 67）
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 leading(compact)
-                ChallengeClock(vm, ink)
+                ChallengeClock(vm, compact)
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("模型の高さ %.2f m".format(Locale.JAPAN, frame.towerHeight), style = MaterialTheme.typography.bodyMedium, color = ink)
+                // 小さい画面では、文字の大きさの設定で大きくしない（情報の段が伸びて、塔を描く所が狭くならないように。通常のモードと同じ）
+                val infoSize = if (compact) with(density) { 13.dp.toSp() } else 14.sp
+                SkyText(
+                    buildAnnotatedString {
+                        append("模型の高さ ")
+                        withStyle(SpanStyle(color = Fieldbook.Ink)) { append("%.2f m".format(Locale.JAPAN, frame.towerHeight)) }
+                    },
+                    color = Fieldbook.Muted,
+                    fontSize = infoSize,
+                )
                 if (!frame.terminal) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("次 ", style = MaterialTheme.typography.bodyMedium, color = ink)
-                        Canvas(Modifier.size(22.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {}) {
+                        SkyText("次", color = Fieldbook.Muted, fontSize = infoSize)
+                        Canvas(Modifier.padding(horizontal = 4.dp).size(22.dp)) {
                             drawPart(frame.next, Offset(size.width / 2, size.height / 2), size.width * 0.7f)
                         }
-                        Text(" ${frame.next.name ?: ""}", style = MaterialTheme.typography.bodyMedium, color = ink)
+                        SkyText(frame.next.name ?: "", color = Fieldbook.Ink, fontSize = infoSize)
                     }
                 }
             }
@@ -191,15 +216,16 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                             RunControls(onRestart = { confirming = ChallengeConfirm.RESTART }, onAbandon = { confirming = ChallengeConfirm.ABANDON })
                         }
                         ChallengeRun.Phase.FALLING -> {
-                            // 狙うときの「◀ ⟲ 置く ⟳ ▶」の行と同じ高さを「落下中…」で取っておき、下の「やり直す」「中断」を
-                            // 動かさない（前は「置く」があった場所に「中断」が来て、続けて「置く」を押すと確かめの窓が開いていた）
+                            // 狙うときの「回す」の行と同じ高さを「落下中…」で取っておき、下の「やり直す」「中断」を動かさない
+                            // （前は「置く」があった場所に「中断」が来て、続けて「置く」を押すと確かめの窓が開いていた）
+                            AimHint(vm.style, visible = false)
                             Box(Modifier.fillMaxWidth().heightIn(min = AIM_ROW_HEIGHT), contentAlignment = Alignment.Center) {
-                                Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
+                                SkyText("落下中…", color = Fieldbook.Muted, fontSize = 14.sp)
                             }
                             RunControls(onRestart = { confirming = ChallengeConfirm.RESTART }, onAbandon = { confirming = ChallengeConfirm.ABANDON })
                         }
                         ChallengeRun.Phase.FINALIZING ->
-                            Text("時間です。塔が落ち着くのを待っています…", style = MaterialTheme.typography.bodyMedium, color = ink, textAlign = TextAlign.Center)
+                            SkyText("時間です。塔が落ち着くのを待っています…", color = Fieldbook.Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
                         ChallengeRun.Phase.FINISHED, ChallengeRun.Phase.UNRESOLVED -> ChallengeResult(vm, frame)
                     }
                 }
@@ -226,18 +252,40 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
     }
 }
 
-/** 残り時間（「残り 02:37」）。秒が変わったときだけ、この字だけを組み立て直す。残り 10 秒からは赤 */
+/**
+ * 残り時間（「残り 02:37」）。秒が変わったときだけ、この字だけを組み立て直す。
+ * 通常のモードの「模型の高さ」（HeightMeter）と同じ形：見出しは墨、数字はオレンジの太い丸ゴシックで、方眼紙の上に縁取りで浮かせる（決定 67）。
+ * 残り 10 秒からは数字を赤にする。大きさは dp で決め、文字の大きさの設定では大きくしない（「‹ 戻る」と同じ行に入れるため）
+ */
 @Composable
-private fun ChallengeClock(vm: ChallengeViewModel, ink: Color) {
+private fun ChallengeClock(vm: ChallengeViewModel, compact: Boolean) {
     val seconds = vm.remainingSeconds
     val minutes = seconds / 60
     val rest = seconds % 60
-    Text(
-        "残り " + String.format(Locale.ROOT, "%02d:%02d", minutes, rest),
-        style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
-        color = if (seconds <= 10) LastSecondsRed else ink,
-        modifier = Modifier.semantics { contentDescription = "残り $minutes 分 $rest 秒" },
-    )
+    val density = LocalDensity.current
+    fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
+    // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（HeightMeter と同じ）
+    val number = when {
+        seconds <= 10 -> LastSecondsRed
+        Fieldbook.dark -> Pop.Orange
+        else -> Pop.OrangeDeep
+    }
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = "残り $minutes 分 $rest 秒" },
+    ) {
+        SkyText("残り", color = Fieldbook.Ink, fontSize = fixed(if (compact) 13f else 15f), modifier = Modifier.padding(end = 8.dp, bottom = if (compact) 3.dp else 5.dp))
+        // 数字は幅をそろえる（tnum）。秒が変わるたびに字の幅が変わって、位置が揺れないように
+        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFeatureSettings = "tnum")) {
+            SkyText(
+                String.format(Locale.ROOT, "%02d:%02d", minutes, rest),
+                color = number,
+                fontSize = fixed(if (compact) 24f else 30f),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+    }
 }
 
 /**
@@ -263,9 +311,26 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             cameraY.animateTo(target.cameraY, tween(durationMillis = CAMERA_ANIMATION_MS, easing = FastOutSlowInEasing))
         }
     }
+    // 横にドラッグすると、前の ◀▶ と同じ 10 cm きざみで動く（狙える位置が変わらないので、決まり（記録の ID）は変えない。決定 67）。
+    // 自分で落とすときは、指を離すと落ちる。自動で落ちるときは、指を離しても落とさない（下がり続けて、塔か台に触れたら落ちる。
+    // 離すたびに落ちると、つかみ直して位置を直せないため）
+    val steps = remember(vm.generation) { DragSteps(MOVE_STEP_CHALLENGE_M) }
+    val style = vm.style
     Canvas(
         modifier
             .onSizeChanged { canvasSize = it }
+            .aimByDrag(
+                key = vm.generation,
+                onDrag = { dx ->
+                    val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom = 1f, cameraY = cameraY.value)
+                    val n = steps.add(viewport.dragToMeters(dx).toDouble())
+                    if (n != 0) vm.move(n * MOVE_STEP_CHALLENGE_M)
+                },
+                onRelease = {
+                    steps.reset()
+                    if (style == ChallengeStyle.MANUAL) vm.place()
+                },
+            )
             .semantics { contentDescription = "塔。模型の高さ %.2f メートル".format(Locale.JAPAN, frame.towerHeight) },
     ) {
         val viewport = StackViewport(size.width, size.height, zoom = 1f, cameraY = cameraY.value)
@@ -295,54 +360,54 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
 }
 
 /**
- * 狙う操作：「◀ ⟲ 15° 置く ⟳ 15° ▶」を 1 行（通常のモードの並びにそろえる）。◀▶ は 1 回 [MOVE_STEP_CHALLENGE_M]
+ * 狙う操作：「回す」のボタン 1 つだけ（決定 67。通常のモードと同じ）。位置はキャンバスのドラッグで決め（10 cm きざみ）、
+ * 自分で落とすときは指を離すと落ちる（[ChallengeCanvas]）。回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114）。
+ * 行の高さは [AIM_ROW_HEIGHT]（落下中の「落下中…」と同じ。下の「やり直す」「中断」が動かないように）
  */
 @Composable
 private fun AimControls(vm: ChallengeViewModel) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PressOutlinedButton(
-            onClick = { vm.move(-MOVE_STEP_CHALLENGE_M) },
-            modifier = Modifier.width(ARROW_BUTTON_WIDTH).semantics { contentDescription = "左へ 10cm" },
-            contentPadding = PaddingValues(0.dp),
-        ) { Text("◀") }
-        // 回転は押し続けると回り続ける（#114。15° きざみのままなので、決まり（記録の ID）は変わらない）
-        RotateButton(
-            RotateDirection.LEFT,
-            sessionKey = vm.generation,
-            onRotate = { vm.rotate(it.toDouble()) },
-            modifier = Modifier.weight(1.2f),
-            contentPadding = AimButtonPadding,
-        )
-        PressButton(
-            onClick = { vm.place() },
-            modifier = Modifier.weight(1f),
-            contentPadding = AimButtonPadding,
-        ) { Text("置く") }
+    // 「置く」のボタンが無いので、落とし方を一言で知らせる（遊び方で違う）
+    AimHint(vm.style)
+    Box(Modifier.fillMaxWidth().heightIn(min = AIM_ROW_HEIGHT), contentAlignment = Alignment.Center) {
         RotateButton(
             RotateDirection.RIGHT,
             sessionKey = vm.generation,
             onRotate = { vm.rotate(it.toDouble()) },
-            modifier = Modifier.weight(1.2f),
-            contentPadding = AimButtonPadding,
+            modifier = Modifier.width(TURN_BUTTON_WIDTH),
+            text = TURN_BUTTON_TEXT,
+            label = TURN_BUTTON_LABEL,
         )
-        PressOutlinedButton(
-            onClick = { vm.move(MOVE_STEP_CHALLENGE_M) },
-            modifier = Modifier.width(ARROW_BUTTON_WIDTH).semantics { contentDescription = "右へ 10cm" },
-            contentPadding = PaddingValues(0.dp),
-        ) { Text("▶") }
     }
+}
+
+/**
+ * 狙う操作の上の一言（決定 67）。自分で落とすときは「指を離すと落ちる」、自動で落ちるときは「触れたら落ちる」。
+ * 落下中も同じ字を見えなくして置き、行の高さをそろえる（[visible] が false）
+ */
+@Composable
+private fun AimHint(style: ChallengeStyle, visible: Boolean = true) {
+    // 通常のモードの置き方の一言と同じ字（縁取りの丸ゴシック・薄い墨）
+    SkyText(
+        when (style) {
+            ChallengeStyle.MANUAL -> "ドラッグして、指を離すと落ちる"
+            ChallengeStyle.AUTO -> "ドラッグで位置を合わせる（塔か台に触れたら落ちる）"
+        },
+        color = Fieldbook.Muted,
+        fontSize = 13.sp,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (visible) Modifier.padding(bottom = 4.dp) else Modifier.padding(bottom = 4.dp).alpha(0f).clearAndSetSemantics {},
+    )
 }
 
 /** 遊んでいる間の「やり直す」「中断」（どちらも確かめてから。その回は記録に残さない） */
 @Composable
 private fun RunControls(onRestart: () -> Unit, onAbandon: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        PressTextButton(onClick = onRestart) { Text("やり直す") }
-        PressTextButton(onClick = onAbandon) { Text("中断") }
+    // 通常のモードの「やり直す」と同じ、紙の面に青緑の縁の小さな札（決定 67）
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
+        PopChip("やり直す", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = onRestart)
+        PopChip("中断", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = onAbandon)
     }
 }
 
@@ -350,23 +415,28 @@ private fun RunControls(onRestart: () -> Unit, onAbandon: () -> Unit) {
 @Composable
 private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame) {
     val score = frame.score
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (score != null) {
-                Text("記録 %.2f m".format(Locale.JAPAN, score.height), style = MaterialTheme.typography.titleLarge)
-                if (vm.ranking.any { it.runId == score.runId }) {
-                    Text("この端末で ${rankOf(score.height, vm.ranking)} 位", style = MaterialTheme.typography.bodyMedium)
-                }
-            } else {
-                Text("揺れが止まりませんでした", style = MaterialTheme.typography.titleLarge)
-                Text("塔が落ち着かなかったので、記録には残しません。", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+    // 通常のモードの終わりのカードと同じ、紙の面（縁と下にのぞく側面）。字は太い丸ゴシック、ボタンはブロック（決定 67）
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (score != null) {
+            Text("記録 %.2f m".format(Locale.JAPAN, score.height), fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink)
+            if (vm.ranking.any { it.runId == score.runId }) {
+                Text("この端末で ${rankOf(score.height, vm.ranking)} 位", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Muted)
             }
-            SaveState(vm)
-            Spacer(Modifier.height(12.dp))
-            PressButton(onClick = { vm.start() }, enabled = vm.canStart) { Text("もう一度") }
-            Spacer(Modifier.height(8.dp))
-            Records(vm.ranking, highlight = score?.runId, style = vm.style)
+        } else {
+            Text("揺れが止まりませんでした", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink)
+            Text("塔が落ち着かなかったので、記録には残しません。", style = MaterialTheme.typography.bodyMedium, color = Fieldbook.Muted, textAlign = TextAlign.Center)
         }
+        SaveState(vm)
+        Spacer(Modifier.height(12.dp))
+        PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
+        Spacer(Modifier.height(8.dp))
+        Records(vm.ranking, highlight = score?.runId, style = vm.style)
     }
 }
 
@@ -380,7 +450,7 @@ private fun SaveState(vm: ChallengeViewModel) {
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
         )
-        PressTextButton(onClick = vm::refreshRecords) { Text("再試行") }
+        PopChip("再試行", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::refreshRecords)
     }
 }
 
@@ -391,7 +461,7 @@ private fun ChallengeIntro(vm: ChallengeViewModel) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("3分チャレンジ", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
+        Text("3分チャレンジ", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 22.sp, color = Fieldbook.Ink)
         Spacer(Modifier.height(8.dp))
         Text(
             "3 分間で、決まった 5 種類の形をどれだけ高く積めるか。画面を離れると一時停止します。",
@@ -409,7 +479,7 @@ private fun ChallengeIntro(vm: ChallengeViewModel) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(16.dp))
-        PressButton(onClick = { vm.start() }, enabled = vm.canStart) { Text("3分チャレンジを始める") }
+        PopButton("3分チャレンジを始める", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
         SaveState(vm)
         Spacer(Modifier.height(16.dp))
         Records(vm.ranking, highlight = null, style = vm.style)
@@ -420,7 +490,7 @@ private fun ChallengeIntro(vm: ChallengeViewModel) {
 @Composable
 private fun Records(ranking: List<ChallengeScore>, highlight: String?, style: ChallengeStyle) {
     // 自分で落とすと自動で落ちるは、決まりが違うので記録を分けて出す（決定 65）
-    Text("この端末の記録（3分チャレンジ・${style.label}）", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+    Text("この端末の記録（3分チャレンジ・${style.label}）", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Fieldbook.Ink)
     if (ranking.isEmpty()) {
         Text("まだ記録がありません", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
         return
@@ -429,9 +499,10 @@ private fun Records(ranking: List<ChallengeScore>, highlight: String?, style: Ch
         val mine = record.runId == highlight
         Text(
             "${rankOf(record.height, ranking)} 位　%.2f m".format(Locale.JAPAN, record.height),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (mine) FontWeight.Bold else null,
-            color = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 14.sp,
+            color = if (mine) Pop.MineInk else Fieldbook.Ink,
         )
     }
 }
@@ -446,12 +517,12 @@ private val ChallengeStyle.label: String
 /** 遊び方の説明（始める前の画面） */
 private val ChallengeStyle.description: String
     get() = when (this) {
-        ChallengeStyle.MANUAL -> "◀▶ と回転で狙って「置く」で落とす。"
-        ChallengeStyle.AUTO -> "形が少しずつ下がってくる。下がっている間に ◀▶ と回転で合わせ、塔か台に触れたら落ちる（「置く」ですぐ落とせる）。"
+        ChallengeStyle.MANUAL -> "ドラッグで狙って、指を離すと落ちる。「回す」で時計回りに回す（押し続けると回り続ける）。"
+        ChallengeStyle.AUTO -> "形が少しずつ下がってくる。下がっている間にドラッグと「回す」で合わせ、塔か台に触れたら落ちる。"
     }
 
 /**
- * 遊び方を選ぶ 2 つのボタン（自分で落とす・自動で落ちる）。選んでいる方は色の付いたボタン、もう一方は枠だけ。
+ * 遊び方を選ぶ 2 つの札（自分で落とす・自動で落ちる）。選んでいる方は青緑の面で少し傾け、もう一方は縁だけ。
  * 読み上げでも、どちらを選んでいるか分かるようにする（Role.RadioButton）
  */
 @Composable
@@ -463,26 +534,29 @@ private fun StylePicker(selected: ChallengeStyle, onPick: (ChallengeStyle) -> Un
                 this.selected = chosen
                 role = Role.RadioButton
             }
-            if (chosen) {
-                PressButton(onClick = {}, modifier = modifier) { Text(style.label) }
-            } else {
-                PressOutlinedButton(onClick = { onPick(style) }, modifier = modifier) { Text(style.label) }
-            }
+            // 選んでいる方は青緑の面に白い字、もう一方は紙の面に青緑の縁と字（「みんな」の並びの札と同じ考え）
+            PopChip(
+                style.label,
+                face = if (chosen) Pop.TealDeep else Fieldbook.Card,
+                text = if (chosen) Pop.Letter else Pop.TealLine,
+                edge = if (chosen) null else Pop.TealLine,
+                fontSize = 14.sp,
+                tiltDeg = if (chosen) -2f else 0f,
+                modifier = modifier,
+                onClick = { if (!chosen) onPick(style) },
+            )
         }
     }
 }
 
-/** ◀▶ で 1 回に動かす量 [m]（チャレンジの決まり） */
+/** ドラッグで動かすきざみ [m]（前の ◀▶ の 1 回と同じ。チャレンジの決まり。決定 67） */
 private const val MOVE_STEP_CHALLENGE_M = 0.1
 
-/** ◀▶ のボタンの幅 */
-private val ARROW_BUTTON_WIDTH = 48.dp
+/** 「回す」のボタンの幅（通常のモードと同じ。画面いっぱいには広げない） */
+private val TURN_BUTTON_WIDTH = 220.dp
 
-/** 狙う操作の行の高さ（ボタンの押せる高さ 48dp）。落下中もこの高さを取っておく */
-private val AIM_ROW_HEIGHT = 48.dp
-
-/** 回転・置くのボタンの中の余白（1 行に入るように狭める。通常のモードと同じ） */
-private val AimButtonPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+/** 狙う操作の行の高さ（「回す」のボタンの押せる高さ 48dp と、積み木の下にのぞく側面 4dp）。落下中もこの高さを取っておく */
+private val AIM_ROW_HEIGHT = 52.dp
 
 /** 残り 10 秒からの時計の色 */
 private val LastSecondsRed = Color(0xFFD64545)

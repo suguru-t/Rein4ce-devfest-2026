@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,6 +88,10 @@ import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.WalkDistance
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
@@ -167,7 +171,7 @@ fun StackScreen(
             } else {
                 Text(vm.startMessage ?: "コレクションにパーツがありません")
                 Spacer(Modifier.height(8.dp))
-                PressButton(onClick = onGoInventory) { Text("コレクションへ") }
+                PopButton("コレクションへ", onClick = onGoInventory, face = Pop.OrangeDeep, text = Pop.Letter)
             }
         }
         return
@@ -286,7 +290,7 @@ fun StackScreen(
 
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                StackCanvas(vm = vm, modifier = Modifier.fillMaxSize().clipToBounds())
+                StackCanvas(vm = vm, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
                 // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
                 // （段を伸ばすと塔を描く所が狭くなるため）
                 if (compact) {
@@ -338,7 +342,7 @@ fun StackScreen(
                                 )
                                 // 入りきらない（文字をとても大きくした）ときは「…」で切れたと分かるようにする（#88 の C のレビュー）
                                 SkyText(
-                                    " ・ ドラッグか ◀▶ で位置を決める",
+                                    " ・ ドラッグして、指を離すと落ちる",
                                     color = Fieldbook.Muted,
                                     fontSize = 13.sp,
                                     maxLines = 1,
@@ -347,39 +351,25 @@ fun StackScreen(
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
-                            // ◀ ⟲ 15° 置く ⟳ 15° ▶ を 1 行に並べる（◀▶ を別の行にすると、操作の段が高くなってキャンバスが縮むため。
-                            // #88 のレビュー）。◀▶ は指で押せる最小の幅、ほかの 3 つは残りの幅を分け合う。
-                            // ◀▶ は狙っている間（この分岐）だけ出す。落下中・完成後は出さず、VM の dragBy も動かさない
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                MoveButton(MoveDirection.LEFT, sessionKey = vm.runId, onMove = vm::dragBy)
-                                // 回転は押し続けると回り続ける（#114。ui/game/RotateButtons.kt）
-                                RotateButton(
-                                    RotateDirection.LEFT,
-                                    sessionKey = vm.runId,
-                                    onRotate = vm::rotate,
-                                    modifier = Modifier.weight(ROTATE_WEIGHT),
-                                    contentPadding = CompactButtonPadding,
-                                )
-                                PressButton(
-                                    onClick = { vm.place(grip) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = CompactButtonPadding,
-                                ) { Text("置く") }
-                                RotateButton(
-                                    RotateDirection.RIGHT,
-                                    sessionKey = vm.runId,
-                                    onRotate = vm::rotate,
-                                    modifier = Modifier.weight(ROTATE_WEIGHT),
-                                    contentPadding = CompactButtonPadding,
-                                )
-                                MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
-                            }
+                            // 操作のボタンは「回す」の 1 つだけ（決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる（aimByDrag）。
+                            // 回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114 の RotateButton）
+                            RotateButton(
+                                RotateDirection.RIGHT,
+                                sessionKey = vm.runId,
+                                onRotate = vm::rotate,
+                                modifier = Modifier.width(TURN_BUTTON_MIN_WIDTH),
+                                text = TURN_BUTTON_TEXT,
+                                label = TURN_BUTTON_LABEL,
+                            )
                             // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
-                            PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
+                            Spacer(Modifier.height(4.dp))
+                            PopChip(
+                                "やり直す",
+                                face = Fieldbook.Card,
+                                text = Pop.TealLine,
+                                edge = Pop.TealLine,
+                                onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) },
+                            )
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
@@ -446,56 +436,74 @@ private fun ResultCard(
     onRetry: () -> Unit,
     onGoGallery: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        // 列をカードの幅いっぱいにして、中身をカードの真ん中にそろえる（幅が中身なりだと、カードの左に寄る）
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            val title = when {
-                unresolved -> "揺れが止まりませんでした"
-                result.remainingCount == 0 -> "全部落ちました"
-                else -> "おわり！ 模型の高さ %.2f m".format(result.tower.height)
-            }
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            Text("置いたパーツ ${result.usedCount} 個 ・ 台に残ったのは ${result.remainingCount} 個", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-            // 使った道（本当に歩いた道の距離）。1 行目はふつうの字、2 行目（数えなかったパーツの断り）は小さい字
-            walkedLines(result.walked).forEachIndexed { i, line ->
-                Text(
-                    line,
-                    style = if (i == 0) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
+    // 終わりのカード：「みんな」・コレクションのカードと同じ紙の面（縁と下にのぞく側面）。字は太い丸ゴシック、ボタンはブロック（決定 67）
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val title = when {
+            unresolved -> "揺れが止まりませんでした"
+            result.remainingCount == 0 -> "全部落ちました"
+            else -> "おわり！ 模型の高さ %.2f m".format(result.tower.height)
+        }
+        Text(title, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink, textAlign = TextAlign.Center)
+        Text(
+            "置いたパーツ ${result.usedCount} 個 ・ 台に残ったのは ${result.remainingCount} 個",
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 13.sp,
+            color = Fieldbook.Muted,
+            textAlign = TextAlign.Center,
+        )
+        // 使った道（本当に歩いた道の距離）。1 行目はふつうの字、2 行目（数えなかったパーツの断り）は小さい字
+        walkedLines(result.walked).forEachIndexed { i, line ->
+            Text(
+                line,
+                style = if (i == 0) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                color = Fieldbook.Ink,
+                textAlign = TextAlign.Center,
+            )
+        }
+        val reason = when {
+            unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
+            result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
+            else -> null
+        }
+        reason?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(12.dp))
+        // 入りきらないボタンは次の行へ回す（文字を大きくしたとき、1 行に並べると「みんな」が画面の外に押し出されていた）
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            PopButton("もう一度", onClick = onRetry, face = Pop.OrangeDeep, text = Pop.Letter)
+            if (vm.canUpload) {
+                // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
+                PopButton(
+                    when {
+                        vm.uploading -> "送信中…"
+                        vm.uploaded -> "送信済み"
+                        else -> "サーバに送信"
+                    },
+                    onClick = { vm.upload() },
+                    face = Fieldbook.Card,
+                    text = Pop.TealLine,
+                    edge = Pop.TealLine,
+                    enabled = !vm.uploading && !vm.uploaded,
+                    reserveLabels = listOf("サーバに送信", "送信中…", "送信済み"),
                 )
             }
-            val reason = when {
-                unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
-                result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
-                else -> null
-            }
-            reason?.let {
-                Spacer(Modifier.height(4.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-            }
-            Spacer(Modifier.height(12.dp))
-            // 入りきらないボタンは次の行へ回す（文字を大きくしたとき、1 行に並べると「みんな」が画面の外に押し出されていた）
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                PressButton(onClick = onRetry) { Text("もう一度") }
-                if (vm.canUpload) {
-                    // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
-                    PressOutlinedButton(onClick = { vm.upload() }, enabled = !vm.uploading && !vm.uploaded) {
-                        when {
-                            vm.uploading -> CircularProgressIndicator(modifier = Modifier.height(16.dp))
-                            vm.uploaded -> Text("送信済み")
-                            else -> Text("サーバに送信")
-                        }
-                    }
-                }
-                PressTextButton(onClick = onGoGallery) { Text("みんな") }
-            }
-            vm.uploadMessage?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall)
-            }
+            PopButton("みんな", onClick = onGoGallery, face = Fieldbook.Card, text = galleryInk(), edge = galleryInk())
+        }
+        vm.uploadMessage?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Fieldbook.Ink, textAlign = TextAlign.Center)
         }
     }
 }
@@ -510,13 +518,15 @@ private fun ResultCard(
  * 動くときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで動く
  */
 @Composable
-private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
+private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Modifier = Modifier) {
     // 落下ラインと台の色。ダークモード（地が暗い）では、暗い地の上でも見える明るさにする
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
     val platform = if (dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    // 指を離したときに呼ぶ（置くパーツのすべりやすさは、画面が今のパーツから決めて渡す）。ジェスチャーは作り直さずに、いつも新しいものを呼ぶ
+    val currentRelease by rememberUpdatedState(onRelease)
     val canvasWidth = canvasSize.width.toFloat()
     val canvasHeight = canvasSize.height.toFloat()
     val target = when (val camera = vm.camera) {
@@ -555,14 +565,16 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier
             .onSizeChanged { canvasSize = it }
-            .pointerInput(vm) {
-                detectDragGestures { change, drag ->
-                    change.consume()
+            // 横にドラッグして狙い、指を離すと落とす（決定 67。ui/game/AimGestures.kt）。落とすのは狙っている間だけ（VM の place が見る）
+            .aimByDrag(
+                key = vm,
+                onDrag = { dx ->
                     // 描くときと同じ変換（いまのキャンバスの大きさとカメラ）で m に直す
-                    val viewport = StackViewport(size.width.toFloat(), size.height.toFloat(), zoom.value, cameraY.value)
-                    vm.dragBy(viewport.dragToMeters(drag.x))
-                }
-            },
+                    val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom.value, cameraY.value)
+                    vm.dragBy(viewport.dragToMeters(dx))
+                },
+                onRelease = { currentRelease() },
+            ),
     ) {
         val viewport = StackViewport(size.width, size.height, zoom.value, cameraY.value)
         val scalePx = viewport.scale
@@ -671,15 +683,6 @@ internal fun walkedLines(walked: WalkDistance): List<String> = when {
 private const val RULER_STAFF_DP = 30f
 
 /**
- * ◀▶ と同じ行に並べる回転・置くのボタンの中の余白。Material の既定（左右 24dp）だと 360dp 幅の画面で 1 行に入らないので狭くする。
- * それでも入らない（文字をとても大きくした）ときは、ボタンの中で折り返す
- */
-private val CompactButtonPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
-
-/** 回転のボタンの幅の割合（「置く」を 1 として）。「⟲ 15°」は「置く」より字が多い */
-private const val ROTATE_WEIGHT = 1.2f
-
-/**
  * 画面名「みちをつむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、押すと動く。
  * 積み木は文字の大きさの設定では大きくしない（dp で決める）。5 文字あるので、小さい画面（[compact]）では一回り小さくして、高さ・残りと同じ行に収める
  */
@@ -744,11 +747,20 @@ private fun PlacedAndFallen(placed: Int, fallen: Int, compact: Boolean) {
     }
 }
 
+/** 「回す」のボタンの幅（ボタンが 1 つだけなので、押しやすい幅にする。画面いっぱいには広げない） */
+private val TURN_BUTTON_MIN_WIDTH = 220.dp
+
 /** 「チェンジ」を、高さの行のまん中からどれだけ下げて置くか（ふつうの画面） */
 private val CHANGE_BUTTON_DROP = 24.dp
 
 /** 「落下 ○ 個」の赤 */
 private val FALLEN_RED = Color(0xFFD64545)
+
+/**
+ * 終わりのカードの「みんな」の字と縁の色（「みんな」のタブの紺）。ダークモードでは紺が暗い紙に沈むので、明るい紺にする
+ * （モードを選ぶ画面の台の色と同じ考え。「サーバに送信」の青緑の縁の札（`Pop.TealLine`）と同じく、明るさだけ変える）
+ */
+private fun galleryInk(): Color = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
 
 /** 操作の段の高さの上限（画面の高さに対する割合）。超える中身はスクロールさせる */
 private const val CONTROLS_MAX_FRACTION = 0.45f
