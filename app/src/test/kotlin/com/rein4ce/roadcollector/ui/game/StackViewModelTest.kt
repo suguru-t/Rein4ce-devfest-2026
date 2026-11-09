@@ -3,7 +3,9 @@ package com.rein4ce.roadcollector.ui.game
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartSize
+import com.rein4ce.roadcollector.core.physics.WeatherBonus
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -551,6 +553,78 @@ class StackViewModelTest {
         assertTrue(focus.maxY < vm.spawnY() - 1f) // 次のパーツが出てくる場所は入れない（もう置かない）
     }
 
+    // ---- 天気のボーナス（決定 68）：終わったときに台に残っていたパーツの天気で、模型を大きくする ----
+
+    @Test
+    fun `台に残った雨と雪の道のぶん、終わったら模型を大きくし、その高さと塔を記録・送信に使う`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var sent: Tower? = null
+            val vm = StackViewModel {
+                sent = it
+                TowerCreated("ok", "https://example.test/ok")
+            }
+            vm.updateInventory(listOf(a), true)
+            // 雪と雨の道を台の上に 1 個ずつ（並べて置く。台は滑らない）
+            placeFlat(vm, x = -0.7f, grip = Grip.ICY)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+            assertEquals(1.2, vm.bonus.multiplier, 1e-9) // 止まったら、台に残っているぶんで数え直す
+            placeFlat(vm, x = 0.7f, grip = Grip.WET)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+            assertEquals(1.3, vm.bonus.multiplier, 1e-9)
+            // 落ちた雪の道は塔に入っていないので数えない
+            placeOffPlatform(vm, grip = Grip.ICY)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+
+            val result = vm.result!!
+            assertEquals(mapOf(Grip.ICY to 1, Grip.WET to 1), result.bonus.counts)
+            assertEquals(1.3, result.bonus.multiplier, 1e-9)
+            assertEquals(vm.height, result.tower.height) // 物理で積んだままの高さ
+            assertEquals(result.tower.height * 1.3f, result.finalHeight, 1e-5f)
+
+            vm.upload()
+            runCurrent()
+            val tower = sent!!
+            assertEquals(result.finalHeight, tower.height, 1e-5f) // 大きくした塔を送る
+            val size = PartSize.of(a.distanceM).toFloat()
+            assertTrue(tower.placements.all { kotlin.math.abs(it.scale - size * 1.3f) < 1e-5f })
+            assertEquals(result.tower.placements.map { it.x * 1.3f }, tower.placements.map { it.x })
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `晴れの道だけなら、模型の大きさは変えない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        finishWithTower(vm)
+        val result = vm.result!!
+        assertEquals(WeatherBonus.NONE, result.bonus)
+        assertEquals(result.tower.height, result.finalHeight)
+        assertSame(result.tower, result.uploadTower)
+    }
+
+    @Test
+    fun `大きくした模型と台が入るように引き、新しいゲームではボーナスを数え直す`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        placeFlat(vm, grip = Grip.ICY)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        val result = vm.result!!
+        val m = result.bonus.multiplier.toFloat()
+        assertEquals(1.2f, m, 1e-6f)
+        val focus = (vm.camera as CameraTarget.Overview).focus
+        val half = (vm.platformWidth / 2).toFloat()
+        assertTrue(focus.minX <= -half * m + 1e-5f && focus.maxX >= half * m - 1e-5f) // 大きくした台の端から端まで
+        assertTrue("maxY=${focus.maxY} final=${result.finalHeight}", focus.maxY >= result.finalHeight - 0.05f)
+
+        vm.restart(listOf(a))
+        assertEquals(WeatherBonus.NONE, vm.bonus)
+    }
+
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
     private val shortTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.3)
 
@@ -565,16 +639,17 @@ class StackViewModelTest {
         error("did not finish within $maxSeconds s (phase=${vm.phase})")
     }
 
-    /** 棒（縦長）を寝かせて、台の真ん中に置く */
-    private fun placeFlat(vm: StackViewModel) {
+    /** 棒（縦長）を寝かせて、台の真ん中（[x] だけずらせる）に置く。[grip] は歩いた日の天気のすべりやすさ */
+    private fun placeFlat(vm: StackViewModel, x: Float = 0f, grip: Grip = Grip.NORMAL) {
+        vm.dragBy(x)
         vm.rotate(90f)
-        vm.place()
+        vm.place(grip)
     }
 
     /** 寝かせた棒を右端まで動かして置く。台に当たらずに落ちる */
-    private fun placeOffPlatform(vm: StackViewModel) {
+    private fun placeOffPlatform(vm: StackViewModel, grip: Grip = Grip.NORMAL) {
         vm.dragBy(10f)
-        placeFlat(vm)
+        placeFlat(vm, grip = grip)
     }
 
     /**

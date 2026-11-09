@@ -110,11 +110,12 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
             // 終わって塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
+            // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
             val vm: StackViewModel = viewModel()
             val canUpload = vm.canUpload
             LaunchedEffect(vm.runId, canUpload) {
-                if (canUpload) vm.result?.let { records.submitNormal(it.tower.height) }
+                if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
             }
         }
         PlayMode.CHALLENGE -> {
