@@ -567,13 +567,16 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean) {
             Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
             Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
         }
-        // スタート（最初の点）：赤い旗
+        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く
         val firstPt = points.firstOrNull()
+        val spread = !recording && firstPt != null && last != null && points.size >= 2 &&
+            roughMeters(firstPt, last) < FLAG_SPREAD_METERS
         if (firstPt != null) {
             val startState = rememberMarkerState()
             startState.position = LatLng(firstPt.lat, firstPt.lng)
-            MarkerComposable(Fieldbook.dark, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
-                FlagMarker(StartFlagColor)
+            val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+            MarkerComposable(Fieldbook.dark, tilt, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
+                FlagMarker(StartFlagColor, tilt = tilt)
             }
         }
         if (last != null) {
@@ -611,8 +614,9 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean) {
                 }
             } else if (points.size >= 2) {
                 // 止めたあと：最後の点に青い旗（ゴール）
-                MarkerComposable(Fieldbook.dark, state = nowState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
-                    FlagMarker(GoalFlagColor)
+                // （歩き始めの近くなら、左右を反転して左へ傾ける）
+                MarkerComposable(Fieldbook.dark, spread, state = nowState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
+                    FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
                 }
             }
         }
@@ -663,8 +667,13 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier, recordi
         // スタート（最初の点）：赤い旗。止めたあとは、最後の点に青い旗（ゴール）。記録中は今いる場所に青い点
         val first = xy.first()
         val lastPt = xy.last()
-        if (!recording) drawFlag(Offset(sx(lastPt.x), sy(lastPt.y)), GoalFlagColor)
-        drawFlag(Offset(sx(first.x), sy(first.y)), StartFlagColor)
+        val startAt = Offset(sx(first.x), sy(first.y))
+        val goalAt = Offset(sx(lastPt.x), sy(lastPt.y))
+        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く
+        val spread = !recording && (goalAt - startAt).getDistance() < FlagWidth.toPx()
+        val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+        if (!recording) drawFlag(goalAt, GoalFlagColor, mirrored = spread, tilt = -tilt)
+        drawFlag(startAt, StartFlagColor, tilt = tilt)
         if (recording) {
             drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
             drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
