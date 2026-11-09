@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.audio.BlockNotes
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
@@ -307,6 +309,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
     val shape = RoundedCornerShape(blockDp * 0.22f)
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    val sfx = rememberSfx()
     val view = LocalView.current
     val motions = remember(text) { List(text.length) { BlockMotion() } }
     val running = remember(text) { arrayOfNulls<Job>(text.length) }
@@ -344,12 +347,19 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                             running[i]?.cancel()
                             running[i] = scope.launch {
                                 if (isLast) {
+                                    // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
                                     val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
-                                    motion.dropIn(fromDx, fromDy, WordMotion) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
+                                    motion.dropIn(fromDx, fromDy, WordMotion) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        sfx.play(Sfx.LAND)
+                                    }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
                                     motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = WordMotion)
                                 }
                             }

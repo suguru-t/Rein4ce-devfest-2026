@@ -31,10 +31,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.audio.BlockNotes
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.ui.common.BlockMotion
 import com.rein4ce.roadcollector.ui.common.BlockMotionSpec
 import com.rein4ce.roadcollector.ui.common.cameraPoint
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -96,6 +99,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
     val shape = RoundedCornerShape((7f * K).dp)
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    val sfx = rememberSfx()
     val motions = remember { List(Blocks.size) { BlockMotion() } }
     val running = remember { arrayOfNulls<Job>(Blocks.size) }
     // 最後の「ミ」をカメラの穴のあたりから落とすための、ブロックのまん中（画面の左上から [px]。傾け・持ち上げの前）
@@ -129,13 +133,20 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                             running[i]?.cancel()
                             running[i] = scope.launch {
                                 if (isLast) {
+                                    // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, Blocks.size))
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
                                     val camera = cameraPoint(view, blockPx = TITLE_BLOCK_DP * density.density)
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density - liftDp
-                                    motion.dropIn(fromDx, fromDy, TitleMotion) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
+                                    motion.dropIn(fromDx, fromDy, TitleMotion) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        sfx.play(Sfx.LAND)
+                                    }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    // 「ぴょん」の高さは積み木ごとに変える（左から ソ・ラ・シ・ド と上がり、最後の「ミ」が上のド。audio/SoundEffects.kt の BlockNotes）
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, Blocks.size))
                                     motion.hop(sign = if (block.tiltDeg < 0f) -1f else 1f, spec = TitleMotion)
                                 }
                             }
