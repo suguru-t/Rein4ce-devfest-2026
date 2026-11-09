@@ -12,11 +12,17 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-// Maps API キー：local.properties → 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）の順に見る。
-// local.properties に「MAPS_API_KEY=」の空の行だけがあるときも、環境変数を見に行く
-val mapsApiKey: String = (
-    localProps.getProperty("MAPS_API_KEY")?.takeIf { it.isNotBlank() } ?: System.getenv("MAPS_API_KEY")
-    )?.trim().orEmpty()
+// Maps API キー：次の順に見て、最初に空でないものを使う（どれにも無ければ空＝地図の代わりに軌跡を Canvas に描く）。
+// 1. このクローンの local.properties
+// 2. Gradle のプロパティ。ふつうはパソコンのユーザーの ~/.gradle/gradle.properties に 1 回書いておけば、
+//    そのパソコンのどのクローン・作業フォルダ（git worktree）でも読まれる（-PMAPS_API_KEY=… でも渡せる）
+// 3. 環境変数 MAPS_API_KEY（GitHub Actions は Secrets から渡す）
+// local.properties に「MAPS_API_KEY=」の空の行だけがあるときも、2・3 を見に行く
+val mapsApiKey: String = listOf(
+    localProps.getProperty("MAPS_API_KEY"),
+    providers.gradleProperty("MAPS_API_KEY").orNull,
+    System.getenv("MAPS_API_KEY"),
+).firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
 val serverBaseUrl: String = localProps.getProperty("SERVER_BASE_URL")?.trim().orEmpty()
     .ifEmpty { "https://road-collector-415368216017.asia-northeast1.run.app" }
 

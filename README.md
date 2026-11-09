@@ -23,9 +23,8 @@
 ### Android アプリ
 
 1. Android Studio（Narwhal 以降）で、このフォルダを開く
-2. Studio が作る `local.properties` に `local.properties.example` の 2 行を足す
-   - `MAPS_API_KEY=`（空でも動く。空なら地図の代わりに軌跡を Canvas 描画。下の「地図（Maps API キー）」を参照）
-   - `SERVER_BASE_URL=https://road-collector-415368216017.asia-northeast1.run.app`（本番サーバ。下の「サーバの接続先」を参照）
+2. 地図のキーを、パソコンに 1 回だけ書く（下の「地図（Maps API キー）」を参照。書かなくても動く。無ければ地図の代わりに軌跡を Canvas 描画）
+   - サーバの接続先は書かなくてよい（本番サーバ `https://road-collector-415368216017.asia-northeast1.run.app` につながる）。手元のサーバにつなぐときだけ、Studio が作る `local.properties` に `SERVER_BASE_URL` を書く（`local.properties.example` と下の「サーバの接続先」を参照）
 3. Run。エミュレータでも実機でも可（minSdk 26）
 
 **発表・実機テストは release ビルドで**：debug ビルドは Compose が遅く、エミュレータで起動が約 4.5 秒かかる（release なら約 2 秒）。release もチーム共通の鍵で署名するので、地図もそのまま出て、debug ビルドの上に入れ替えられる。
@@ -37,7 +36,15 @@
 
 ### 地図（Maps API キー）
 
-記録画面の地図は Google Maps で、`MAPS_API_KEY` が無いと軌跡だけを Canvas に描く。キーは A が管理している 1 つをチームで共有する（Slack で A から受け取って `local.properties` に書く。**リポジトリには入れない**）。
+記録画面の地図は Google Maps で、`MAPS_API_KEY` が無いと軌跡だけを Canvas に描く。キーは A が管理している 1 つをチームで共有する（Slack で A から受け取る。**リポジトリには入れない**）。
+
+**キーはパソコンに 1 回だけ書く**：パソコンのユーザーの Gradle の設定ファイルに 1 行足すと、そのパソコンのどのクローン・作業フォルダ（`git worktree`）でも読まれる。クローンし直しても書き直さなくてよい。
+
+- ファイル：Windows は `C:\Users\<ユーザー名>\.gradle\gradle.properties`、Mac / Linux は `~/.gradle/gradle.properties`（無ければ作る）
+- 書く行：`MAPS_API_KEY=AIza…`（Slack で受け取ったキー）
+- Android Studio で開いているなら、書いたあとに Sync（「Sync Project with Gradle Files」）する
+
+読む順は、このクローンの `local.properties` → `~/.gradle/gradle.properties` → 環境変数 `MAPS_API_KEY`（GitHub Actions は Secrets から渡す）。前と同じく `local.properties` に書いてもよい（そちらが先に読まれる）。空の `MAPS_API_KEY=` の行は、無いのと同じに扱う。`~/.gradle/gradle.properties` はリポジトリの外にあるので、git に入ることはない。
 
 - デバッグ署名はチーム共通の鍵 `app/debug.keystore`（パスワードは Android 標準と同じ `android`）。全員と GitHub Actions のビルドが同じ署名になるので、キーの「Android アプリ」制限にはこの鍵の SHA-1 だけ登録してある。自分の PC で作った鍵は使わない
 - 同じ署名なので、手元のビルドと Actions の APK を同じ端末に入れ替えてもアンインストールは要らない
