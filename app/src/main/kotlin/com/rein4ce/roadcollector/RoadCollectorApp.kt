@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector
 import android.app.Application
 import android.content.Context
 import com.rein4ce.roadcollector.audio.BgmPlayer
+import com.rein4ce.roadcollector.audio.SoundEffects
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.data.MyTowers
@@ -38,6 +39,12 @@ class RoadCollectorApp : Application() {
 
     /** BGM（全部の画面で同じ曲）。流すかどうかは MainActivity が、アプリが前に出ているかと設定から決める */
     val bgm: BgmPlayer by lazy { BgmPlayer(this) }
+
+    /**
+     * 効果音（ボタン・積み木・道を 1 本集めたとき）。画面を開いたとき（MainActivity）に読み込みを始める
+     * （記録サービスだけが裏で立ち上がったときには読み込まない）
+     */
+    val sfx: SoundEffects by lazy { SoundEffects(this, settings) }
 
     /** このスマホから送信したタワーの id（「みんな」で「あなた」の札を出す） */
     lateinit var myTowers: MyTowers

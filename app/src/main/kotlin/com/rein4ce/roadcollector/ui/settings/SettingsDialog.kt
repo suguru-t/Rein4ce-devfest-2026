@@ -71,6 +71,7 @@ import kotlin.math.roundToInt
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
  * - BGM：オン・オフのスイッチと、その下に音量のスライダー（10 段階。オフのときは動かせない）、初期設定に戻すボタン
+ * - 効果音：オン・オフのスイッチ（ボタン・積み木・道を 1 本集めたときの木琴の音。BGM とは別に切り替えられる）
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
  * - デモ（発表で使う）：見本のパーツ（コレクションに出す・出さない）、デモの天気（背景とデモ散歩の天気を選んだ天気にする）。
@@ -89,6 +90,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val haptics by settings.haptics.collectAsStateWithLifecycle()
     val bgmOn by settings.bgmOn.collectAsStateWithLifecycle()
     val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
+    val sfxOn by settings.sfxOn.collectAsStateWithLifecycle()
     val nickname by settings.nickname.collectAsStateWithLifecycle()
     val demoSky by settings.demoSky.collectAsStateWithLifecycle()
     // 見本のパーツがコレクションにあるか（1 本でもあればオン。読み込み中は切り替えさせない）
@@ -123,6 +125,8 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     LinkRow(Page.HAPTICS.title, onOff(haptics)) { page = Page.HAPTICS }
                     ItemDivider()
                     LinkRow(Page.BGM.title, if (bgmOn) "音量 $bgmVolume" else "オフ") { page = Page.BGM }
+                    ItemDivider()
+                    LinkRow(Page.SFX.title, onOff(sfxOn)) { page = Page.SFX }
                 }
                 Section("記録") {
                     LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
@@ -169,6 +173,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     settings.setBgmOn(true)
                     settings.setBgmVolume(AppSettings.DEFAULT_BGM_VOLUME)
                 },
+            )
+            Page.SFX -> SwitchPage(
+                checked = sfxOn,
+                onChange = settings::setSfxOn,
+                explanation = "ボタンを押したときや、題字の積み木を押したとき、道を 1 本集めたときに、木琴の音を鳴らします。" +
+                    "音の大きさは、端末の音量で変わります。",
             )
             Page.KEEP_ON -> SwitchPage(
                 checked = keepOn,
@@ -233,6 +243,7 @@ private enum class Page(val title: String) {
     MOTION("背景の天気の動き"),
     HAPTICS("振動"),
     BGM("BGM"),
+    SFX("効果音"),
     KEEP_ON("記録中は画面を消さない"),
     AI("AI に名前を考えてもらう"),
     SAMPLES("見本のパーツ"),

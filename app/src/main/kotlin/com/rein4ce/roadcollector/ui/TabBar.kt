@@ -53,7 +53,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -114,6 +116,7 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
         ) {
             val density = LocalDensity.current
             val haptics = rememberHaptics()
+            val sfx = rememberSfx()
             val count = Dest.all.size
             val barWidthPx = with(density) { maxWidth.toPx() }
             val tabWidthPx = barWidthPx / count
@@ -182,6 +185,7 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                            sfx.play(Sfx.PRESS)
                             var x = down.position.x
                             var hovered = indexAt(x)
                             fingerX = x

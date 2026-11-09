@@ -176,6 +176,19 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _bgmVolume.value = v
     }
 
+    private val _sfxOn = MutableStateFlow(readBoolean(KEY_SFX_ON, true))
+
+    /**
+     * 効果音（ボタンを押したとき・題字や画面名の積み木が跳ねたとき・道を 1 本集めたとき）を鳴らすか。初めはオン。
+     * BGM とは別に切り替えられる。鳴らすかは鳴らす瞬間に読む（audio/SoundEffects.kt）
+     */
+    val sfxOn: StateFlow<Boolean> = _sfxOn
+
+    fun setSfxOn(on: Boolean) {
+        store.put(KEY_SFX_ON, on.toString())
+        _sfxOn.value = on
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -252,6 +265,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_BGM_ON = "bgm_on"
         private const val KEY_BGM_VOLUME = "bgm_volume"
+        private const val KEY_SFX_ON = "sfx_on"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"
