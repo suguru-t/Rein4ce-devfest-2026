@@ -51,7 +51,7 @@ import kotlin.random.Random
  * - 雨・雷雨：斜めに落ちる雨粒（奥のものほど細く・短く・遅く・うすい）と、紙に当たってできる小さな輪
  * - 霧雨：細かく短い雨粒
  * - 雪：揺れながらゆっくり落ちる白い粒
- * - 霧：紙の色のもやが横に流れて、方眼の線がところどころ薄れる。くもり：灰色がかった空を、雲がゆっくり横に流れる
+ * - くもり：灰色がかった空を、雲がゆっくり横に流れる。霧の日も同じ雲（画面に出す天気は 4 つ。決定 73。前は紙の色のもやを流していた）
  * - 晴れ：天気アプリの晴れの画面のように、上のほうにうすい空の色、白く飛んだ太陽とクリーム色のまぶしさ、
  *   細い光の筋、うすい虹色の輪と六角形のレンズのきらめき。スマホを傾けると太陽ときらめきが少し動く
  * - 晴れの夜（[WalkWeather.isDay] が false）：太陽の代わりに、夜の空の色と月、ゆっくりまたたく星。月はふだん三日月で、満月の夜だけ満月（[Moon]）。
@@ -73,8 +73,8 @@ import kotlin.random.Random
  *   雨の落ちる速さや雲・太陽の位置は描く範囲の高さから決めているので、小さな範囲にそのまま描くと、雨がゆっくり落ち、雲や太陽も寄ってしまう。
  *   画面の高さを渡すと、画面いっぱいに描いた天気の上のほうを、この範囲で切り取って見せる（背景の天気と同じ速さ・大きさになる）。
  *   null なら、描く範囲いっぱいに描く（背景）
- * @param plainPaper 方眼の線の無い紙（コレクションの拡大表示の窓）に描く。霧は方眼の線を薄めて見せる作りなので、線が無いと見えない。
- *   雨・雪も方眼紙より目立たないので、雨粒と輪を濃くし、雪の粒のにじみを濃くし、霧は灰色のもやにする
+ * @param plainPaper 方眼の線の無い紙（コレクションの拡大表示の窓）に描く。
+ *   雨・雪は方眼紙より目立たないので、雨粒と輪を濃くし、雪の粒のにじみを濃くする
  */
 @Composable
 fun WeatherBackdrop(
@@ -188,7 +188,7 @@ private class Particles(
     private val isDay: Boolean = true,
     /** 月の位相（0 新月・0.5 満月。[Moon.phase]） */
     private val moonPhase: Double = 0.5,
-    /** 方眼の線の無い紙に描く（雨・雪を濃くし、霧を灰色のもやにする。[WeatherBackdrop] の plainPaper） */
+    /** 方眼の線の無い紙に描く（雨・雪を濃くする。[WeatherBackdrop] の plainPaper） */
     private val plainPaper: Boolean = false,
 ) {
     private val count: Int = when (sky) {
@@ -228,8 +228,8 @@ private class Particles(
             }
             Sky.DRIZZLE -> rain(t, short = true)
             Sky.SNOW -> snow(t)
-            Sky.FOG -> fog(t)
-            Sky.CLOUDY -> clouds(t)
+            // 霧の日も、くもりと同じ雲（画面に出す天気は 4 つ。決定 73。前は紙の色のもやを流していた）
+            Sky.CLOUDY, Sky.FOG -> clouds(t)
             Sky.CLEAR -> sun(t, tilt)
         }
     }
@@ -520,33 +520,6 @@ private class Particles(
                 ),
                 radius = core * 1.15f,
                 center = c,
-            )
-        }
-    }
-
-    /**
-     * 霧：紙の色のもや。全体を少し紙の色でおおい、その上を濃いもやの塊が横に流れる。
-     * 明るい紙の上では白いもやは見えないので、方眼の線を隠す（線がところどころ薄れて流れる）ことで霧に見せる
-     */
-    private fun DrawScope.fog(t: Float) {
-        val w = size.width
-        val h = size.height
-        // 方眼の無い紙では、紙の色のもやは見えないので、灰色のもやを流す
-        val mist = if (plainPaper) FogMist else FogPaper
-        val peak = if (plainPaper) 0.55f else 0.9f
-        drawRect(mist.copy(alpha = if (plainPaper) 0.1f else 0.3f))
-        for (i in 0 until count) {
-            val bandH = h * lerp(0.10f, 0.2f, depth[i])
-            val cy = h * (0.05f + 0.9f * phase[i])
-            val cx = wrap(x0[i] * w + t * w * lerp(0.012f, 0.03f, depth[i]), w + bandH * 6) - bandH * 3
-            drawOval(
-                brush = Brush.radialGradient(
-                    listOf(mist.copy(alpha = peak), mist.copy(alpha = 0f)),
-                    center = Offset(cx, cy),
-                    radius = bandH * 2.6f,
-                ),
-                topLeft = Offset(cx - bandH * 3f, cy - bandH * 1.2f),
-                size = androidx.compose.ui.geometry.Size(bandH * 6f, bandH * 2.4f),
             )
         }
     }
@@ -857,12 +830,6 @@ private class Particles(
         /** 光と影の境のぼかし：位相を [FEATHER_PHASE] ずつ進めた形を [FEATHER_STEPS] 枚重ねる（1 枚で 2 px ほど） */
         private const val FEATHER_STEPS = 8
         private const val FEATHER_PHASE = 0.004
-
-        /** 霧のもや（方眼紙の地の色。線を隠す） */
-        private val FogPaper: Color get() = Fieldbook.Paper
-
-        /** 方眼の無い紙（拡大表示の窓）の霧のもや。紙より少し暗い灰色（ダークでは少し明るい灰色） */
-        private val FogMist: Color get() = if (Fieldbook.dark) Color(0xFFA9B4AE) else Color(0xFF8E9894)
     }
 }
 
