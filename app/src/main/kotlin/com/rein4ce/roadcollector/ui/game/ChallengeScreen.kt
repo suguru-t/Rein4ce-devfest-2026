@@ -171,19 +171,19 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                 leading(compact)
                 ChallengeClock(vm, compact)
             }
-            // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）、
-            // 右に「次」の形を大きめに（決定 69。前は小さな 1 行の字だった）
+            // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
                 HeightMeter(frame.towerHeight.toFloat(), compact)
-                if (!frame.terminal) NextPiece(frame.next, compact)
             }
 
-            // 2 段目：キャンバス
-            ChallengeCanvas(vm, frame, Modifier.fillMaxWidth().weight(1f).clipToBounds())
+            // 2 段目：キャンバス。右上に「次」の形の札を重ねる（決定 75。前は情報の段の右端に、背景なしで出していた）
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                ChallengeCanvas(vm, frame, Modifier.fillMaxSize().clipToBounds())
+                if (!frame.terminal) NextPiece(frame.next, compact, Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp))
+            }
 
             // 3 段目：操作
             Column(
@@ -246,28 +246,29 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 }
 
 /**
- * 「次」の形（決定 69）。見出しは「模型の高さ」と同じ字、形は大きめ（前は 22dp の小さな絵）、下に形の名前。
- * 名前は墨で 13dp（小さい画面は 12dp）。棒は細い横線 1 本で形からは分かりにくく、名前がいちばんの手がかりになるため
- * （前は 11dp の薄い墨で読みにくかった。#126 のレビュー）。
- * 大きさは dp で決め、文字の大きさの設定では大きくしない（情報の段が伸びて、塔を描く所が狭くならないように。HeightMeter と同じ）
+ * 「次」の形の札（決定 69・75）。塔を描く所の右上に重ねる、紙のカード（「みんな」・コレクションのカードと同じ面・縁・側面）に、
+ * 上から「次」の見出し・形の絵（大きめ）・形の名前。背景のカードがあるので、ほかの字や積み木と分かれて「次」だと分かる。
+ * 大きさは dp で決め、文字の大きさの設定では大きくしない（塔を描く所に重ねるので、大きくすると塔が隠れる）
  */
 @Composable
-private fun NextPiece(next: Part, compact: Boolean) {
+private fun NextPiece(next: Part, compact: Boolean, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
     // 形が分かるように大きめに（決定 75。前は 40dp・小さい画面で 30dp）
     val icon = if (compact) 40.dp else 56.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clearAndSetSemantics { contentDescription = "次の形 ${next.name ?: ""}" },
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .popBlock(face = Fieldbook.Card, corner = 12.dp, depth = 3.dp, edge = Fieldbook.CardEdge)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .clearAndSetSemantics { contentDescription = "次の形 ${next.name ?: ""}" },
     ) {
-        SkyText("次", color = Fieldbook.Ink, fontSize = fixed(if (compact) 14f else 15f), modifier = Modifier.padding(end = 6.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(icon)) {
-                drawPart(next, Offset(size.width / 2, size.height / 2), size.width * 0.75f)
-            }
-            SkyText(next.name ?: "", color = Fieldbook.Ink, fontSize = fixed(if (compact) 12f else 13f), maxLines = 1, softWrap = false)
+        Text("次", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fixed(if (compact) 12f else 13f), color = Fieldbook.Muted)
+        Canvas(Modifier.size(icon)) {
+            // 置いたときと同じ向き（決まった形の色）
+            drawPart(next, Offset(size.width / 2, size.height / 2), size.width * 0.75f)
         }
+        Text(next.name ?: "", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fixed(if (compact) 12f else 13f), color = Fieldbook.Ink, maxLines = 1, softWrap = false)
     }
 }
 
