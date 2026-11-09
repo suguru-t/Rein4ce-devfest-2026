@@ -551,6 +551,50 @@ class StackViewModelTest {
         assertTrue(focus.maxY < vm.spawnY() - 1f) // 次のパーツが出てくる場所は入れない（もう置かない）
     }
 
+    // ---- 動かし方と回し方（ドラッグと ⟲⟳ だけ。決定 67） ----
+
+    @Test
+    fun `ドラッグの量をそのまま足し、台の端から決まった所で止まる`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        vm.dragBy(.12f); vm.dragBy(.05f)
+        assertEquals(.17f, vm.ghostX, .0001f)
+        vm.dragBy(-.07f)
+        assertEquals(.1f, vm.ghostX, .0001f)
+        repeat(1000) { vm.dragBy(.05f) }
+        assertEquals(vm.dragLimit, vm.ghostX, .0001f)
+        repeat(1000) { vm.dragBy(-.05f) }
+        assertEquals(-vm.dragLimit, vm.ghostX, .0001f)
+    }
+
+    @Test
+    fun `回すのは少しずつでよく、15° きざみにそろえない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        repeat(10) { vm.rotate(1.5f) }
+        assertEquals(15f, vm.ghostAngleDeg, 1e-4f)
+        vm.rotate(-20.25f)
+        assertEquals(354.75f, vm.ghostAngleDeg, 1e-4f)
+    }
+
+    @Test
+    fun `落下中と終わったあとは、動かしも回しもしない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        placeOffPlatform(vm)
+        val fallingX = vm.ghostX
+        val fallingAngle = vm.ghostAngleDeg
+        vm.dragBy(-.05f); vm.rotate(3f)
+        assertEquals(fallingX, vm.ghostX, 0f)
+        assertEquals(fallingAngle, vm.ghostAngleDeg, 0f)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished || vm.phase == StackViewModel.Phase.Unresolved }
+        val finalX = vm.ghostX
+        val finalAngle = vm.ghostAngleDeg
+        vm.dragBy(-.05f); vm.rotate(3f)
+        assertEquals(finalX, vm.ghostX, 0f)
+        assertEquals(finalAngle, vm.ghostAngleDeg, 0f)
+    }
+
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
     private val shortTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.3)
 

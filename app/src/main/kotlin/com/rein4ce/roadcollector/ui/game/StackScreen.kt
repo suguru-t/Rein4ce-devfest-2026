@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -39,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -53,12 +53,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -199,7 +200,7 @@ fun StackScreen(
     var infoMinHeightDp by rememberSaveable(vm.runId) { mutableStateOf(0f) }
 
     // いま置くパーツのすべりやすさ。雨や雪の日の道は、置くと滑りやすい（摩擦が小さい）。
-    // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
+    // 急に滑って驚かないよう、置く前に知らせる（指を離して落とすときにも、同じ値を渡す）
     val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
     val grip = Grip.of(sky)
 
@@ -284,9 +285,10 @@ fun StackScreen(
                 }
             }
 
-            // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
+            // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）。
+            // ドラッグして指を離すと落ちる（「置く」と ◀▶ のボタンはやめた。決定 67）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                StackCanvas(vm = vm, modifier = Modifier.fillMaxSize().clipToBounds())
+                StackCanvas(vm = vm, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
                 // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
                 // （段を伸ばすと塔を描く所が狭くなるため）
                 if (compact) {
@@ -338,7 +340,7 @@ fun StackScreen(
                                 )
                                 // 入りきらない（文字をとても大きくした）ときは「…」で切れたと分かるようにする（#88 の C のレビュー）
                                 SkyText(
-                                    " ・ ドラッグか ◀▶ で位置を決める",
+                                    " ・ ドラッグして、離すと落ちる",
                                     color = Fieldbook.Muted,
                                     fontSize = 13.sp,
                                     maxLines = 1,
@@ -347,39 +349,29 @@ fun StackScreen(
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
-                            // ◀ ⟲ 15° 置く ⟳ 15° ▶ を 1 行に並べる（◀▶ を別の行にすると、操作の段が高くなってキャンバスが縮むため。
-                            // #88 のレビュー）。◀▶ は指で押せる最小の幅、ほかの 3 つは残りの幅を分け合う。
-                            // ◀▶ は狙っている間（この分岐）だけ出す。落下中・完成後は出さず、VM の dragBy も動かさない
+                            // 操作のボタンは回転の ⟲ ⟳ だけ（決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる。
+                            // 「置く」「◀▶」「やり直す」はやめた（やり直すときは、終わったあとの「もう一度」か、上の「‹ 戻る」から）。
+                            // 回転は押している間なめらかに回る（ui/game/RotateButtons.kt）。狙っている間（この分岐）だけ出す
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                MoveButton(MoveDirection.LEFT, sessionKey = vm.runId, onMove = vm::dragBy)
-                                // 回転は押し続けると回り続ける（#114。ui/game/RotateButtons.kt）
                                 RotateButton(
                                     RotateDirection.LEFT,
                                     sessionKey = vm.runId,
                                     onRotate = vm::rotate,
-                                    modifier = Modifier.weight(ROTATE_WEIGHT),
-                                    contentPadding = CompactButtonPadding,
-                                )
-                                PressButton(
-                                    onClick = { vm.place(grip) },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = CompactButtonPadding,
-                                ) { Text("置く") }
+                                )
                                 RotateButton(
                                     RotateDirection.RIGHT,
                                     sessionKey = vm.runId,
                                     onRotate = vm::rotate,
-                                    modifier = Modifier.weight(ROTATE_WEIGHT),
+                                    modifier = Modifier.weight(1f),
                                     contentPadding = CompactButtonPadding,
                                 )
-                                MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
                             }
-                            // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
-                            PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
@@ -508,9 +500,13 @@ private fun ResultCard(
  * （[StackViewport.follow]）、置き切ったら塔全体と台が入るように引く（[StackViewport.overview]）。
  * camera はパーツが止まったときだけ変わるので、狙っている間と落下中にカメラは動かず、落ちていくパーツも追いかけない。
  * 動くときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで動く
+ *
+ * 狙っている間は、ドラッグで位置を決め、指を離すと [onRelease]（落とす。決定 67・[dragThenDrop]）。
+ * 読み上げでは、キャンバスの操作（左へ・右へ・落とす）で同じことができる
  */
 @Composable
-private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
+private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Modifier = Modifier) {
+    val release by rememberUpdatedState(onRelease)
     // 落下ラインと台の色。ダークモード（地が暗い）では、暗い地の上でも見える明るさにする
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
@@ -555,12 +551,25 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier
             .onSizeChanged { canvasSize = it }
-            .pointerInput(vm) {
-                detectDragGestures { change, drag ->
-                    change.consume()
+            .dragThenDrop(
+                key = vm,
+                // 狙っているパーツ（ゲーム・置いた数・パーツ）。落下中・終わったあとは null（触れても何もしない）
+                aimKey = { if (vm.phase == StackViewModel.Phase.Placing) Triple(vm.runId, vm.placedCount, vm.current?.id) else null },
+                onDrag = { dx ->
                     // 描くときと同じ変換（いまのキャンバスの大きさとカメラ）で m に直す
-                    val viewport = StackViewport(size.width.toFloat(), size.height.toFloat(), zoom.value, cameraY.value)
-                    vm.dragBy(viewport.dragToMeters(drag.x))
+                    val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom.value, cameraY.value)
+                    vm.dragBy(viewport.dragToMeters(dx))
+                },
+                onRelease = { release() },
+            )
+            .semantics {
+                contentDescription = "積む所"
+                if (vm.phase == StackViewModel.Phase.Placing) {
+                    customActions = listOf(
+                        CustomAccessibilityAction("左へ 10 cm") { vm.dragBy(-A11Y_MOVE_M); true },
+                        CustomAccessibilityAction("右へ 10 cm") { vm.dragBy(A11Y_MOVE_M); true },
+                        CustomAccessibilityAction("落とす") { release(); true },
+                    )
                 }
             },
     ) {
@@ -670,14 +679,11 @@ internal fun walkedLines(walked: WalkDistance): List<String> = when {
 /** 目盛の縦の線の位置（キャンバスの左端から）[dp]。断面図の標尺の幅と同じ */
 private const val RULER_STAFF_DP = 30f
 
-/**
- * ◀▶ と同じ行に並べる回転・置くのボタンの中の余白。Material の既定（左右 24dp）だと 360dp 幅の画面で 1 行に入らないので狭くする。
- * それでも入らない（文字をとても大きくした）ときは、ボタンの中で折り返す
- */
+/** 回転のボタン（⟲ ⟳）の中の余白。上下は Material の既定より詰めて、操作の段を低くする（キャンバスを広く取る） */
 private val CompactButtonPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
 
-/** 回転のボタンの幅の割合（「置く」を 1 として）。「⟲ 15°」は「置く」より字が多い */
-private const val ROTATE_WEIGHT = 1.2f
+/** 読み上げの「左へ」「右へ」で 1 回に動かす量 [m]（ドラッグの代わり。決定 67） */
+private const val A11Y_MOVE_M = 0.1f
 
 /**
  * 画面名「みちをつむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、押すと動く。

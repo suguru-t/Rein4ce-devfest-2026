@@ -295,7 +295,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
 }
 
 /**
- * 狙う操作：「◀ ⟲ 15° 置く ⟳ 15° ▶」を 1 行（通常のモードの並びにそろえる）。◀▶ は 1 回 [MOVE_STEP_CHALLENGE_M]
+ * 狙う操作：「◀ ⟲ 置く ⟳ ▶」を 1 行。◀▶ は 1 回 [MOVE_STEP_CHALLENGE_M]
  */
 @Composable
 private fun AimControls(vm: ChallengeViewModel) {
@@ -309,12 +309,12 @@ private fun AimControls(vm: ChallengeViewModel) {
             modifier = Modifier.width(ARROW_BUTTON_WIDTH).semantics { contentDescription = "左へ 10cm" },
             contentPadding = PaddingValues(0.dp),
         ) { Text("◀") }
-        // 回転は押し続けると回り続ける（#114。15° きざみのままなので、決まり（記録の ID）は変わらない）
+        // 回転は押している間なめらかに回る（決定 67。15° きざみをやめたので、決まりの ID を上げた）
         RotateButton(
             RotateDirection.LEFT,
             sessionKey = vm.generation,
             onRotate = { vm.rotate(it.toDouble()) },
-            modifier = Modifier.weight(1.2f),
+            modifier = Modifier.weight(1f),
             contentPadding = AimButtonPadding,
         )
         PressButton(
@@ -326,7 +326,7 @@ private fun AimControls(vm: ChallengeViewModel) {
             RotateDirection.RIGHT,
             sessionKey = vm.generation,
             onRotate = { vm.rotate(it.toDouble()) },
-            modifier = Modifier.weight(1.2f),
+            modifier = Modifier.weight(1f),
             contentPadding = AimButtonPadding,
         )
         PressOutlinedButton(
