@@ -61,7 +61,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.data.ChallengeStorage
-import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
 import com.rein4ce.roadcollector.ui.common.AppIcons
@@ -81,42 +80,14 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * 積む画面の遊び方（モード）。並びは、モードを選ぶ画面の上から。
  * まだ作っていないモード（[ready] が false）は、選ぶ画面に「準備中」で出して、押せないようにする。
  *
- * - 通常：いまの積み方（集めたパーツを最大 5 本選んで積み、高さを測る）。#108 で、広い台に終わりなく落ちてくる形にする予定
+ * - 通常：広い台に、コレクションの全部のパーツからランダムに 1 つずつ出て、終わりなく積む。台から落ちたら終わり（決定 62・#108）
  * - 3 分チャレンジ：#45・#78（D）。[StackTab] から ChallengeScreen を始める。カードには、この端末での最高の記録（ChallengeStorage）
  * - 毎日 1 つずつ積む：#106・決定 61。[StackTab] から DailyScreen を始める。カードには、今の塔の高さと日数（DailyTowerStore）
  */
 enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
-    NORMAL("通常", "パーツを 5 本まで積んで、高さを測る", ready = true),
+    NORMAL("通常", "次々に出るパーツを、落とすまで積む", ready = true),
     CHALLENGE("3 分チャレンジ", "3 分のあいだに、ピースを高く積む", ready = true),
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
-}
-
-/**
- * いま出すモード（null ならモードを選ぶ画面）。
- *
- * コレクションで選んだパーツの「積む」と、積む画面の「パーツを選ぶ」は、新しい開始要求（[GameSession.StartRequest]）を出す。
- * まだ始めていない要求が来たら、選ぶ画面を飛ばして通常で始める（選んだパーツで積みたいのが分かっているので）。
- * 1 つの要求で飛ぶのは 1 回だけ（[jumpedFor]。[StackTabState.jumpedFor] に覚える）。そのあと「戻る」で選ぶ画面に戻れる
- * （要求のパーツが消えていて始められないときも）
- *
- * @param chosen    選ぶ画面で選んだモード（戻ると null）
- * @param jumpedFor 通常へ飛んだ開始要求の id
- */
-internal fun shownMode(chosen: PlayMode?, request: GameSession.StartRequest?, jumpedFor: Long?): PlayMode? =
-    if (request != null && !request.started && request.id != jumpedFor) PlayMode.NORMAL else chosen
-
-/**
- * 積むタブの、画面をまたいで覚えておくこと。
- * （前は、選ぶ画面を出しているかもここで AppNav に知らせて、選ぶ画面のときだけ天気を出していた。#116 で積む画面が地を塗らなくなり、
- * 遊んでいる間も天気を出すようになったので外した）
- */
-internal object StackTabState {
-    /**
-     * 選ぶ画面を飛ばして通常へ移った開始要求の id（[shownMode]）。開始要求（[GameSession]）と同じく、アプリのプロセスの中だけで覚える。
-     * 要求の番号はプロセスごとに 1 から数え直すので、画面の保存（rememberSaveable）に残すと、裏でプロセスが終わって復元されたあとの
-     * 新しい要求と番号が重なり、飛ばずに選ぶ画面が出ることがある（#117 の C のレビュー）。タブを移っても、画面を作り直しても残る
-     */
-    var jumpedFor by mutableStateOf<Long?>(null)
 }
 
 /**
@@ -128,16 +99,9 @@ internal object StackTabState {
  */
 @Composable
 fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
+    // 選んだモード（null ならモードを選ぶ画面）。コレクションでパーツを選んで積む流れはやめたので（決定 62）、いつも選ぶ画面から入る
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
-    val request = GameSession.startRequest
-    // 最初のコマから通常を出す（選ぶ画面が一瞬見えないように）。覚えるのは次の LaunchedEffect
-    val mode = shownMode(chosen, request, StackTabState.jumpedFor)
-    LaunchedEffect(request) {
-        if (request != null && !request.started && request.id != StackTabState.jumpedFor) {
-            chosen = PlayMode.NORMAL
-            StackTabState.jumpedFor = request.id
-        }
-    }
+    val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
 
     when (mode) {
@@ -146,7 +110,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
             ModePlayPage(PlayMode.NORMAL, onBack = { chosen = null }) { leading ->
                 StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
-            // 積み切って塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
+            // 終わって塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
             val vm: StackViewModel = viewModel()
             val canUpload = vm.canUpload

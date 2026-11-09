@@ -176,7 +176,7 @@ fun AppNav(collectRequests: Int = 0) {
                     TabPage(tabPadding, onBack = ::backHome) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
                 }
                 composable(Dest.Inventory.route) {
-                    TabPage(tabPadding, onBack = ::backHome) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
+                    TabPage(tabPadding, onBack = ::backHome) { InventoryScreen() }
                 }
                 composable(Dest.Stack.route) {
                     TabPage(tabPadding, onBack = ::backHome) {
