@@ -279,9 +279,18 @@ private fun dailyRecord(tower: DailyTower?): String =
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
  * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
  * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 77。一言だけ [note] で替える）
+ *
+ * @param leading 左の積み木の代わりに置くもの（「みんな」のホームでは、遊び方の色のメダルに自分の順位。決定 82）。
+ *   無ければ、モードの色の積み木にモードのアイコン。[MODE_LEADING_SIZE] の場所に置く
  */
 @Composable
-internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
+internal fun ModeRow(
+    mode: PlayMode,
+    record: String?,
+    onClick: () -> Unit,
+    note: String = mode.note,
+    leading: (@Composable () -> Unit)? = null,
+) {
     val look = lookOf(mode)
     val source = remember { MutableInteractionSource() }
     val action = if (mode.ready) {
@@ -301,6 +310,10 @@ internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note:
         modifier = Modifier.fillMaxWidth().then(action),
     ) {
         Box(modifier = Modifier.width(BLOCK_COLUMN), contentAlignment = Alignment.Center) {
+            if (leading != null) {
+                leading()
+                return@Box
+            }
             // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
             Box(
                 contentAlignment = Alignment.Center,
@@ -402,6 +415,9 @@ private fun ModePlayPage(
  */
 private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float, val tagFace: Color)
 
+/** モードの行の積み木の面の色（題字の積み木の色。「みんな」のホームのメダルもこの色にする） */
+internal fun modeBlockFace(mode: PlayMode): Color = lookOf(mode).face
+
 private fun lookOf(mode: PlayMode): ModeLook = when (mode) {
     PlayMode.NORMAL -> ModeLook(Pop.Orange, null, -4f, Pop.OrangeDeep)
     PlayMode.CHALLENGE -> ModeLook(Pop.Teal, AppIcons.Stopwatch, 3f, Pop.TealDeep)
@@ -431,6 +447,12 @@ private val ROW_GAP = 14.dp
 private val BLOCK_COLUMN = 84.dp
 private val BLOCK_SIZE = 68.dp
 private val BLOCK_DEPTH = 5.dp
+
+/** 行の左の積み木の大きさ（[ModeRow] の leading も、この大きさに収める） */
+internal val MODE_LEADING_SIZE = BLOCK_SIZE
+
+/** 行の左の積み木の、下にのぞく側面の厚み（leading もそろえる） */
+internal val MODE_LEADING_DEPTH = BLOCK_DEPTH
 private val ICON_SIZE = 38.dp
 
 /** 右の紙のカードの、いちばん低い高さ（積み木と同じくらい） */

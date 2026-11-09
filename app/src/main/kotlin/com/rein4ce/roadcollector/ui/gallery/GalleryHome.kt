@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +19,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
@@ -35,7 +42,11 @@ import com.rein4ce.roadcollector.ui.common.artBars
 import com.rein4ce.roadcollector.ui.common.artSlab
 import com.rein4ce.roadcollector.ui.common.artStar
 import com.rein4ce.roadcollector.ui.common.bar
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.game.MODE_LEADING_DEPTH
+import com.rein4ce.roadcollector.ui.game.MODE_LEADING_SIZE
 import com.rein4ce.roadcollector.ui.game.ModeRow
+import com.rein4ce.roadcollector.ui.game.modeBlockFace
 import com.rein4ce.roadcollector.ui.game.PlayMode
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
@@ -68,11 +79,14 @@ internal fun GalleryHome(
                     rows = {
                         Column(verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
                             TowerMode.entries.forEach { mode ->
+                                val play = playModeOf(mode)
                                 ModeRow(
-                                    mode = playModeOf(mode),
+                                    mode = play,
                                     note = rankingNote(mode),
                                     record = homeRecord(stateOf(mode), mode, isMine),
                                     onClick = { onPick(mode) },
+                                    // みちをつむの四角い積み木（アイコン）の代わりに、遊び方の色のメダルに自分の順位（決定 82）
+                                    leading = { RankMedal(modeBlockFace(play), myRank(stateOf(mode), mode, isMine)) },
                                 )
                             }
                         }
@@ -108,33 +122,118 @@ private fun HomeTitle(scale: Float) {
 }
 
 /**
- * 積み木で作った塔の絵（飾り。読み上げない）。高さの違う 2 本の塔を 1 本の台に並べる（ランキングで比べる、という絵）。
- * 高い塔のてっぺんには、1 番の星。
- * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツ（橋・L）は角の立った同じ太さの棒を組み合わせ、
- * 板と台だけ角を少し丸め、傾けない（ui/common/TowerArt.kt。決定 82。前は下に濃い側面がのぞく傾いた積み木で、ホームと質感が違った）
+ * 表彰台の絵（飾り。読み上げない）。1・2・3 の段（まん中がいちばん高い 1 位、左が 2 位、右が 3 位）に、
+ * 高さの違う積み木の塔を立て、1 位の塔のてっぺんに星を置く。みちをつむの絵（積んでいる途中）と見分けられるよう、
+ * 順位を比べる画面だと一目で分かる絵にした（B の希望。決定 82。前は 1 本の台に 2 本の塔を並べた絵）。
+ * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツは角の立った同じ太さの棒を組み合わせ、
+ * 板と段だけ角を少し丸め、傾けない（ui/common/TowerArt.kt）
  */
 @Composable
 private fun RankingArt(modifier: Modifier = Modifier) {
-    // 台の色は積む画面と同じ（ダークでは、暗い地の上でも見える明るさ）
-    val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
-    // 紺の積み木は、ダークでは台と同じ明るい紺にして、暗い地に沈ませない
-    val navy = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
+    // 段の色は積む画面の台と同じ（ダークでは、暗い地の上でも見える明るさ）
+    val step = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
+    val measurer = rememberTextMeasurer()
+    val numberStyle = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, color = Pop.Letter)
     Canvas(modifier = modifier.clearAndSetSemantics {}) {
         // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる（みちをつむの絵と同じ）
         val u = size.width / 176f
-        // 台
-        artSlab(platform, x = 20f, y = 98f, w = 136f, h = 12f, r = 3f, u = u)
-        // 高い塔（左）：下から、黄の板・青緑の橋・オレンジの L・紺の板、てっぺんに星
-        artSlab(Pop.Yellow, x = 36f, y = 84f, w = 52f, h = 14f, r = 4f, u = u)
-        artBars(Pop.Teal, u, bar(43f, 60f, 10f, 24f), bar(72f, 60f, 10f, 24f), bar(43f, 60f, 39f, 10f))
-        artBars(Pop.Orange, u, bar(52f, 32f, 10f, 28f), bar(52f, 50f, 26f, 10f))
-        artSlab(navy, x = 44f, y = 22f, w = 28f, h = 10f, r = 3f, u = u)
-        artStar(Pop.Yellow, cx = 58f, cy = 11f, r = 9.5f, u = u)
-        // 低い塔（右）：下から、オレンジの板・黄の四角・青緑の短い棒
-        artSlab(Pop.Orange, x = 100f, y = 86f, w = 44f, h = 12f, r = 4f, u = u)
-        artSlab(Pop.Yellow, x = 110f, y = 64f, w = 24f, h = 22f, r = 3f, u = u)
-        artBars(Pop.Teal, u, bar(114f, 54f, 16f, 10f))
+        // 段：左が 2 位・まん中が 1 位・右が 3 位。段の数字は白
+        // (順位, 左, 上, 幅, 高さ)。数字は段の上のほう（高い段でも上から 12 の所まで）に置く
+        val steps = listOf(
+            floatArrayOf(1f, 65f, 70f, 46f, 40f),
+            floatArrayOf(2f, 17f, 82f, 46f, 28f),
+            floatArrayOf(3f, 113f, 92f, 46f, 18f),
+        )
+        for (st in steps) {
+            val rank = st[0].toInt()
+            artSlab(step, x = st[1], y = st[2], w = st[3], h = st[4], r = 3f, u = u)
+            val text = measurer.measure("$rank", numberStyle.copy(fontSize = ((if (rank == 1) 15f else 12f) * u).toSp()))
+            val cx = (st[1] + st[3] / 2) * u
+            val cy = (st[2] + minOf(st[4] / 2, 12f)) * u
+            drawText(text, topLeft = Offset(cx - text.size.width / 2f, cy - text.size.height / 2f))
+        }
+        // 1 位の塔（まん中の段の上）：黄の板・青緑の橋・オレンジの L、てっぺんに星
+        artSlab(Pop.Yellow, x = 70f, y = 60f, w = 36f, h = 10f, r = 3f, u = u)
+        artBars(Pop.Teal, u, bar(74f, 43f, 8f, 17f), bar(94f, 43f, 8f, 17f), bar(74f, 43f, 28f, 8f))
+        artBars(Pop.Orange, u, bar(80f, 22f, 8f, 21f), bar(80f, 35f, 18f, 8f))
+        artStar(Pop.Yellow, cx = 84f, cy = 12f, r = 8.5f, u = u)
+        // 2 位の塔（左の段の上）：オレンジの板・黄の四角・青緑の短い棒
+        artSlab(Pop.Orange, x = 24f, y = 72f, w = 32f, h = 10f, r = 3f, u = u)
+        artSlab(Pop.Yellow, x = 30f, y = 56f, w = 20f, h = 16f, r = 3f, u = u)
+        artBars(Pop.Teal, u, bar(34f, 48f, 12f, 8f))
+        // 3 位の塔（右の段の上）：青緑の板・オレンジの四角
+        artSlab(Pop.Teal, x = 120f, y = 84f, w = 32f, h = 8f, r = 3f, u = u)
+        artSlab(Pop.Orange, x = 127f, y = 70f, w = 18f, h = 14f, r = 3f, u = u)
     }
+}
+
+/**
+ * 行の左に置くメダル（決定 82）：遊び方の色の丸い積み木（下に側面がのぞく）に、高い順での自分の順位を大きな白い字で。
+ * まだ自分のタワーが無ければ「—」。上に短い 2 本のリボンを付ける。
+ * みちをつむの行は四角い積み木にアイコンなので、丸いメダルに順位で、どちらの画面か見分けられるようにした（B の希望）
+ */
+@Composable
+private fun RankMedal(face: Color, rank: Int?) {
+    val ribbon = Pop.side(face)
+    val spoken = if (rank != null) "あなたは $rank 位" else "まだ順位はありません"
+    Box(
+        contentAlignment = Alignment.BottomCenter,
+        modifier = Modifier
+            .size(width = MODE_LEADING_SIZE, height = MODE_LEADING_SIZE + MODE_LEADING_DEPTH)
+            .clearAndSetSemantics { contentDescription = spoken },
+    ) {
+        // リボン：上の端から、メダルの裏のまん中へ下りる細い V の 2 本の帯（メダルの上に、首にかける帯がのぞく）
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val w = size.width
+            val bandW = w * 0.15f
+            fun band(topX: Float, bottomX: Float) {
+                val path = Path().apply {
+                    moveTo(topX - bandW / 2, 0f)
+                    lineTo(topX + bandW / 2, 0f)
+                    lineTo(bottomX + bandW / 2, size.height * 0.5f)
+                    lineTo(bottomX - bandW / 2, size.height * 0.5f)
+                    close()
+                }
+                drawPath(path, ribbon)
+            }
+            band(topX = w * 0.36f, bottomX = w * 0.46f)
+            band(topX = w * 0.64f, bottomX = w * 0.54f)
+        }
+        // メダル（丸い積み木）
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(width = MEDAL_SIZE, height = MEDAL_SIZE + MODE_LEADING_DEPTH)
+                .popBlock(face = face, corner = MEDAL_SIZE / 2, depth = MODE_LEADING_DEPTH),
+        ) {
+            if (rank == null) {
+                Text("—", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 22.sp, color = Pop.Letter)
+            } else {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "$rank",
+                        fontFamily = Pop.Rounded,
+                        fontWeight = FontWeight.Black,
+                        // 3 けたは少し小さく（メダルに入るように）
+                        fontSize = if (rank >= 100) 18.sp else 26.sp,
+                        color = Pop.Letter,
+                        maxLines = 1,
+                    )
+                    Text("位", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Pop.Letter, modifier = Modifier.padding(bottom = 3.dp))
+                }
+            }
+        }
+    }
+}
+
+/** メダルの丸の大きさ（行の左の積み木より一回り小さく、上にリボンがのぞく場所を残す） */
+private val MEDAL_SIZE = 52.dp
+
+/** 高い順での自分のいちばん良い順位（1 から）。読み込めていない・自分のタワーが無いときは null */
+internal fun myRank(state: TowerGallery.State, mode: TowerMode, isMine: (TowerSummary) -> Boolean): Int? {
+    if (state !is TowerGallery.State.Loaded) return null
+    val i = sortTowers(rankedTowers(state, mode), TowerSort.HEIGHT).indexOfFirst(isMine)
+    return if (i < 0) null else i + 1
 }
 
 /** ホームの行の一言（そのランキングで何を比べるか） */
