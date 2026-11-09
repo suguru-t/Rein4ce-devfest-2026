@@ -582,100 +582,139 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         lat = last?.lat ?: idle?.lat,
         lng = last?.lng ?: idle?.lng,
     )
-    GoogleMap(
-        modifier = Modifier.fillMaxSize(),
-        cameraPositionState = cameraPositionState,
-        // ダークモードなら、地図も暗い色にする
-        mapColorScheme = if (Fieldbook.dark) ComposeMapColorScheme.DARK else ComposeMapColorScheme.LIGHT,
-    ) {
-        if (points.size >= 2) {
-            val latLngs = points.map { LatLng(it.lat, it.lng) }
-            Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
-            Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
-        }
-        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く。
-        // 近いかどうかは、今の地図の拡大で旗の幅が何 m になるかと比べる（拡大を変えると開いたり閉じたりする）。
-        // 地図を動かすたびに中身を組み立て直さないよう、開くかどうかが変わったときだけ読み直す
-        val firstPt = points.firstOrNull()
-        val spread by remember(recording, firstPt, last, points.size) {
-            derivedStateOf {
-                !recording && firstPt != null && last != null && points.size >= 2 &&
-                    roughMeters(firstPt, last) < flagWidthMeters(firstPt.lat, cameraPositionState.position.zoom)
+    // 「今いる場所へ戻る」ボタン（#112・決定 72）。戻す所は、記録中（デモ散歩の再生中も）なら歩いている人、そうでなければ今いる場所（HereButton.kt）
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val here = hereTarget(points, recording, playingDemo, idle?.let { MapSpot(it.lat, it.lng) })
+    // 位置の許可が無いときは、押すと許可を聞く（許可されたら、記録していない間の今いる場所が届き始め、地図もそこへ動く）
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+    val canAsk = here == null && !LocationRecordingService.hasLocationPermission(context)
+    Box(Modifier.fillMaxSize()) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            // ダークモードなら、地図も暗い色にする
+            mapColorScheme = if (Fieldbook.dark) ComposeMapColorScheme.DARK else ComposeMapColorScheme.LIGHT,
+        ) {
+            if (points.size >= 2) {
+                val latLngs = points.map { LatLng(it.lat, it.lng) }
+                Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
+                Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
             }
-        }
-        if (firstPt != null) {
-            val startState = rememberMarkerState()
-            startState.position = LatLng(firstPt.lat, firstPt.lng)
-            val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
-            MarkerComposable(Fieldbook.dark, tilt, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
-                FlagMarker(StartFlagColor, tilt = tilt)
+            // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く。
+            // 近いかどうかは、今の地図の拡大で旗の幅が何 m になるかと比べる（拡大を変えると開いたり閉じたりする）。
+            // 地図を動かすたびに中身を組み立て直さないよう、開くかどうかが変わったときだけ読み直す
+            val firstPt = points.firstOrNull()
+            val spread by remember(recording, firstPt, last, points.size) {
+                derivedStateOf {
+                    !recording && firstPt != null && last != null && points.size >= 2 &&
+                        roughMeters(firstPt, last) < flagWidthMeters(firstPt.lat, cameraPositionState.position.zoom)
+                }
             }
-        }
-        if (last != null) {
-            if (recording) {
-                // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
-                // 位置は、点から点へ飛ばさず、なめらかに動かす。
-                // ただしデモ散歩の再生中は、地図と同じく、すぐ新しい点へ移す（点が数十ミリ秒ごとに来るので、なめらかに動かすと
-                // 動き出すたびに次の点で止められて十数点ぶん遅れ、地図を拡大していると人が画面の外に置いていかれる）
-                val target = LatLng(last.lat, last.lng)
-                var shown by remember { mutableStateOf(target) }
-                LaunchedEffect(target) {
-                    if (playingDemo) {
-                        shown = target
-                        return@LaunchedEffect
+            if (firstPt != null) {
+                val startState = rememberMarkerState()
+                startState.position = LatLng(firstPt.lat, firstPt.lng)
+                val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+                MarkerComposable(Fieldbook.dark, tilt, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
+                    FlagMarker(StartFlagColor, tilt = tilt)
+                }
+            }
+            if (last != null) {
+                if (recording) {
+                    // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
+                    // 位置は、点から点へ飛ばさず、なめらかに動かす。
+                    // ただしデモ散歩の再生中は、地図と同じく、すぐ新しい点へ移す（点が数十ミリ秒ごとに来るので、なめらかに動かすと
+                    // 動き出すたびに次の点で止められて十数点ぶん遅れ、地図を拡大していると人が画面の外に置いていかれる）
+                    val target = LatLng(last.lat, last.lng)
+                    var shown by remember { mutableStateOf(target) }
+                    LaunchedEffect(target) {
+                        if (playingDemo) {
+                            shown = target
+                            return@LaunchedEffect
+                        }
+                        val from = shown
+                        animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
+                            shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
+                        }
                     }
-                    val from = shown
-                    animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
-                        shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
+                    // 黄色の人が歩いている向きを向いて歩き、まわりの三角がスマホの向いている方位を指す（デモ散歩の再生中は三角を出さない）
+                    HereMarker(
+                        at = shown,
+                        heading = heading,
+                        showPointer = !playingDemo,
+                        walking = true,
+                        walkingEast = movingEast(points),
+                        camera = cameraPositionState,
+                        facing = facing,
+                        zIndex = 5f,
+                    )
+                } else if (points.size >= 2) {
+                    // 止めたあと：最後の点に青い旗（ゴール）
+                    // （歩き始めの近くなら、左右を反転して左へ傾ける）
+                    val goalState = rememberMarkerState()
+                    goalState.position = LatLng(last.lat, last.lng)
+                    MarkerComposable(Fieldbook.dark, spread, state = goalState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
+                        FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
                     }
                 }
-                // 黄色の人が歩いている向きを向いて歩き、まわりの三角がスマホの向いている方位を指す（デモ散歩の再生中は三角を出さない）
+            }
+            // 記録していない間：今いる場所に止まった黄色の人と、向いている方位の三角。位置のずれの大きさを薄い青緑の円で
+            if (showIdleDot && idle != null) {
+                val here = LatLng(idle.lat, idle.lng)
+                if (idle.accuracyM > 0f) {
+                    Circle(
+                        center = here,
+                        radius = idle.accuracyM.toDouble(),
+                        fillColor = Pop.Teal.copy(alpha = 0.12f),
+                        strokeColor = Pop.Teal.copy(alpha = 0.35f),
+                        strokeWidth = 2f,
+                        zIndex = 3f,
+                    )
+                }
                 HereMarker(
-                    at = shown,
+                    at = here,
                     heading = heading,
-                    showPointer = !playingDemo,
-                    walking = true,
-                    walkingEast = movingEast(points),
+                    showPointer = true,
+                    walking = false,
+                    walkingEast = null,
                     camera = cameraPositionState,
                     facing = facing,
-                    zIndex = 5f,
+                    zIndex = 4.5f,
                 )
-            } else if (points.size >= 2) {
-                // 止めたあと：最後の点に青い旗（ゴール）
-                // （歩き始めの近くなら、左右を反転して左へ傾ける）
-                val goalState = rememberMarkerState()
-                goalState.position = LatLng(last.lat, last.lng)
-                MarkerComposable(Fieldbook.dark, spread, state = goalState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
-                    FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
+            }
+        }
+        // 右下の拡大・縮小のボタン（地図に付いているもの）のすぐ上に置く（Google マップの現在地のボタンと同じ並び）
+        HereButton(
+            ready = here != null || canAsk,
+            label = when {
+                here != null -> "今いる場所へ戻る"
+                canAsk -> "今いる場所へ戻る。位置の許可を聞きます"
+                else -> "今いる場所を調べています"
+            },
+            onClick = {
+                val target = here
+                if (target != null) {
+                    scope.launch {
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngZoom(LatLng(target.lat, target.lng), hereZoom(cameraPositionState.position.zoom)),
+                            HERE_ANIMATION_MS,
+                        )
+                    }
+                } else if (canAsk) {
+                    locationPermission.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
-            }
-        }
-        // 記録していない間：今いる場所に止まった黄色の人と、向いている方位の三角。位置のずれの大きさを薄い青緑の円で
-        if (showIdleDot && idle != null) {
-            val here = LatLng(idle.lat, idle.lng)
-            if (idle.accuracyM > 0f) {
-                Circle(
-                    center = here,
-                    radius = idle.accuracyM.toDouble(),
-                    fillColor = Pop.Teal.copy(alpha = 0.12f),
-                    strokeColor = Pop.Teal.copy(alpha = 0.35f),
-                    strokeWidth = 2f,
-                    zIndex = 3f,
-                )
-            }
-            HereMarker(
-                at = here,
-                heading = heading,
-                showPointer = true,
-                walking = false,
-                walkingEast = null,
-                camera = cameraPositionState,
-                facing = facing,
-                zIndex = 4.5f,
-            )
-        }
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = HERE_BUTTON_END, bottom = HERE_BUTTON_BOTTOM),
+        )
     }
 }
+
+/**
+ * 「今いる場所へ戻る」ボタンの置き場所（地図の右下の端から）。地図に付いている拡大・縮小のボタン（右から約 11dp・下から約 89dp まで）の
+ * すぐ上で、横のまん中をそろえる
+ */
+private val HERE_BUTTON_END = 6.dp
+private val HERE_BUTTON_BOTTOM = 96.dp
 
 /**
  * [at] に、今いる場所の黄色の人（[rememberWalkerIcon]）と、向いている方位の三角（[HeadingPointer]）を出す。
