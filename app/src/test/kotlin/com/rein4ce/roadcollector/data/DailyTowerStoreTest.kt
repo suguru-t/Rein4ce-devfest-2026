@@ -25,7 +25,7 @@ class DailyTowerStoreTest {
             DailyBlock(
                 part = Part(id = "p1", points = listOf(Pt(-0.5f, 0f), Pt(0.5f, 0f)), kind = Kind.BAR, distanceM = 400, walkedAt = 0L),
                 placement = Placement("p1", x = 0.1f, y = 0.05f, angleRad = 0f),
-                grip = Grip.DAMP,
+                grip = Grip.WET,
                 day = "2026-11-10",
             ),
         ),
@@ -55,5 +55,15 @@ class DailyTowerStoreTest {
         // 空から始めたあとも、積めば保存できる
         store.save(tower)
         assertTrue(file!!.contains("\"p1\""))
+    }
+
+    @Test
+    fun `前の名前の霧と霧雨のすべりやすさは、くもりと雨として読む（決定 73）`() = runTest {
+        store.save(tower)
+        // 天気を 4 つにまとめる前に保存した塔には、霧雨（DAMP）・霧（FOGGY）の名前が残っている
+        file = file!!.replace("\"WET\"", "\"DAMP\"")
+        assertEquals(Grip.WET, DailyTowerStore(read = { file }, write = {}, quarantine = { error("退避しない") }).load().blocks.single().grip)
+        file = file!!.replace("\"DAMP\"", "\"FOGGY\"")
+        assertEquals(Grip.CLOUDY, DailyTowerStore(read = { file }, write = {}, quarantine = { error("退避しない") }).load().blocks.single().grip)
     }
 }

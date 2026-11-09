@@ -19,10 +19,12 @@ import kotlin.math.sin
  * 歩いたときの天気のアイコン（天気アプリと同じ絵）。野帳の図の左上に、右上の北と対になるように描く。
  * 道の色（[Fieldbook.roadColors]）と同じ色を使って、道の色の意味（青は雨、水色は雪…）も一緒に分かるようにする。
  *
- * - 晴れ：太陽 ・ くもり：雲 ・ 霧：横に流れる線 ・ 霧雨：雲と短い雨 2 本 ・ 雨：雲と雨 3 本 ・ 雷雨：雲と稲妻 ・ 雪：雪の結晶
+ * - 晴れ：太陽 ・ くもり：雲 ・ 雨：雲と雨 3 本 ・ 雪：雪の結晶
+ * - 画面に出す天気は 4 つ（決定 73。`Sky.shown`）なので、霧はくもりの雲、霧雨と雷雨は雨と同じ絵にする
+ *   （前は霧の横に流れる線、霧雨の短い雨 2 本、雷雨の稲妻もあった）
  *
  * 雲は白っぽく塗って縁を濃い色で描き、雨・雪は道の色にする。
- * 線だけの絵（霧・雪の結晶）は、ライトでは濃い縁の色、ダークでは道の色にする（暗い紙の上で濃い色は見えないため）
+ * 線だけの絵（雪の結晶）は、ライトでは濃い縁の色、ダークでは道の色にする（暗い紙の上で濃い色は見えないため）
  *
  * @param center アイコンのまん中 [px]
  * @param size アイコンの一辺 [px]
@@ -44,37 +46,11 @@ internal fun DrawScope.drawWeatherIcon(sky: Sky, center: Offset, size: Float) {
             drawCircle(road, radius = 0.21f * s, center = center)
             drawCircle(casing, radius = 0.21f * s, center = center, style = edge)
         }
-        Sky.CLOUDY -> cloud(center, s, casing, dy = 0f)
-        Sky.FOG -> {
-            // 霧：横に流れる 3 本の線（長さと位置を少しずつずらす）
-            val w = 0.085f * s
-            drawLine(line, at(-0.42f, -0.2f), at(0.26f, -0.2f), strokeWidth = w, cap = StrokeCap.Round)
-            drawLine(line, at(-0.28f, 0f), at(0.42f, 0f), strokeWidth = w, cap = StrokeCap.Round)
-            drawLine(line, at(-0.42f, 0.2f), at(0.2f, 0.2f), strokeWidth = w, cap = StrokeCap.Round)
-        }
-        Sky.DRIZZLE -> {
-            cloud(center, s, casing, dy = -0.14f)
-            rain(at = ::at, xs = listOf(-0.1f, 0.12f), length = 0.13f, color = road, width = 0.075f * s)
-        }
-        Sky.RAIN -> {
+        // 画面に出す天気は 4 つ（決定 73）。霧はくもりの雲、霧雨と雷雨は雨の雲と雨粒
+        Sky.CLOUDY, Sky.FOG -> cloud(center, s, casing, dy = 0f)
+        Sky.RAIN, Sky.DRIZZLE, Sky.THUNDER -> {
             cloud(center, s, casing, dy = -0.14f)
             rain(at = ::at, xs = listOf(-0.2f, 0f, 0.2f), length = 0.2f, color = road, width = 0.08f * s)
-        }
-        Sky.THUNDER -> {
-            cloud(center, s, casing, dy = -0.16f)
-            // 稲妻：雲の下から斜めに折れて落ちる
-            val bolt = Path().apply {
-                moveTo(at(0.06f, 0.1f).x, at(0.06f, 0.1f).y)
-                lineTo(at(-0.1f, 0.32f).x, at(-0.1f, 0.32f).y)
-                lineTo(at(0.01f, 0.32f).x, at(0.01f, 0.32f).y)
-                lineTo(at(-0.07f, 0.5f).x, at(-0.07f, 0.5f).y)
-                lineTo(at(0.15f, 0.24f).x, at(0.15f, 0.24f).y)
-                lineTo(at(0.04f, 0.24f).x, at(0.04f, 0.24f).y)
-                lineTo(at(0.14f, 0.1f).x, at(0.14f, 0.1f).y)
-                close()
-            }
-            drawPath(bolt, Bolt)
-            drawPath(bolt, casing, style = Stroke(width = 0.045f * s, join = StrokeJoin.Round))
         }
         Sky.SNOW -> {
             // 雪の結晶：中心を通る 3 本の線（6 本の腕）と、それぞれの腕の先の小さな V
@@ -119,6 +95,3 @@ private fun DrawScope.rain(at: (Float, Float) -> Offset, xs: List<Float>, length
 
 /** 雲の白（ライトでもダークでも、雲だと分かる明るさ） */
 private val CloudFill = Color(0xFFF1F3F5)
-
-/** 稲妻の黄色 */
-private val Bolt = Color(0xFFFFC928)

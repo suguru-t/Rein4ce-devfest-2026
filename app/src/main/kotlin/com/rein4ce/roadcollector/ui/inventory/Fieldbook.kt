@@ -74,11 +74,12 @@ object Fieldbook {
      * 晴れ・天気が分からないときは、いつものオレンジ（[Road]）。
      * 白い紙片の上でも道の形が見えるよう、縁取りはどれも濃い色にする（雪の水色も、縁で形が分かる）
      */
-    fun roadColors(sky: Sky?): Pair<Color, Color> = when (sky) {
-        Sky.DRIZZLE, Sky.RAIN, Sky.THUNDER -> Color(0xFF3F7FC4) to Color(0xFF1B3A60)
+    fun roadColors(sky: Sky?): Pair<Color, Color> = when (sky?.shown) {
+        // 画面に出す 4 つの天気で決める（決定 73。霧はくもり、霧雨と雷雨は雨）
+        Sky.RAIN -> Color(0xFF3F7FC4) to Color(0xFF1B3A60)
         Sky.SNOW -> Color(0xFF8CCBEA) to Color(0xFF235777)
-        Sky.CLOUDY, Sky.FOG -> Color(0xFF8D959C) to Color(0xFF3B4247)
-        Sky.CLEAR, null -> Road to RoadCasing
+        Sky.CLOUDY -> Color(0xFF8D959C) to Color(0xFF3B4247)
+        else -> Road to RoadCasing
     }
     /** 測量の青。字やボタンの色。ボタンの地にも使い、その上の字は白（ダークでも白い字が読める明るさにしてある） */
     val Survey: Color get() = c(0xFF1F5FA8, 0xFF4A8BD6)

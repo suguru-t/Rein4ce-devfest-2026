@@ -43,6 +43,16 @@ class PartFilterTest {
     }
 
     @Test
+    fun `filtering by a shown weather also picks the weathers folded into it`() {
+        // 画面に出す天気は 4 つ（決定 73）：雨を選ぶと霧雨・雷雨の日も、くもりを選ぶと霧の日も入る
+        val many = mapOf("d" to Sky.DRIZZLE, "t" to Sky.THUNDER, "f" to Sky.FOG, "r" to Sky.RAIN, "k" to Sky.CLOUDY)
+        val parts = many.keys.map { id -> SampleParts.all.first().copy(id = id) }
+        fun ids(filter: PartFilter) = applyPartFilter(parts, filter, { many[it.id] }, emptySet()).map { it.id }
+        assertEquals(listOf("d", "t", "r"), ids(PartFilter(sky = Sky.RAIN)))
+        assertEquals(listOf("f", "k"), ids(PartFilter(sky = Sky.CLOUDY)))
+    }
+
+    @Test
     fun `only the usual order without narrowing allows reordering by hand`() {
         assertTrue(PartFilter().isDefault)
         assertFalse(PartFilter(sort = PartSort.OLDEST).isDefault)

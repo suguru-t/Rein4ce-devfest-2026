@@ -844,13 +844,11 @@ private fun BonusChip(grip: Grip, count: Int) {
     }
 }
 
-/** すべりやすさを、その元になった天気に戻す（札の色と名前に使う。雷雨は雨と同じすべりやすさなので「雨」） */
+/** すべりやすさを、その元になった天気（画面に出す 4 つ。決定 73）に戻す（札の色と名前に使う。霧はくもり、霧雨と雷雨は雨） */
 private val Grip.sky: Sky
     get() = when (this) {
         Grip.NORMAL -> Sky.CLEAR
         Grip.CLOUDY -> Sky.CLOUDY
-        Grip.FOGGY -> Sky.FOG
-        Grip.DAMP -> Sky.DRIZZLE
         Grip.WET -> Sky.RAIN
         Grip.ICY -> Sky.SNOW
     }

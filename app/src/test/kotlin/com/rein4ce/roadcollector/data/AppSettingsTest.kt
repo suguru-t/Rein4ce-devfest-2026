@@ -26,10 +26,27 @@ class AppSettingsTest {
         assertEquals(null, DemoSky.REAL.weather)
         AppSettings(store).setDemoSky(DemoSky.SNOW)
         assertEquals(DemoSky.SNOW, AppSettings(store).demoSky.value)
-        // 7 つの天気を全部選べる。晴れの夜は昼でない、満月は満月の時刻
-        assertEquals(Sky.entries.toSet(), DemoSky.entries.mapNotNull { it.weather?.sky }.toSet())
+        // 画面に出す 4 つの天気（晴れ・くもり・雨・雪。決定 73）を全部選べる。晴れの夜は昼でない、満月は満月の時刻
+        assertEquals(Sky.SHOWN.toSet(), DemoSky.entries.mapNotNull { it.weather?.sky }.toSet())
         assertEquals(false, DemoSky.CLEAR_NIGHT.weather!!.isDay)
         assertTrue(DemoSky.FULL_MOON.fullMoon && Moon.isFull(Moon.phase(DemoSky.FULL_MOON_TIME_MS)))
+    }
+
+    @Test
+    fun `a demo sky saved before the four weathers is read as the nearest one`() {
+        // 前は霧・霧雨・雷雨も選べた（決定 73 で外した）。霧はくもり、霧雨と雷雨は雨として読む
+        for ((old, now) in listOf("FOG" to DemoSky.CLOUDY, "DRIZZLE" to DemoSky.RAIN, "THUNDER" to DemoSky.RAIN)) {
+            val store = MapStore().apply { map["demo_sky"] = old }
+            assertEquals(now, AppSettings(store).demoSky.value)
+        }
+    }
+
+    @Test
+    fun `a weather filter saved before the four weathers is read as the shown weather`() {
+        val fog = MapStore().apply { map["part_sky"] = "FOG" }
+        assertEquals(Sky.CLOUDY, AppSettings(fog).partFilter.value.sky)
+        val thunder = MapStore().apply { map["part_sky"] = "THUNDER" }
+        assertEquals(Sky.RAIN, AppSettings(thunder).partFilter.value.sky)
     }
 
     @Test

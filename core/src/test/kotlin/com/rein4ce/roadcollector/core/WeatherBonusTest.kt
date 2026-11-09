@@ -17,7 +17,7 @@ class WeatherBonusTest {
 
     @Test
     fun `more slippery weather adds more`() {
-        val order = listOf(Grip.NORMAL, Grip.CLOUDY, Grip.FOGGY, Grip.DAMP, Grip.WET, Grip.ICY)
+        val order = listOf(Grip.NORMAL, Grip.CLOUDY, Grip.WET, Grip.ICY)
         // 晴れは何も足さず、滑りやすいほど多く足す
         assertEquals(0, Grip.NORMAL.bonusPercent)
         assertEquals(order.map { it.bonusPercent }.sorted(), order.map { it.bonusPercent })
@@ -34,10 +34,10 @@ class WeatherBonusTest {
 
     @Test
     fun `each part adds its own bonus and sunny parts add nothing`() {
-        val bonus = WeatherBonus.of(listOf(Grip.ICY, Grip.NORMAL, Grip.WET, Grip.ICY, Grip.NORMAL, Grip.DAMP))
-        // 雪 0.20 × 2 + 雨 0.10 + 霧雨 0.05
-        assertEquals(1.55, bonus.multiplier, 1e-9)
-        assertEquals(listOf(Grip.ICY to 2, Grip.WET to 1, Grip.DAMP to 1), bonus.entries)
+        val bonus = WeatherBonus.of(listOf(Grip.ICY, Grip.NORMAL, Grip.WET, Grip.ICY, Grip.NORMAL, Grip.CLOUDY))
+        // 雪 0.20 × 2 + 雨 0.10 + くもり 0.01
+        assertEquals(1.51, bonus.multiplier, 1e-9)
+        assertEquals(listOf(Grip.ICY to 2, Grip.WET to 1, Grip.CLOUDY to 1), bonus.entries)
     }
 
     @Test
