@@ -191,9 +191,9 @@ fun StackScreen(
             if (!isLoaded || (inventory.isNotEmpty() && vm.startMessage == null)) {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(8.dp))
-                Text("パーツを読み込み中…")
+                Text("道を読み込み中…")
             } else {
-                Text(vm.startMessage ?: "コレクションにパーツがありません")
+                Text(vm.startMessage ?: "コレクションに道がありません")
                 Spacer(Modifier.height(8.dp))
                 PopButton("コレクションへ", onClick = onGoInventory, face = Pop.OrangeDeep, text = Pop.Letter)
             }
@@ -490,7 +490,7 @@ private fun ResultCard(
         }
         Text(title, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink, textAlign = TextAlign.Center)
         Text(
-            "置いたパーツ ${result.usedCount} 個 ・ 台に残ったのは ${result.remainingCount} 個",
+            "置いた道 ${result.usedCount} 本 ・ 台に残ったのは ${result.remainingCount} 本",
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
             fontSize = 13.sp,
@@ -509,7 +509,7 @@ private fun ResultCard(
         }
         val reason = when {
             unresolved -> "塔が止まらず、高さを確定できないので、保存できません。もう一度試してください。"
-            result.remainingCount == 0 -> "台にパーツが残っていないので、保存できません。"
+            result.remainingCount == 0 -> "台に道が残っていないので、保存できません。"
             else -> null
         }
         reason?.let {
@@ -804,7 +804,7 @@ private fun BonusChip(grip: Grip, count: Int) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(road).border(1.dp, casing, CircleShape))
         Spacer(Modifier.width(5.dp))
         Text(
-            "${sky.label} $count 個 ${bonusText(grip.bonusPercent * count)}",
+            "${sky.label} $count 本 ${bonusText(grip.bonusPercent * count)}",
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
             fontSize = 12.sp,
@@ -823,11 +823,11 @@ private fun BonusChip(grip: Grip, count: Int) {
 internal fun walkedLines(walked: WalkDistance): List<String> = when {
     walked.walks > 0 -> listOfNotNull(
         "使った道：合計 %.2f km".format(Locale.JAPAN, walked.meters / 1000.0),
-        if (walked.others > 0) "見本・デモ・歩いた記録か確かめられないパーツ ${walked.others} 個は距離に含めていません" else null,
+        if (walked.others > 0) "見本・デモ・歩いた記録か確かめられない道 ${walked.others} 本は距離に含めていません" else null,
     )
     walked.others == 0 -> emptyList()
-    walked.unknown == 0 -> listOf("見本・デモのパーツなので、歩いた距離は出ません")
-    else -> listOf("歩いた記録か確かめられないパーツなので、歩いた距離は出ません")
+    walked.unknown == 0 -> listOf("見本・デモの道なので、歩いた距離は出ません")
+    else -> listOf("歩いた記録か確かめられない道なので、歩いた距離は出ません")
 }
 
 
@@ -888,15 +888,29 @@ private val COMPACT_HEIGHT = 600.dp
  */
 @Composable
 private fun PlacedAndFallen(placed: Int, fallen: Int, bonus: WeatherBonus.Result, compact: Boolean) {
-    val size = if (compact) with(LocalDensity.current) { 13.dp.toSp() } else 15.sp
+    val density = LocalDensity.current
+    fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
+    val size = if (compact) fixed(13f) else 15.sp
     Column(horizontalAlignment = Alignment.End) {
-        SkyText("置いた $placed 個", color = Fieldbook.Ink, fontSize = size)
-        // 2 行目：落ちたら「落下 ○ 個」。落ちるまでは、台の上に残っているパーツの天気のボーナス（決定 68）を「ボーナス ×1.30」と出す。
+        // 「置いた ○ 本」：数字はオレンジの大きな字、ほかは墨（毎日 1 つずつ積むの「○ 日ぶん」・90 秒チャレンジの残り時間と同じ形。決定 76）。
+        // 前は 15sp の 1 行の字で、ほかの画面の字より小さかった
+        val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier.clearAndSetSemantics { contentDescription = "置いた $placed 本" },
+        ) {
+            val unit = fixed(if (compact) 13f else 15f)
+            val bottom = if (compact) 3.dp else 5.dp
+            SkyText("置いた", color = Fieldbook.Ink, fontSize = unit, modifier = Modifier.padding(end = 4.dp, bottom = bottom))
+            SkyText("$placed", color = number, fontSize = fixed(if (compact) 24f else 30f), maxLines = 1, softWrap = false)
+            SkyText("本", color = Fieldbook.Ink, fontSize = unit, modifier = Modifier.padding(start = 4.dp, bottom = bottom))
+        }
+        // 2 行目：落ちたら「落下 ○ 本」。落ちるまでは、台の上に残っている道の天気のボーナス（決定 68）を「ボーナス ×1.30」と出す。
         // どちらも無いときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
         when {
-            fallen > 0 -> SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size)
+            fallen > 0 -> SkyText("落下 $fallen 本", color = FALLEN_RED, fontSize = size)
             bonus.active -> SkyText("ボーナス ${multiplierText(bonus.multiplier)}", color = Pop.TealLine, fontSize = size)
-            else -> SkyText("落下 0 個", color = FALLEN_RED, fontSize = size, modifier = Modifier.alpha(0f).clearAndSetSemantics {})
+            else -> SkyText("落下 0 本", color = FALLEN_RED, fontSize = size, modifier = Modifier.alpha(0f).clearAndSetSemantics {})
         }
     }
 }

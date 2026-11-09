@@ -129,7 +129,7 @@ class ChallengeViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { ChallengeRun(1, clock = { now }) })
-        vm.start(); vm.resume()
+        vm.start(); vm.finishCountdown(); vm.resume()
         val frame = vm.frame
         repeat(10) { now += 16_000_000; vm.tick() }
         assertSame(frame, vm.frame)
@@ -178,7 +178,7 @@ class ChallengeViewModelTest {
         runCurrent()
         assertEquals(ChallengeStyle.MANUAL, vm.style)
         assertEquals(listOf(ChallengeRules.ID), asked)
-        vm.start(); vm.resume()
+        vm.start(); vm.finishCountdown(); vm.resume()
         assertEquals(listOf(ChallengeStyle.MANUAL), styles)
         // 自分で落とす形は、狙っている間は下がらない（指を離すまで、出てくる高さで待つ）
         val start = vm.ghostY
@@ -190,5 +190,34 @@ class ChallengeViewModelTest {
         // 指を離す（place）と落ちる
         vm.place()
         assertEquals(ChallengeRun.Phase.FALLING, vm.frame!!.phase)
+    }
+
+    @Test fun `新しい回は「3・2・1」を数え終えるまで、動かす・回す・落とすを受け付けない（決定 75）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val now = 0L
+        val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { style -> ChallengeRun(1, style = style, clock = { now }) })
+        runCurrent()
+        vm.start()
+        assertTrue(vm.needsCountdown)
+        assertFalse(vm.canAim)
+        vm.showCountdown(3)
+        assertEquals(3, vm.countdown)
+        val before = vm.frame!!
+        vm.move(0.3); vm.rotate(30.0); vm.place()
+        assertEquals("数えている間は何も変わらない", before, vm.frame)
+        // 数え終えたら、時計を動かして（画面の時計のループと同じ）、操作できる
+        vm.finishCountdown(); vm.resume()
+        assertEquals(0, vm.countdown)
+        assertFalse(vm.needsCountdown)
+        assertTrue(vm.canAim)
+        vm.move(0.3)
+        assertEquals(0.3, vm.frame!!.x, 1e-9)
+        // やり直すと、新しい回なので、また数える
+        vm.restart()
+        assertTrue(vm.needsCountdown)
+        // 画面を離れたら、数えていた途中でも消す
+        vm.showCountdown(2)
+        vm.leave()
+        assertEquals(0, vm.countdown)
     }
 }

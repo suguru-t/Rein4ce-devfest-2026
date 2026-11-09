@@ -436,7 +436,7 @@ class StackViewModel(
         /** ゴーストを台の端からどこまで外へ動かせるか [m] */
         const val DRAG_MARGIN_M = 0.8
 
-        const val MESSAGE_COLLECTION_EMPTY = "コレクションにパーツがありません。"
+        const val MESSAGE_COLLECTION_EMPTY = "コレクションに道がありません。"
 
         /** 1 ゲームでチェンジできる回数（[change]） */
         const val CHANGES_PER_GAME = 3

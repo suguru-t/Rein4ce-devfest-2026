@@ -21,7 +21,7 @@ class WalkedLinesTest {
     @Test
     fun `ほかのパーツが混ざっていれば、数えなかったことを 2 行目に`() {
         assertEquals(
-            listOf("使った道：合計 0.50 km", "見本・デモ・歩いた記録か確かめられないパーツ 3 個は距離に含めていません"),
+            listOf("使った道：合計 0.50 km", "見本・デモ・歩いた記録か確かめられない道 3 本は距離に含めていません"),
             walkedLines(WalkDistance(meters = 500, walks = 1, others = 3, unknown = 1)),
         )
     }
@@ -30,11 +30,11 @@ class WalkedLinesTest {
     fun `見本とデモだけで積んだら、合計 0 km は出さずに 1 行だけ`() {
         // 発表は見本とデモで積むので、毎回「合計 0.00 km」が出て失敗したように見えないように（#87 のレビュー）
         assertEquals(
-            listOf("見本・デモのパーツなので、歩いた距離は出ません"),
+            listOf("見本・デモの道なので、歩いた距離は出ません"),
             walkedLines(WalkDistance(meters = 0, walks = 0, others = 5, unknown = 0)),
         )
         assertEquals(
-            listOf("歩いた記録か確かめられないパーツなので、歩いた距離は出ません"),
+            listOf("歩いた記録か確かめられない道なので、歩いた距離は出ません"),
             walkedLines(WalkDistance(meters = 0, walks = 0, others = 5, unknown = 2)),
         )
     }

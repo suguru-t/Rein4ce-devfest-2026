@@ -151,7 +151,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     leading(compact)
                     Spacer(Modifier.weight(1f))
-                    SkyText("${vm.tower.days} 日ぶん", color = Fieldbook.Ink, fontSize = 15.sp)
+                    DailyDays(vm.tower.days, compact)
                 }
                 DailyHeight(vm.height, compact)
             }
@@ -269,6 +269,24 @@ private fun TodayChoices(todays: List<Part>, colorsOf: (Part) -> PieceColors, on
 @Composable
 private fun Note(text: String) {
     SkyText(text, color = Fieldbook.Ink, fontSize = 14.sp, textAlign = TextAlign.Center)
+}
+
+/**
+ * 積んだ日数（「12 日ぶん」）。数字はオレンジの大きな太い丸ゴシック、「日ぶん」は墨（90 秒チャレンジの残り時間と同じ形）。
+ * 前は 15sp の 1 行の字で小さかった（B の希望で大きくした）。大きさは dp で決め、文字の大きさの設定では大きくしない（上の行に収めるため）
+ */
+@Composable
+private fun DailyDays(days: Int, compact: Boolean) {
+    val density = LocalDensity.current
+    fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
+    val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = "$days 日ぶん" },
+    ) {
+        SkyText("$days", color = number, fontSize = fixed(if (compact) 24f else 30f), maxLines = 1, softWrap = false)
+        SkyText("日ぶん", color = Fieldbook.Ink, fontSize = fixed(if (compact) 13f else 15f), modifier = Modifier.padding(start = 4.dp, bottom = if (compact) 3.dp else 5.dp))
+    }
 }
 
 /** 塔の高さ：「塔の高さ」と、大きな数字と「m」（ふつうの積む画面の高さと同じ形。dp で決め、文字の大きさの設定では大きくしない） */
