@@ -34,6 +34,18 @@ SOURCES = [
     APP / "ui/common/Pop.kt",
     # ホームのボタン（画面の名前と一言）
     APP / "ui/HomeScreen.kt",
+    # ホームの見出しの下の一言（「歩いた道を、積み上げよう」。開いたときのタイトルと同じ文）
+    APP / "ui/TitleIntro.kt",
+    # 設定の窓と使い方（項目の名前・今の設定・見出し。決定 56）と、設定の選択肢の名前（画面の明るさ・天気の動き・曲・デモの天気）
+    APP / "ui/settings/SettingsDialog.kt",
+    APP / "ui/settings/HowToContent.kt",
+    APP / "data/AppSettings.kt",
+    # 積む画面の情報の字（高さ・残り・落下・歩いた道の大きさ・置き方の一言。決定 59）
+    APP / "ui/game/StackScreen.kt",
+    # 名前を付ける窓（「保存」「AI に考えてもらう」。パーツの名前とニックネーム）
+    APP / "ui/common/NameField.kt",
+    # 積む画面のモードを選ぶ画面（画面名「みちをつむ」・モードの名前と一言・記録・「‹ 戻る」）
+    APP / "ui/game/ModeSelect.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）

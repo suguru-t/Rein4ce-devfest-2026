@@ -51,6 +51,7 @@ object TrackToPart {
         params: ConversionParams = ConversionParams.DEFAULT,
         id: String = newId(),
         walkedAt: Long = points.lastOrNull()?.timeMs ?: 0L,
+        startedAt: Long? = points.firstOrNull()?.timeMs?.takeIf { it > 0L },
     ): Result {
         val filtered = TrackFilter.filter(points, params.maxAccuracyM, params.minStepM, params.maxSpeedMps)
         if (filtered.size < 2) return tooFewOrTooFast(points, filtered.size, params)
@@ -106,9 +107,10 @@ object TrackToPart {
             epsilonM = epsilon,
             fastestMps = fastest,
         )
-        // 歩いた場所：形の中心（バウンディングボックスの中心）を緯度・経度に戻す。長辺の長さはパーツの 1.0 にあたる
+        // 歩いた場所：形の中心（バウンディングボックスの中心）を緯度・経度に戻す。長辺の長さはパーツの 1.0 にあたる。
+        // 歩き始めた時刻も一緒に持つ（パーツの天気は、歩き始めたときの天気にする。決定 55）
         val (centerLat, centerLng) = Projection.toLatLng(filtered.first(), XY(bbox.centerX, bbox.centerY))
-        val place = PartPlace(lat = centerLat, lng = centerLng, sizeM = longSide)
+        val place = PartPlace(lat = centerLat, lng = centerLng, sizeM = longSide, startedAt = startedAt)
         return Result.Success(part, stats, place)
     }
 

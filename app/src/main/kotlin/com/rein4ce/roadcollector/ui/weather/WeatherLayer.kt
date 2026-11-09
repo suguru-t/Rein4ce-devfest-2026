@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Duration.Companion.minutes
 
 /** 背景の天気を決めるときの、いま見ている画面 */
-enum class BackdropScreen { HOME, COLLECT, COLLECTION, GALLERY, OTHER }
+enum class BackdropScreen { HOME, COLLECT, COLLECTION, STACK, GALLERY, OTHER }
 
 /**
  * コレクションで大きく見ているパーツの id（見ていなければ null）。コレクションの画面が入れて、背景の天気がそれを見る。
@@ -35,10 +35,10 @@ object BackdropFocus {
  * - **コレクション**：一覧では、採集と同じ今の天気。カードを押して大きく見ている間だけ、そのパーツを歩いたときの天気
  *   （その道を歩いた日の空は、大きく見たときの楽しみにする。分からないパーツなら、その間は何も降らせない）
  * - **みんな**：採集と同じ今の天気（タワーを歩いたときの天気はサーバに無いので、今の天気を出す）
- * - **積む**：降らせない
+ * - **積む**：モードを選ぶ画面でも遊んでいる間も、採集と同じ今の天気。積み木（塗りつぶし）は天気の上に描くので、雨や雪の粒が積み木に重なって見えることはない（決定 59）
  *
  * 設定（ホームの歯車）の「背景の天気の動き」で、なめらか・ふつう・止める・出さないを選べる。
- * 設定の「デモの天気」（発表用）を選んでいると、今の天気の代わりに（ホーム・記録・みんな・コレクションの一覧）、選んだ天気を出す（満月を選ぶと、どの画面の月も満月）。
+ * 設定の「デモの天気」（発表用）を選んでいると、今の天気の代わりに（ホーム・記録・積む（選ぶ画面と遊ぶ画面）・みんな・コレクションの一覧）、選んだ天気を出す（満月を選ぶと、どの画面の月も満月）。
  * 記録中（デモ再生中も）は、どの画面でも止まった絵にする。記録中は採集画面を開いたまま歩くことが多く、GPS と一緒に電池を使い続けないため。
  *
  * 方眼紙（`fieldbookGrid`）の上、画面の部品の下に敷く（AppNav）。
@@ -57,7 +57,7 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
 
     val showsCurrent = screen != BackdropScreen.OTHER
     if (showsCurrent) {
-        // ホーム・採集・コレクション・みんなを行き来しても聞き直しは増えない（WeatherService が 15 分以内なら聞き直さない）
+        // ホーム・採集・コレクション・積む・みんなを行き来しても聞き直しは増えない（WeatherService が 15 分以内なら聞き直さない）
         LaunchedEffect(Unit) {
             while (true) {
                 service.refreshCurrent()
@@ -70,7 +70,7 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     val shownId = if (screen == BackdropScreen.COLLECTION) focus else null
     val weather = when (screen) {
         // 今の天気。「デモの天気」を選んでいれば、本当の天気の代わりにそれを出す
-        BackdropScreen.HOME, BackdropScreen.COLLECT, BackdropScreen.GALLERY -> demo.weather ?: current
+        BackdropScreen.HOME, BackdropScreen.COLLECT, BackdropScreen.STACK, BackdropScreen.GALLERY -> demo.weather ?: current
         BackdropScreen.COLLECTION -> if (shownId != null) repository.weatherOf(shownId, saved) else demo.weather ?: current
         BackdropScreen.OTHER -> null
     }

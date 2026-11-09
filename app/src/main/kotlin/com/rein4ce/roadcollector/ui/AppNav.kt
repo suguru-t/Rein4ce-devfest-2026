@@ -44,7 +44,7 @@ import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
-import com.rein4ce.roadcollector.ui.game.StackModes
+import com.rein4ce.roadcollector.ui.game.StackTab
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import com.rein4ce.roadcollector.ui.settings.HowToDialog
@@ -150,6 +150,7 @@ fun AppNav(collectRequests: Int = 0) {
                 null, HOME_ROUTE -> BackdropScreen.HOME
                 Dest.Collect.route -> BackdropScreen.COLLECT
                 Dest.Inventory.route -> BackdropScreen.COLLECTION
+                Dest.Stack.route -> BackdropScreen.STACK
                 Dest.Gallery.route -> BackdropScreen.GALLERY
                 else -> BackdropScreen.OTHER
             }
@@ -179,8 +180,8 @@ fun AppNav(collectRequests: Int = 0) {
                 }
                 composable(Dest.Stack.route) {
                     TabPage(tabPadding, onBack = ::backHome) {
-                        // 積むタブは「通常」と「3分チャレンジ」を切り替える（ui/game/ChallengeScreen.kt の StackModes）
-                        StackModes(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) })
+                        // まずモードを選ぶ画面。選んだら、そのモードの画面（通常なら積む画面）になる（ui/game/ModeSelect.kt）
+                        StackTab(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) })
                     }
                 }
                 composable(Dest.Gallery.route) {
