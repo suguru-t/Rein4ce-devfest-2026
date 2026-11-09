@@ -598,18 +598,10 @@ private fun StackCanvas(
         }
     }
 
-    // 模型の高さの目盛。「みんな」の断面図の標尺（TowerSection）と同じ字と色にする：太い丸ゴシック 9dp（図の一部なので、
-    // 文字の大きさの設定では大きくしない）、「1m」。キャンバスの左端に重ねて描くので、塔の大きさは目盛が無いときと同じ
+    // 模型の高さの目盛（HeightRuler.kt。毎日 1 つずつ積む・90 秒チャレンジと同じ）。キャンバスの左端に重ねて描くので、塔の大きさは目盛が無いときと同じ
     val density = LocalDensity.current
-    val rulerInk = Fieldbook.Muted
-    val rulerMark = Fieldbook.Mark
-    val rulerGrid = Fieldbook.GridMajor
-    val rulerStyle = remember(rulerInk, density) {
-        TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 9.dp.toSp() }, color = rulerInk)
-    }
+    val ruler = rememberHeightRuler()
     val textMeasurer = rememberTextMeasurer()
-    // 目盛の字は「0m」〜「99m」くらいしか出ないので、測った結果を覚えておき、カメラが動いている間も毎コマ測り直さない
-    val rulerLabels = remember(rulerStyle) { HashMap<String, TextLayoutResult>() }
     // 天気のボーナスの札（「雪 +0.20」。決定 68）：紙の面に、道の天気の色の縁と丸（置く前のすべりやすさの札と同じ色）。字は太い丸ゴシックの墨
     val tagInk = Fieldbook.Ink
     val tagFace = Fieldbook.Card
@@ -644,7 +636,7 @@ private fun StackCanvas(
         fun sy(y: Double) = viewport.toScreenY(y.toFloat())
 
         // 目盛（塔と同じ変換なので、カメラが上がっても引いても塔の高さとずれない）。パーツの下になるように先に描く
-        drawHeightRuler(viewport, rulerMark, rulerGrid) { text -> rulerLabels.getOrPut(text) { textMeasurer.measure(text, rulerStyle) } }
+        drawHeightRuler(viewport, ruler)
 
         // 落下ライン
         drawLine(
@@ -743,42 +735,6 @@ private fun BonusBanner(show: BonusShowState, compact: Boolean, modifier: Modifi
 }
 
 /**
- * 模型の高さの目盛を、キャンバスの左端に重ねて描く。「みんな」の断面図の標尺（TowerSection）と同じ形：
- * 縦の線の左に「1m」の字と短い目盛り、右へ伸びる薄い点線。20 cm の細かい目盛りは、間が空くときだけ（[heightTicks]）。
- * 縦の線は台の上面（0 m）から上だけ（台が下に外れているときは、キャンバスの下の端から）
- *
- * @param label 目盛りの字を測った結果（同じ字は覚えておいたものを使う）
- */
-private fun DrawScope.drawHeightRuler(
-    viewport: StackViewport,
-    mark: Color,
-    grid: Color,
-    label: (String) -> TextLayoutResult,
-) {
-    val staffX = RULER_STAFF_DP.dp.toPx()
-    val labelGap = maxOf(28.dp.toPx(), label("0m").size.height * 1.5f)
-    val ticks = heightTicks(viewport, minorGapPx = 8.dp.toPx(), labelGapPx = labelGap)
-    if (ticks.isEmpty()) return
-    val bottom = min(size.height, viewport.toScreenY(0f))
-    if (bottom > 0f) drawLine(mark, Offset(staffX, 0f), Offset(staffX, bottom), 1.dp.toPx())
-    val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx()))
-    for (tick in ticks) {
-        val y = tick.screenY
-        val text = tick.label
-        if (text == null) {
-            drawLine(mark, Offset(staffX - 2.dp.toPx(), y), Offset(staffX, y), 1.dp.toPx())
-            continue
-        }
-        drawLine(mark, Offset(staffX - 4.dp.toPx(), y), Offset(staffX, y), 1.dp.toPx())
-        // 1 m ごとの薄い点線。台の上面（0 m）には台があるので引かない
-        if (tick.meters > 0f) drawLine(grid, Offset(staffX, y), Offset(size.width, y), 1.dp.toPx(), pathEffect = dash)
-        val layout = label(text)
-        val top = (y - layout.size.height / 2f).coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f))
-        drawText(layout, topLeft = Offset(staffX - 6.dp.toPx() - layout.size.width, top))
-    }
-}
-
-/**
  * 終わりのカードの天気のボーナス（決定 68）。
  * - ボーナスが付いた：「天気ボーナス ×1.30」と、積んだままの高さから大きくしたあとの高さ、天気ごとの数と足した分の札（「● 雨 3 個 +0.30」。
  *   頭の丸は、置く前の「雨の日の道 ・ すべりやすい」の札と同じ天気の色）
@@ -874,8 +830,6 @@ internal fun walkedLines(walked: WalkDistance): List<String> = when {
     else -> listOf("歩いた記録か確かめられないパーツなので、歩いた距離は出ません")
 }
 
-/** 目盛の縦の線の位置（キャンバスの左端から）[dp]。断面図の標尺の幅と同じ */
-private const val RULER_STAFF_DP = 30f
 
 /**
  * 画面名「みちをつむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、押すと動く。

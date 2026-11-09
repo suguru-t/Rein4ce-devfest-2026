@@ -86,7 +86,8 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  */
 enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
     NORMAL("通常", "次々に出るパーツを、落とすまで積む", ready = true),
-    CHALLENGE("3 分チャレンジ", "3 分のあいだに、ピースを高く積む", ready = true),
+    // 前は 3 分チャレンジ。90 秒にした（決定 75）
+    CHALLENGE("90 秒チャレンジ", "90 秒のあいだに、ピースを高く積む", ready = true),
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
 }
 

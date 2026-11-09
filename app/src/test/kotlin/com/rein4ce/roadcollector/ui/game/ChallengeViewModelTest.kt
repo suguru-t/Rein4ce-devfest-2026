@@ -84,18 +84,18 @@ class ChallengeViewModelTest {
             ChallengeRun(runs.toLong(), clock = { now })
         })
         vm.start(); vm.resume(); now += 30_000_000_000; vm.tick()
-        assertEquals(150, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS - 30, vm.remainingSeconds)
         val generation = vm.generation
         vm.restart()
         assertEquals(2, runs)
         assertTrue(vm.generation > generation)
         assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
 
         vm.leave()
         assertNull(vm.frame)
         assertTrue(vm.shapes.isEmpty())
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
         runCurrent()
         assertEquals(0, writes)
         assertTrue(vm.canStart)
@@ -121,7 +121,7 @@ class ChallengeViewModelTest {
         vm.start()
         assertEquals(2, runs)
         assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
     }
 
     @Test fun `何も起きないコマではフレームを変えず、残り時間は秒が変わったときだけ変える`() = runTest {
@@ -133,9 +133,9 @@ class ChallengeViewModelTest {
         val frame = vm.frame
         repeat(10) { now += 16_000_000; vm.tick() }
         assertSame(frame, vm.frame)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
         now += 1_000_000_000; vm.tick()
-        assertEquals(179, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS - 1, vm.remainingSeconds)
         vm.move(0.1)
         assertNotEquals(frame, vm.frame)
     }

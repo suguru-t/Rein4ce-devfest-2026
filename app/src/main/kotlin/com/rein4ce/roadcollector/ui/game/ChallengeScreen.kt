@@ -64,6 +64,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
 import com.rein4ce.roadcollector.core.model.Part
@@ -89,7 +90,7 @@ import java.util.Locale
 
 
 /**
- * 3分チャレンジの画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
+ * 90 秒チャレンジ（前は 3 分チャレンジ。決定 75）の画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
  *
  * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 69）。遊び方は自分で落とすだけ
  *   （通常のモードと同じく、ドラッグして指を離すと落ちる。自動で落ちるはやめた）
@@ -254,7 +255,8 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 private fun NextPiece(next: Part, compact: Boolean) {
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    val icon = if (compact) 30.dp else 40.dp
+    // 形が分かるように大きめに（決定 75。前は 40dp・小さい画面で 30dp）
+    val icon = if (compact) 40.dp else 56.dp
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.clearAndSetSemantics { contentDescription = "次の形 ${next.name ?: ""}" },
@@ -314,6 +316,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
     val platform = if (dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
+    // 模型の高さの目盛（通常のモードと同じ。HeightRuler.kt。決定 75）
+    val ruler = rememberHeightRuler()
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val target = StackViewport.follow(canvasSize.width.toFloat(), canvasSize.height.toFloat(), frame.cameraTop.toFloat())
     val cameraY = remember(vm.generation) { Animatable(0f) }
@@ -361,6 +365,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
     ) {
         val viewport = StackViewport(size.width, size.height, zoom = 1f, cameraY = cameraY.value)
         fun at(x: Double, y: Double) = Offset(viewport.toScreenX(x.toFloat()), viewport.toScreenY(y.toFloat()))
+        // 目盛（塔と同じ変換なので、視点が上がっても塔の高さとずれない）。形の下になるように先に描く
+        drawHeightRuler(viewport, ruler)
         // 落下ライン（通常のモードと同じ。ここより下に落ちた形は消える）
         drawLine(guide, Offset(0f, viewport.toScreenY(-1.5f)), Offset(size.width, viewport.toScreenY(-1.5f)), strokeWidth = 2f)
         for (shape in vm.shapes) {
@@ -380,7 +386,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
         }
         if (frame.phase == ChallengeRun.Phase.AIMING) {
             // 狙っている形の高さ（vm.ghostY）は描画の中だけで読む。自分で落とすときは出てくる高さのまま
-            drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale, Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
+            // 置いたときと同じ大きさ（1.4 倍。決定 75）
+            drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale * ChallengeRules.PIECE_SCALE.toFloat(), Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
         }
     }
 }
@@ -480,12 +487,12 @@ private fun SaveState(vm: ChallengeViewModel) {
 }
 
 /**
- * この端末の記録（3分チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
+ * この端末の記録（90 秒チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
  * 遊べるのは自分で落とすだけなので、その決まりの記録だけを出す（決定 69。ほかの決まりの記録は消さずに残っている）
  */
 @Composable
 private fun Records(ranking: List<ChallengeScore>, highlight: String?) {
-    Text("この端末の記録（3分チャレンジ）", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Fieldbook.Ink)
+    Text("この端末の記録（90 秒チャレンジ）", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Fieldbook.Ink)
     if (ranking.isEmpty()) {
         Text("まだ記録がありません", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
         return

@@ -319,6 +319,8 @@ private fun TodayPartCard(part: Part, colors: PieceColors, width: Dp, onClick: (
 @Composable
 private fun DailyCanvas(vm: DailyViewModel, colorsOf: (Part) -> PieceColors, modifier: Modifier = Modifier) {
     val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
+    // 塔の高さの目盛（通常のモードと同じ。HeightRuler.kt。決定 75）
+    val ruler = rememberHeightRuler()
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val target = when (val camera = vm.camera) {
         is CameraTarget.Follow -> StackViewport.follow(canvasSize.width.toFloat(), canvasSize.height.toFloat(), camera.top)
@@ -357,6 +359,8 @@ private fun DailyCanvas(vm: DailyViewModel, colorsOf: (Part) -> PieceColors, mod
         val viewport = StackViewport(size.width, size.height, zoom.value, cameraY.value)
         fun sx(x: Double) = viewport.toScreenX(x.toFloat())
         fun sy(y: Double) = viewport.toScreenY(y.toFloat())
+        // 目盛（塔と同じ変換なので、視点が上がっても塔の高さとずれない）。積み木の下になるように先に描く
+        drawHeightRuler(viewport, ruler)
         // 積み木は、天気と時間帯の色で塗り、自分の色を暗くした線で囲む（通常の積む画面と同じ。決定 74）
         val outlinePx = PIECE_OUTLINE_DP.dp.toPx()
         drawWorldShapes(vm.shapes, platform, outlinePx, { sx(it) }, { sy(it) }, viewport.scale, colorsOf)
