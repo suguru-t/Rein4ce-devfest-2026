@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -43,7 +44,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -57,6 +61,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
+import com.rein4ce.roadcollector.core.challenge.ChallengeStyle
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.rankOf
@@ -92,7 +97,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChallengeViewModel(ChallengeStorage(directory)::update) as T
+                ChallengeStorage(directory).let { storage -> ChallengeViewModel(storage::update, loadRecords = storage::ranking) } as T
         }
     }
     val vm: ChallengeViewModel = viewModel(factory = factory)
@@ -283,7 +288,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             }
         }
         if (frame.phase == ChallengeRun.Phase.AIMING) {
-            drawPart(frame.current, at(frame.x, frame.spawnY), viewport.scale, Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
+            // 狙っている形の高さは、自動で落ちるときは毎コマ下がるので、描画の中だけで読む（vm.ghostY）
+            drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale, Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
         }
     }
 }
@@ -359,7 +365,7 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame) {
             Spacer(Modifier.height(12.dp))
             PressButton(onClick = { vm.start() }, enabled = vm.canStart) { Text("もう一度") }
             Spacer(Modifier.height(8.dp))
-            Records(vm.ranking, highlight = score?.runId)
+            Records(vm.ranking, highlight = score?.runId, style = vm.style)
         }
     }
 }
@@ -388,7 +394,16 @@ private fun ChallengeIntro(vm: ChallengeViewModel) {
         Text("3分チャレンジ", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.height(8.dp))
         Text(
-            "3 分間で、決まった 5 種類の形をどれだけ高く積めるか。◀▶ と回転で狙って「置く」。画面を離れると一時停止します。",
+            "3 分間で、決まった 5 種類の形をどれだけ高く積めるか。画面を離れると一時停止します。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(16.dp))
+        StylePicker(vm.style, onPick = vm::selectStyle)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            vm.style.description,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
@@ -397,14 +412,15 @@ private fun ChallengeIntro(vm: ChallengeViewModel) {
         PressButton(onClick = { vm.start() }, enabled = vm.canStart) { Text("3分チャレンジを始める") }
         SaveState(vm)
         Spacer(Modifier.height(16.dp))
-        Records(vm.ranking, highlight = null)
+        Records(vm.ranking, highlight = null, style = vm.style)
     }
 }
 
 /** この端末の記録（3分チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ */
 @Composable
-private fun Records(ranking: List<ChallengeScore>, highlight: String?) {
-    Text("この端末の記録（3分チャレンジ）", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+private fun Records(ranking: List<ChallengeScore>, highlight: String?, style: ChallengeStyle) {
+    // 自分で落とすと自動で落ちるは、決まりが違うので記録を分けて出す（決定 65）
+    Text("この端末の記録（3分チャレンジ・${style.label}）", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
     if (ranking.isEmpty()) {
         Text("まだ記録がありません", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
         return
@@ -417,6 +433,42 @@ private fun Records(ranking: List<ChallengeScore>, highlight: String?) {
             fontWeight = if (mine) FontWeight.Bold else null,
             color = if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
         )
+    }
+}
+
+/** 遊び方の名前（選ぶボタンと、記録の見出し） */
+private val ChallengeStyle.label: String
+    get() = when (this) {
+        ChallengeStyle.MANUAL -> "自分で落とす"
+        ChallengeStyle.AUTO -> "自動で落ちる"
+    }
+
+/** 遊び方の説明（始める前の画面） */
+private val ChallengeStyle.description: String
+    get() = when (this) {
+        ChallengeStyle.MANUAL -> "◀▶ と回転で狙って「置く」で落とす。"
+        ChallengeStyle.AUTO -> "形が少しずつ下がってくる。下がっている間に ◀▶ と回転で合わせ、塔か台に触れたら落ちる（「置く」ですぐ落とせる）。"
+    }
+
+/**
+ * 遊び方を選ぶ 2 つのボタン（自分で落とす・自動で落ちる）。選んでいる方は色の付いたボタン、もう一方は枠だけ。
+ * 読み上げでも、どちらを選んでいるか分かるようにする（Role.RadioButton）
+ */
+@Composable
+private fun StylePicker(selected: ChallengeStyle, onPick: (ChallengeStyle) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
+        ChallengeStyle.entries.forEach { style ->
+            val chosen = style == selected
+            val modifier = Modifier.semantics {
+                this.selected = chosen
+                role = Role.RadioButton
+            }
+            if (chosen) {
+                PressButton(onClick = {}, modifier = modifier) { Text(style.label) }
+            } else {
+                PressOutlinedButton(onClick = { onPick(style) }, modifier = modifier) { Text(style.label) }
+            }
+        }
     }
 }
 
