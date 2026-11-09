@@ -24,13 +24,25 @@ import kotlin.math.min
  * 4. 大きくなったら、札を薄くして消す（[TAG_FADE_MS]。上の倍率と終わりのカードは残る）
  *
  * 札の間隔は、全部で [TAGS_TOTAL_MS] に収まるようにし、[MIN_TAG_MS]〜[MAX_TAG_MS] にする（多いと速く、少ないとゆっくり）。
+ * 前は間隔を 0.15 秒より短くしなかったので、ボーナスの付いたパーツが多いと長くなっていた（くもりの道 60 個で約 12 秒。#125 の C のレビュー）。
+ * 倍率が上限（[WeatherBonus.MAX_MULTIPLIER]）に届いたら、そこから先の札は出さない（足しても倍率が変わらないため）。
  * 時刻はミリ秒で、見せ始めてからの時間
  *
- * @param marks 札を出すパーツの数
  * @param percents 札 1 つずつの足す分 [百分の一]（出す順）
  */
 internal class BonusTimeline(private val percents: List<Int>) {
-    val marks: Int get() = percents.size
+    /** 出す札の数（倍率が上限に届いた札まで） */
+    val marks: Int = run {
+        val capPercent = ((WeatherBonus.MAX_MULTIPLIER - 1.0) * 100).toInt()
+        var sum = 0
+        var count = 0
+        for (p in percents) {
+            if (sum >= capPercent) break
+            sum += p
+            count++
+        }
+        count
+    }
 
     /** 札と札の間 [ms] */
     val tagIntervalMs: Long = if (marks == 0) 0L else (TAGS_TOTAL_MS / marks).coerceIn(MIN_TAG_MS, MAX_TAG_MS)
@@ -54,6 +66,7 @@ internal class BonusTimeline(private val percents: List<Int>) {
      * [t] のときの [i] 番目の札の大きさ（0〜1。出るときに少し大きくなってから戻る、ポンと出る動き）
      */
     fun tagPop(i: Int, t: Long): Float {
+        if (i >= marks) return 0f
         val p = ((t - tagStartMs(i)).toFloat() / TAG_POP_MS).coerceIn(0f, 1f)
         if (p <= 0f) return 0f
         // 0 → 1.15 → 1
@@ -79,7 +92,7 @@ internal class BonusTimeline(private val percents: List<Int>) {
 
         /** 札を全部出すのにかける時間の目安 */
         const val TAGS_TOTAL_MS = 1800L
-        const val MIN_TAG_MS = 150L
+        const val MIN_TAG_MS = 16L
         const val MAX_TAG_MS = 450L
 
         /** 札がポンと出る動きの時間 */
@@ -134,9 +147,14 @@ internal class BonusShowState(
 internal fun rememberBonusShow(vm: StackViewModel): BonusShowState {
     val result = vm.result
     val timeline = remember(result) { BonusTimeline(result?.bonusMarks.orEmpty().map { it.grip.bonusPercent }) }
-    val clock = remember(result) { Animatable(0f) }
     var shownRun by rememberSaveable { mutableStateOf(-1L) }
     val reduceMotion = rememberReduceMotion()
+    // 見せ終わった回（タブを行き来して戻ったとき）と、動きを減らす設定では、時計を終わりの時刻から始める。
+    // 0 から始めると、最初の 1 コマだけ大きくする前の塔が出て、カードの内訳がもう一度浮かび上がっていた（#125 の C のレビュー）
+    val clock = remember(result) {
+        val done = result != null && (shownRun == vm.runId || reduceMotion)
+        Animatable(if (done) timeline.totalMs.toFloat() else 0f)
+    }
     LaunchedEffect(result) {
         if (result == null || !result.bonus.active) return@LaunchedEffect
         val end = timeline.totalMs.toFloat()

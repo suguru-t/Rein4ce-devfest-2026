@@ -14,13 +14,23 @@ import androidx.compose.ui.input.pointer.positionChange
  * - [onDrag] は、横に動いた量 [px]（右が +）。キャンバスの変換（StackViewport）で m に直すのは呼ぶ側
  * - [onRelease] は、指を離したとき。落とすかどうか（狙っている間だけ・自動で落ちるときは落とさない等）は呼ぶ側が決める
  * - 2 本目の指は見ない（最初の指だけ）。指が取り消された（画面の端からのジェスチャーなど）ときは落とさない
+ * - 指を置いた時点で狙える状態（[canAim]）でなければ、その指では動かさず、離しても落とさない。前のパーツが落ちている間に指を置き、
+ *   次のパーツが出てから離すと、狙わずに出てきた位置で落ちていたため（#125 の C のレビュー）。指をいったん離して置き直せば狙える
  *
  * @param key これが変わったら、ジェスチャーを受け付け直す（ゲームの作り直しなど）
+ * @param canAim いま狙っているか（指を置いたときに 1 回だけ見る）。ジェスチャーは作り直さないので、いつも今の状態を読む関数にする
  */
-internal fun Modifier.aimByDrag(key: Any?, onDrag: (dxPx: Float) -> Unit, onRelease: () -> Unit): Modifier =
+internal fun Modifier.aimByDrag(
+    key: Any?,
+    canAim: () -> Boolean,
+    onDrag: (dxPx: Float) -> Unit,
+    onRelease: () -> Unit,
+): Modifier =
     pointerInput(key) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            // 狙えないときに置いた指は、離すまで見ない（awaitEachGesture は、指が全部離れてから次を待つ）
+            if (!canAim()) return@awaitEachGesture
             val id = down.id
             while (true) {
                 val event = awaitPointerEvent()

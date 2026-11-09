@@ -321,6 +321,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             .onSizeChanged { canvasSize = it }
             .aimByDrag(
                 key = vm.generation,
+                canAim = { vm.frame?.phase == ChallengeRun.Phase.AIMING },
                 onDrag = { dx ->
                     val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom = 1f, cameraY = cameraY.value)
                     val n = steps.add(viewport.dragToMeters(dx).toDouble())

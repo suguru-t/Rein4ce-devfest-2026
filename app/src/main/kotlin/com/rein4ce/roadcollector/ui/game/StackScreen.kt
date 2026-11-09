@@ -602,6 +602,7 @@ private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease
             // 横にドラッグして狙い、指を離すと落とす（決定 67。ui/game/AimGestures.kt）。落とすのは狙っている間だけ（VM の place が見る）
             .aimByDrag(
                 key = vm,
+                canAim = { vm.phase == StackViewModel.Phase.Placing },
                 onDrag = { dx ->
                     // 描くときと同じ変換（いまのキャンバスの大きさとカメラ）で m に直す
                     val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom.value, cameraY.value)
