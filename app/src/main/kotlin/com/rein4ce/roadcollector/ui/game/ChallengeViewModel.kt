@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.ui.game
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
+import com.rein4ce.roadcollector.core.challenge.ChallengeStyle
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import kotlinx.coroutines.CancellationException
@@ -46,7 +48,9 @@ data class ChallengeFrame(
  */
 class ChallengeViewModel(
     private val updateRecords: suspend (ChallengeScore?) -> List<ChallengeScore>,
-    private val newRun: () -> ChallengeRun = { ChallengeRun(Random.nextLong()) },
+    private val newRun: (ChallengeStyle) -> ChallengeRun = { ChallengeRun(Random.nextLong(), style = it) },
+    /** [ChallengeStyle] ごとの記録を読む（決まりの ID）。渡さなければ、自分で落とすの記録（テスト） */
+    private val loadRecords: suspend (String) -> List<ChallengeScore> = { updateRecords(null) },
 ) : ViewModel() {
     private var run: ChallengeRun? = null
 
@@ -64,6 +68,18 @@ class ChallengeViewModel(
 
     /** 残り時間 [秒]（切り上げ）。秒が変わったときだけ変わる */
     var remainingSeconds by mutableIntStateOf(FULL_SECONDS)
+        private set
+
+    /**
+     * 遊び方（自分で落とす・自動で落ちる。#45・決定 65）。始める前の画面で選ぶ。記録の一覧もこれで分ける
+     */
+    var style by mutableStateOf(ChallengeStyle.MANUAL)
+        private set
+
+    /**
+     * いま狙っている形の高さ [m]。自動で落ちるときは毎コマ下がるので、フレーム（[frame]）には入れず、キャンバスの描画の中だけで読む
+     */
+    var ghostY by mutableFloatStateOf(0f)
         private set
 
     var ranking by mutableStateOf<List<ChallengeScore>>(emptyList())
@@ -98,10 +114,18 @@ class ChallengeViewModel(
         refreshRecords()
     }
 
+    /** 遊び方を選ぶ（始める前だけ）。記録の一覧を、その遊び方のものに読み直す */
+    fun selectStyle(next: ChallengeStyle) {
+        if (frame != null || next == style) return
+        style = next
+        ranking = emptyList()
+        load()
+    }
+
     fun start() {
         if (!canStart) return
         run?.pause()
-        run = newRun()
+        run = newRun(style)
         generation++
         publishFrame()
     }
@@ -162,6 +186,7 @@ class ChallengeViewModel(
     private fun publishFrame() {
         val r = run ?: return
         shapes = r.shapes
+        ghostY = r.ghostY.toFloat()
         remainingSeconds = ((r.remainingNs + NS_PER_SECOND - 1) / NS_PER_SECOND).toInt()
         frame = ChallengeFrame(r.phase, r.current, r.next, r.x, r.angle, r.spawnY, r.cameraTop, r.towerHeight, r.score)
         val score = r.score
@@ -179,7 +204,7 @@ class ChallengeViewModel(
         saveError = false
         viewModelScope.launch {
             try {
-                val records = updateRecords(null)
+                val records = loadRecords(style.ruleId)
                 if (request == operation) ranking = records
             } catch (e: CancellationException) {
                 throw e
