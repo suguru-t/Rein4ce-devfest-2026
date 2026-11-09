@@ -204,4 +204,62 @@ class ChallengeRunTest {
         assertNotEquals(first, run.current.id)
         assertNull(run.score)
     }
+
+    @Test fun `自動で落ちる：狙っている間も下がっていき、台に触れたら「置く」を押さなくても落ちる`() {
+        var now = 0L
+        val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
+        val run = ChallengeRun(1, style = ChallengeStyle.AUTO, clock = { now }, world = physics)
+        run.resume()
+        val start = run.ghostY
+        repeat(10) { now += 50_000_000; run.tick() }
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        assertEquals("0.5 秒で 0.2 m 下がる", start - 0.2, run.ghostY, 1e-6)
+        // 下がっている間は、台にも置いたパーツにも重ならない
+        var landed = false
+        repeat(200) {
+            now += 50_000_000; run.tick()
+            if (run.phase == ChallengeRun.Phase.AIMING) assertFalse(physics.overlaps(run.current, run.x, run.ghostY, Math.toRadians(run.angle)))
+            if (run.phase == ChallengeRun.Phase.FALLING) landed = true
+        }
+        assertTrue("台に触れて、物理で落ちた", landed)
+        assertTrue("塔に積まれた", run.towerHeight > 0.0)
+    }
+
+    @Test fun `自動で落ちる：台の外を下がったら、台の下で落として次の形へ`() {
+        var now = 0L
+        val run = ChallengeRun(1, style = ChallengeStyle.AUTO, clock = { now })
+        run.resume()
+        val first = run.current.id
+        repeat(20) { run.move(0.1) } // 台（幅 1.4 m）の外まで寄せる
+        assertEquals(ChallengeRun.MOVE_LIMIT_M, run.x, 1e-9)
+        var ticks = 0
+        while (run.current.id == first && ticks < 400) { now += 50_000_000; run.tick(); ticks++ }
+        assertNotEquals("落ちて、次の形に進んだ", first, run.current.id)
+        assertEquals("台には何も残っていない", 0.0, run.towerHeight, 1e-9)
+    }
+
+    @Test fun `自動で落ちる：「置く」でその場からすぐ落とせる・記録は別の決まりの ID`() {
+        var now = 0L
+        val run = ChallengeRun(5, style = ChallengeStyle.AUTO, clock = { now }, wallClock = { 42 })
+        run.resume()
+        repeat(5) { now += 50_000_000; run.tick() }
+        val y = run.ghostY
+        assertTrue(y < run.spawnY)
+        assertTrue(run.place())
+        assertEquals(ChallengeRun.Phase.FALLING, run.phase)
+        now = ChallengeRules.DURATION_NS; run.tick()
+        repeat(200) { now += 50_000_000; run.tick() }
+        assertTrue(run.terminal)
+        run.score?.let { assertEquals(ChallengeRules.AUTO_ID, it.rule) }
+        assertNotEquals(ChallengeRules.ID, ChallengeRules.AUTO_ID)
+    }
+
+    @Test fun `自分で落とすときは、狙っている間は下がらない`() {
+        var now = 0L
+        val run = ChallengeRun(1, clock = { now })
+        run.resume()
+        repeat(100) { now += 50_000_000; run.tick() }
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        assertEquals(run.spawnY, run.ghostY, 0.0)
+    }
 }

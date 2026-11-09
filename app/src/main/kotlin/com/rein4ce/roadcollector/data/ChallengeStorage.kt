@@ -19,35 +19,43 @@ class ChallengeStorage(private val directory: File) {
     suspend fun update(score: ChallengeScore?): List<ChallengeScore> =
         withContext(if (score == null) Dispatchers.IO else Dispatchers.IO + NonCancellable) {
             synchronized(fileLock) {
-                val records = ChallengeRecords(
-                    read = {
-                        try {
-                            file.openRead().bufferedReader().use { it.readText() }
-                        } catch (e: FileNotFoundException) {
-                            // 無ければ空。あるのに開けないファイルは上書きしない
-                            if (file.baseFile.exists()) throw e
-                            null
-                        }
-                    },
-                    write = { text ->
-                        val stream = file.startWrite()
-                        try {
-                            stream.write(text.toByteArray(Charsets.UTF_8))
-                            file.finishWrite(stream)
-                        } catch (e: Exception) {
-                            file.failWrite(stream)
-                            throw e
-                        }
-                    },
-                    // 読めない中身は消さずに別の名前で残し（あとで中を見られるように）、空から始める
-                    quarantine = {
-                        val broken = File(directory, "challenge_records.broken-${System.currentTimeMillis()}.json")
-                        if (!file.baseFile.renameTo(broken)) file.delete()
-                    },
-                )
+                val records = open()
                 if (score == null) records.ranking(ChallengeRules.ID) else records.add(score)
             }
         }
+
+    /** [rule] の決まりの記録を、高い順に読む（「自分で落とす」と「自動で落ちる」で分ける。決定 65） */
+    suspend fun ranking(rule: String): List<ChallengeScore> =
+        withContext(Dispatchers.IO) { synchronized(fileLock) { open().ranking(rule) } }
+
+    private fun open(): ChallengeRecords {
+        return ChallengeRecords(
+            read = {
+                try {
+                    file.openRead().bufferedReader().use { it.readText() }
+                } catch (e: FileNotFoundException) {
+                    // 無ければ空。あるのに開けないファイルは上書きしない
+                    if (file.baseFile.exists()) throw e
+                    null
+                }
+            },
+            write = { text ->
+                val stream = file.startWrite()
+                try {
+                    stream.write(text.toByteArray(Charsets.UTF_8))
+                    file.finishWrite(stream)
+                } catch (e: Exception) {
+                    file.failWrite(stream)
+                    throw e
+                }
+            },
+            // 読めない中身は消さずに別の名前で残し（あとで中を見られるように）、空から始める
+            quarantine = {
+                val broken = File(directory, "challenge_records.broken-${System.currentTimeMillis()}.json")
+                if (!file.baseFile.renameTo(broken)) file.delete()
+            },
+        )
+    }
 
     private companion object {
         val fileLock = Any()
