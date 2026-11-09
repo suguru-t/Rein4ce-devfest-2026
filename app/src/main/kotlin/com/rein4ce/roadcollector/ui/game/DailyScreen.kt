@@ -150,11 +150,13 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                     DailyViewModel.Phase.Viewing -> when {
                         vm.placedToday -> Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
                         !vm.canPlaceToday -> Note(
-                            "今日の道は ${DailyTower.MAX_RETRIES} 回置き直しても、台に残りませんでした。あしたまた、その日に歩いた道を 1 つ積めます",
+                            // 文の切れ目で改行する（そのままだと「あ／したまた」のように語の途中で折り返していた）
+                            "今日の道は ${DailyTower.MAX_RETRIES} 回置き直しても、台に残りませんでした。\nあしたまた、その日に歩いた道を 1 つ積めます",
                         )
                         todays.isEmpty() -> Note("今日歩いた道がまだありません。歩いて道を集めると（デモ散歩でも）、1 つ積めます")
                         else -> {
-                            if (vm.fallsToday > 0) Note("今日は台から ${vm.fallsToday} 回落ちました（置き直しは 1 日 ${DailyTower.MAX_RETRIES} 回まで）")
+                            if (vm.fallsToday > 0) // 1 行に収まるように短く（前は「今日は…（置き直しは 1 日 3 回まで）」で、最後の 2 字だけ次の行に落ちていた）
+                            Note("台から ${vm.fallsToday} 回落ちました（置き直しは ${DailyTower.MAX_RETRIES} 回まで）")
                             Note("今日歩いた道から 1 つ選んで積みましょう（1 日に 1 つ）")
                             TodayChoices(todays, onPick = { part -> vm.choose(part, gripOf(part)) })
                         }
