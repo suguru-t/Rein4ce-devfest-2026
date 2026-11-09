@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.ui.inventory
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -11,6 +12,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopButton
@@ -97,13 +99,18 @@ internal fun rememberWalkReplay(): WalkReplay {
  * 押すたびに字が入れ替わるので、読み上げでも今できることが分かる
  */
 @Composable
-internal fun ReplayButton(replay: WalkReplay, modifier: Modifier = Modifier) {
+internal fun ReplayButton(
+    replay: WalkReplay,
+    modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+) {
     PopButton(
         label = if (replay.playing) "立ち止まる" else "もう一度歩く",
         onClick = { if (replay.playing) replay.stop() else replay.play() },
         face = Pop.TealDeep,
         text = Pop.Letter,
         fontSize = 15.sp,
+        padding = padding,
         modifier = modifier,
     )
 }

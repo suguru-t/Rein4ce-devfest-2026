@@ -55,6 +55,10 @@ private val POP_CORNER = 18.dp
  *   （「みんな」の断面図の名札の台と同じ考え方）。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
  * @param backdrop 枠の紙の上・見出しと中身の下に敷くもの（`Modifier.matchParentSize()` で枠いっぱいに敷く）。
  *   コレクションの拡大表示で、そのパーツを歩いた日の天気を降らせるのに使う。中身を動かしても、敷いたものは動かない
+ * @param footer あれば、枠の中のいちばん下に、中身とは別に置くもの（ボタンなど）。中身が長くて動かすときも、ここは動かず
+ *   いつも見える（小さい画面や文字を大きくしている人の画面で、ボタンが枠の下に隠れないように）。コレクションの拡大表示で使う
+ * @param scrollContent false なら中身を動かさず（スクロールしない）、枠に入る高さまでを中身に渡す。
+ *   中身の側で、入る大きさに縮める（コレクションの拡大表示：小さい画面では図を小さくして、注記もボタンも 1 画面に入れる）
  */
 @Composable
 fun FramedDialog(
@@ -64,6 +68,8 @@ fun FramedDialog(
     onBack: (() -> Unit)? = null,
     pop: Boolean = false,
     backdrop: (@Composable BoxScope.() -> Unit)? = null,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
+    scrollContent: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -123,11 +129,21 @@ fun FramedDialog(
                     val scroll = remember(title) { ScrollState(0) }
                     Column(
                         modifier = Modifier
-                            .verticalScroll(scroll)
+                            // 見出しと下に置くもの（footer）を先に測り、残りの高さで中身を動かす
+                            .weight(1f, fill = false)
+                            .then(if (scrollContent) Modifier.verticalScroll(scroll) else Modifier)
                             // 左右・下は 24dp。上は、中身の最初の見出しや行の上の余白と合わせて 24dp ほどになるように
-                            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 24.dp),
+                            // （下に置くものがあれば、下の余白はそちらに付ける）
+                            .padding(start = 24.dp, end = 24.dp, top = 14.dp, bottom = if (footer != null) 0.dp else 24.dp),
                         content = content,
                     )
+                    if (footer != null) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
+                            content = footer,
+                        )
+                    }
                 }
             }
             // 枠の下の丸いボタン：ふつうは「×」で閉じる。戻る先があるときは「＜」で戻る

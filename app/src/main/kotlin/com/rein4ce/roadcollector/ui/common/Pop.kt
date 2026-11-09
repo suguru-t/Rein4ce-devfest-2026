@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -143,6 +145,7 @@ internal fun Modifier.popBlock(face: Color, corner: Dp = 12.dp, depth: Dp = 4.dp
  * @param text    字の色（押せるとき）
  * @param edge    縁取り（白い面に色の縁の、二番手のボタン）
  * @param enabled false なら押せない。面は灰色・字は薄い色・縁なしにする（押せないボタンの見た目を、使う所ごとに書かないように）
+ * @param padding 面の内側の余白（狭い所に 2 つ並べるときに、字を 1 行に入れやすくするため左右を狭くする）
  */
 @Composable
 internal fun PopButton(
@@ -155,6 +158,7 @@ internal fun PopButton(
     fontSize: TextUnit = 16.sp,
     enabled: Boolean = true,
     corner: Dp = 14.dp,
+    padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
 ) {
     val source = remember { MutableInteractionSource() }
     Box(
@@ -164,7 +168,7 @@ internal fun PopButton(
             .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .popBlock(face = if (enabled) face else Fieldbook.GridMajor, corner = corner, edge = if (enabled) edge else null)
             .heightIn(min = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(padding),
     ) {
         Text(
             label,
@@ -173,6 +177,9 @@ internal fun PopButton(
             fontSize = fontSize,
             color = if (enabled) text else Fieldbook.Muted,
             maxLines = 2,
+            // 文字を大きくして 2 行になるときは、言葉の切れ目（「もう一度」「歩く」）で折り返して、まん中にそろえる
+            textAlign = TextAlign.Center,
+            style = noteStyle,
         )
     }
 }
