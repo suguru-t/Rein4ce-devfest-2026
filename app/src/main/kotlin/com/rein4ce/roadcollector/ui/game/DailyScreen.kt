@@ -275,6 +275,7 @@ private fun DailyCanvas(vm: DailyViewModel, modifier: Modifier = Modifier) {
             .semantics { contentDescription = "毎日 1 つずつ積む塔。高さ %.2f メートル".format(vm.height) }
             .aimByDrag(
                 key = vm,
+                canAim = { vm.phase == DailyViewModel.Phase.Aiming },
                 onDrag = { dx ->
                     val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom.value, cameraY.value)
                     vm.dragBy(viewport.dragToMeters(dx))

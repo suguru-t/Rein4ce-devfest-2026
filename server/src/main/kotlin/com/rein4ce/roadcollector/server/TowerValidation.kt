@@ -33,8 +33,12 @@ const val OWNER_HEADER = "X-Owner-Id"
 const val MIN_PLATFORM_WIDTH = 0.5f
 const val MAX_PLATFORM_WIDTH = 10f
 
-/** 座標・高さ・太さの上限。台の幅は 1.4 m、5 本積んでも数 m。これを超える値は壊れたデータ */
-const val MAX_COORDINATE = 100f
+/**
+ * 座標・高さ・太さの上限 [m]。これを超える値は壊れたデータ。
+ * 通常は終わりなく積み（決定 62）、終わったときに天気のボーナスで塔ごと最大 3 倍に大きくする（決定 68）ので、
+ * 前の 100 m では、元の塔が 33 m を超えると送れなかった。300 m にして、元の塔が 100 m まで送れるようにした（#125 の C のレビュー）
+ */
+const val MAX_COORDINATE = 300f
 
 /**
  * パーツの大きさ（Placement.scale）の範囲。アプリは歩いた距離で 0.7〜1.4 倍（PartSize）にするが、

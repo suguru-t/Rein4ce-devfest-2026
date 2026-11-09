@@ -409,7 +409,7 @@ class StackViewModelTest {
             newResponse.complete(TowerCreated("new", "https://example.test/new"))
             runCurrent()
             assertFalse(vm.uploading)
-            assertEquals("送信しました：https://example.test/new", vm.uploadMessage)
+            assertEquals("保存しました：https://example.test/new", vm.uploadMessage)
         } finally {
             Dispatchers.resetMain()
         }
@@ -462,7 +462,7 @@ class StackViewModelTest {
             runCurrent()
             assertFalse(vm.uploaded)
             assertFalse(vm.uploading)
-            assertEquals("送信できませんでした（https://server.test）：offline", vm.uploadMessage)
+            assertEquals("保存できませんでした（https://server.test）：offline", vm.uploadMessage)
             vm.upload()
             runCurrent()
             assertEquals(2, calls)
