@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -46,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -146,6 +148,8 @@ internal fun Modifier.popBlock(face: Color, corner: Dp = 12.dp, depth: Dp = 4.dp
  * @param edge    縁取り（白い面に色の縁の、二番手のボタン）
  * @param enabled false なら押せない。面は灰色・字は薄い色・縁なしにする（押せないボタンの見た目を、使う所ごとに書かないように）
  * @param padding 面の内側の余白（狭い所に 2 つ並べるときに、字を 1 行に入れやすくするため左右を狭くする）
+ * @param reserveLabels 押すと字が入れ替わるボタンで、入れ替わる字（[label] も含めてよい）。どの字でもボタンの大きさが
+ *   変わらないよう、いちばん大きい字の分の場所を取っておく（見えない・読み上げない字を重ねる）
  */
 @Composable
 internal fun PopButton(
@@ -159,6 +163,7 @@ internal fun PopButton(
     enabled: Boolean = true,
     corner: Dp = 14.dp,
     padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+    reserveLabels: List<String> = emptyList(),
 ) {
     val source = remember { MutableInteractionSource() }
     Box(
@@ -170,18 +175,31 @@ internal fun PopButton(
             .heightIn(min = 48.dp)
             .padding(padding),
     ) {
-        Text(
-            label,
-            fontFamily = Pop.Rounded,
-            fontWeight = FontWeight.Black,
-            fontSize = fontSize,
-            color = if (enabled) text else Fieldbook.Muted,
-            maxLines = 2,
-            // 文字を大きくして 2 行になるときは、言葉の切れ目（「もう一度」「歩く」）で折り返して、まん中にそろえる
-            textAlign = TextAlign.Center,
-            style = noteStyle,
-        )
+        // 入れ替わるほかの字の分の場所（見えない・読み上げない）。字が変わっても、ボタンと並ぶ段の高さが変わらないように
+        for (other in reserveLabels) {
+            if (other != label) {
+                PopButtonLabel(other, fontSize, Color.Transparent, Modifier.alpha(0f).clearAndSetSemantics {})
+            }
+        }
+        PopButtonLabel(label, fontSize, if (enabled) text else Fieldbook.Muted)
     }
+}
+
+/** [PopButton] の字 */
+@Composable
+private fun PopButtonLabel(label: String, fontSize: TextUnit, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        label,
+        fontFamily = Pop.Rounded,
+        fontWeight = FontWeight.Black,
+        fontSize = fontSize,
+        color = color,
+        maxLines = 2,
+        // 文字を大きくして 2 行になるときは、言葉の切れ目（「もう一度」「歩く」）で折り返して、まん中にそろえる
+        textAlign = TextAlign.Center,
+        style = noteStyle,
+        modifier = modifier,
+    )
 }
 
 /**

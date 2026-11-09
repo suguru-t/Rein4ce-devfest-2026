@@ -14,6 +14,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -66,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -80,6 +84,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -640,7 +645,7 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
         title = part.displayName,
         onDismiss = onDismiss,
         pop = true,
-        // 中身は動かさず、図の大きさで枠に収める（下の BoxWithConstraints）
+        // 枠の中の高さを中身に渡して、図の大きさで枠に収める（入りきらないときだけ、中身の側でスクロールする。FitFigureLayout）
         scrollContent = false,
         // 歩いたときの天気を、窓の紙（図のまわり）にも降らせる。背景の天気は、窓とまわりの暗い幕で見えにくいため。
         // 図（地図と道）はふさがない
@@ -669,74 +674,121 @@ private fun ZoomDialog(part: Part, place: PartPlace?, weather: WalkWeather?, onR
             }
         },
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            // 図は正方形で、ふつうは枠の幅いっぱい。窓に入りきらないとき（小さい画面や、文字を大きくしている人の画面）は、
-            // 下の注記と、枠の下のボタンが見えるよう、残りの高さに入るまで図を小さくする（枠の中はスクロールしない）
-            BoxWithConstraints(
-                contentAlignment = Alignment.TopCenter,
-                modifier = Modifier.weight(1f, fill = false).fillMaxWidth(),
-            ) {
-                // 図の一辺。[strip] は図の下の Google のロゴの帯（地図を敷くときだけ）
-                fun side(strip: Dp): Dp =
-                    if (constraints.hasBoundedHeight) minOf(maxWidth, maxOf(maxHeight - strip - FIGURE_DEPTH, MIN_FIGURE)) else maxWidth
-                // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
-                // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
-                val mapPlace = place?.takeIf {
-                    BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = side(MAP_LOGO_STRIP_DP.dp).value)
-                }
-                val side = side(if (mapPlace != null) MAP_LOGO_STRIP_DP.dp else 0.dp)
-                Box(
-                    modifier = Modifier
-                        .width(side)
-                        .popBlock(face = Fieldbook.Card, corner = CARD_CORNER, depth = FIGURE_DEPTH, edge = Fieldbook.CardEdge)
-                        .clip(RoundedCornerShape(CARD_CORNER)),
-                ) {
-                    if (mapPlace != null) {
-                        // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
-                        // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
-                        PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
-                    }
-                    Column {
-                        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-                            // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
-                            if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
-                            // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
-                            FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
+        // 図と、その下の注記。図は正方形で、ふつうは枠の幅いっぱい。窓に入りきらないとき（小さい画面や、文字を大きくしている人の画面）は、
+        // 注記と枠の下のボタンが見えるよう、残りの高さに入るまで図を小さくする（FitFigureLayout）。
+        // 小さくする限り（MIN_FIGURE）まで縮めても入らないとき（文字をとても大きくしたときなど）だけ、中身をスクロールさせる
+        // （図を最小のまま押し込むと、注記に重なって読めなくなるため。#97 の A のレビュー）
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            FitFigureLayout(
+                // 枠の中で、中身に使える高さ（FramedDialog の scrollContent = false で、見出しとボタンを引いた残り）
+                viewport = if (constraints.hasBoundedHeight) constraints.maxHeight else Constraints.Infinity,
+                minFigure = MIN_FIGURE + MAP_LOGO_STRIP_DP.dp + FIGURE_DEPTH,
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                figure = {
+                    BoxWithConstraints(contentAlignment = Alignment.TopCenter, modifier = Modifier.fillMaxWidth()) {
+                        // 図の一辺：渡された高さ（FitFigureLayout が、注記を引いた残りを渡す）に入る大きさ。
+                        // [strip] は図の下の Google のロゴの帯（地図を敷くときだけ）
+                        fun side(strip: Dp): Dp =
+                            if (constraints.hasBoundedHeight) minOf(maxWidth, maxOf(maxHeight - strip - FIGURE_DEPTH, MIN_FIGURE)) else maxWidth
+                        // 図の背景に地図を敷くのは、歩いた場所が分かっていて、地図のキーがあり、図と同じ縮尺まで地図を
+                        // 拡大できるときだけ（とても短い散歩は、地図をいちばん拡大しても合わない）。無ければ今までどおり紙だけ
+                        val mapPlace = place?.takeIf {
+                            BuildConfig.MAPS_API_KEY.isNotBlank() && mapCanMatch(it, figureDp = side(MAP_LOGO_STRIP_DP.dp).value)
                         }
-                        if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                        val side = side(if (mapPlace != null) MAP_LOGO_STRIP_DP.dp else 0.dp)
+                        Box(
+                            modifier = Modifier
+                                .width(side)
+                                .popBlock(face = Fieldbook.Card, corner = CARD_CORNER, depth = FIGURE_DEPTH, edge = Fieldbook.CardEdge)
+                                .clip(RoundedCornerShape(CARD_CORNER)),
+                        ) {
+                            if (mapPlace != null) {
+                                // 地図は図と同じ縮尺・位置（PlaceMap.kt）。道・見当・北・縮尺はその上に重ねる。
+                                // 図の下に細い帯を足して、Google のロゴを道や縮尺に隠されない場所に置く
+                                PlaceMap(mapPlace, belowDp = MAP_LOGO_STRIP_DP, modifier = Modifier.matchParentSize())
+                            }
+                            Column {
+                                Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                                    // 図の範囲だけ紙の色を半分透かして重ね、地図をうすくする（下の帯の Google のロゴにはかけない）
+                                    if (mapPlace != null) Box(Modifier.matchParentSize().background(Fieldbook.Paper.copy(alpha = MAP_FADE)))
+                                    // なぞるところは図の描き直しの中だけで読む（毎コマ、窓の中身全体を組み立て直さないように）
+                                    FieldbookPart(part, modifier = Modifier.matchParentSize(), sky = weather?.sky, trace = { replay.frame })
+                                }
+                                if (mapPlace != null) Spacer(Modifier.height(MAP_LOGO_STRIP_DP.dp))
+                            }
+                        }
                     }
-                }
+                },
+                below = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.height(6.dp))
+                        // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
+                        // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
+                        // 再生している間は、この行に何倍速かを出す（図の中に出すと旗や道にかかる。注記は見えなくするだけで場所は残し、
+                        // 下の「止める」ボタンが動かないようにする）
+                        val speed = replaySpeed(part.distanceM)
+                        val showSpeed = replay.playing && speed != null
+                        Box(contentAlignment = Alignment.Center) {
+                            WalkNote(
+                                distanceM = part.distanceM,
+                                date = if (isSample) "見本" else walkDate(part.walkedAt),
+                                weather = weather?.sky?.label,
+                                // 再生中は見えなくするだけでなく、読み上げからも外す（見えている「約 ○ 倍速」とそろえる。#94 の A のレビュー）
+                                modifier = Modifier
+                                    .graphicsLayer { alpha = if (showSpeed) 0f else 1f }
+                                    .then(if (showSpeed) Modifier.clearAndSetSemantics {} else Modifier),
+                            )
+                            if (showSpeed) {
+                                // 行の大きさは注記で決め、倍速の字では変えない（字の高さが少し違うので、再生を始めると
+                                // 図の大きさが 1px 動いていた。#97 の A のレビュー）
+                                Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "約 $speed 倍速",
+                                        fontFamily = Fieldbook.Data,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Fieldbook.Survey,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.wrapContentSize(unbounded = true),
+                                    )
+                                }
+                            }
+                        }
+                        // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
+                        if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
+ * 拡大表示の図（[figure]）と、その下の注記（[below]）を縦に並べる。注記を先に測り、図には [viewport] から注記を引いた残りの高さを
+ * 最大として渡す（図の側で、その高さに入る大きさにする）。残りが [minFigure] より少なければ [minFigure] を渡すので、全体は
+ * [viewport] より高くなる（外側のスクロールで見る）
+ */
+@Composable
+private fun FitFigureLayout(
+    viewport: Int,
+    minFigure: Dp,
+    figure: @Composable () -> Unit,
+    below: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(contents = listOf(figure, below), modifier = modifier) { (figureParts, belowParts), constraints ->
+        val width = constraints.maxWidth
+        val belowPlaced = belowParts.map { it.measure(Constraints(maxWidth = width)) }
+        val belowHeight = belowPlaced.sumOf { it.height }
+        val room = if (viewport == Constraints.Infinity) Constraints.Infinity else maxOf(viewport - belowHeight, minFigure.roundToPx())
+        val figurePlaced = figureParts.map { it.measure(Constraints(maxWidth = width, maxHeight = room)) }
+        layout(width, figurePlaced.sumOf { it.height } + belowHeight) {
+            var y = 0
+            (figurePlaced + belowPlaced).forEach {
+                it.place((width - it.width) / 2, y)
+                y += it.height
             }
-            Spacer(Modifier.height(6.dp))
-            // 歩いた長さ・日付・天気（記録のあとの窓・カードと同じ形。ui/common/WalkNote）。
-            // 歩いたときの天気が分かっていれば、字でも出す（道の色だけでは分からない人もいるので）
-            // 再生している間は、この行に何倍速かを出す（図の中に出すと旗や道にかかる。注記は見えなくするだけで場所は残し、
-            // 下の「止める」ボタンが動かないようにする）
-            val speed = replaySpeed(part.distanceM)
-            val showSpeed = replay.playing && speed != null
-            Box(contentAlignment = Alignment.Center) {
-                WalkNote(
-                    distanceM = part.distanceM,
-                    date = if (isSample) "見本" else walkDate(part.walkedAt),
-                    weather = weather?.sky?.label,
-                    // 再生中は見えなくするだけでなく、読み上げからも外す（見えている「約 ○ 倍速」とそろえる。#94 の A のレビュー）
-                    modifier = Modifier
-                        .graphicsLayer { alpha = if (showSpeed) 0f else 1f }
-                        .then(if (showSpeed) Modifier.clearAndSetSemantics {} else Modifier),
-                )
-                if (showSpeed) {
-                    Text(
-                        "約 $speed 倍速",
-                        fontFamily = Fieldbook.Data,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Fieldbook.Survey,
-                        maxLines = 1,
-                    )
-                }
-            }
-            // 歩いたときの天気は Open-Meteo から取っているので、出どころを添える（見本の天気は作り物なので付けない）
-            if (weather != null && !isSample) WeatherCredit(modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -953,7 +1005,7 @@ private const val MAP_LOGO_STRIP_DP = 28f
 /** 拡大表示の図のブロックの厚み（下にのぞく側面） */
 private val FIGURE_DEPTH = 4.dp
 
-/** 拡大表示の図をこれより小さくはしない（それでも入らない、とても小さい画面では、注記が枠の下に隠れる） */
+/** 拡大表示の図をこれより小さくはしない（それでも入らないときは、中身をスクロールさせる。FitFigureLayout） */
 private val MIN_FIGURE = 160.dp
 
 /**
