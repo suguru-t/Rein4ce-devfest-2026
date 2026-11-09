@@ -4,7 +4,9 @@
 
 - bgm.ogg「いつもの」：歩く速さくらい（88 BPM）のゆったりした曲。はじめからある曲で、音は前と同じ
 - bgm_chip.ogg「ピコピコ」：昔のゲーム機のような音（矩形波・三角波・雑音の太鼓）。140 BPM で、速い分散和音と太鼓で走る、冒険に出るような曲
-- bgm_musicbox.ogg「オルゴール」：金属の歯をはじいたキラキラした音。3 拍子・132 BPM で、メリーゴーラウンドのように弾む曲
+- bgm_ukulele.ogg「ウクレレ」：ウクレレをジャカジャカ刻み、口笛が旋律を吹く。112 BPM で、晴れた日に外を歩くような曲
+- bgm_guitar.ogg「ギター」：アコースティックギターの指弾きと手拍子。100 BPM で、ハイキングのように前へ進む曲
+  （3 曲目はウクレレとギターのどちらかにする。B が聞き比べて決める。オルゴールは「歯医者で流れていそう」でやめた）
 
 どれも 16 小節ぶん鳴らし、最後から最初へつなぎ目なく戻る 1 つのループにする（響きの尾も、曲の頭に回して重ねる）。
 3 曲とも効果音（tools/make_sfx.py）と同じハ長調の音だけを使うので、重なっても濁らない。ほかの 2 曲の大きさは「いつもの」にそろえる。
@@ -20,7 +22,7 @@ OGG（Vorbis）にするのは、ファイルを小さくするため（WAV だ�
 Vorbis は長さを 1 点単位で覚えているので、MP3・AAC と違って頭と終わりに無音が足されず、ループのつなぎ目がずれない。
 
 チームで用意した曲に差し替えるときは、res/raw/bgm*.ogg を消して、同じ名前（bgm.ogg・bgm.mp3 など、
-Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_chip・bgm_musicbox）でしか見ていない。
+Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_chip・bgm_ukulele・bgm_guitar）でしか見ていない。
 曲の規約（リポジトリが公開なので、ファイルを置いてよいか・クレジットの書き方）は確かめてから入れる。
 """
 
@@ -206,19 +208,91 @@ def drum(kind: int, velocity: float, length: float) -> np.ndarray:
     return tone * velocity
 
 
-def music_box(m: int, velocity: float, length: float) -> np.ndarray:
-    """オルゴール：金属の歯をはじいたキラキラした音。すぐ消える高い響きと、1 オクターブ上の響きを少し足す。高い音ほど早く消える"""
+PLUCK_OVERSAMPLE = 4  # 弦の音を作るときの点の細かさ（何倍か）
+
+
+def pluck(m: int, velocity: float, length: float, decay_s: float = 0.8, softness: int = 1) -> np.ndarray:
+    """弦をはじいた音（Karplus-Strong：雑音を 1 周期ぶんの長さで回しながら、少しずつならして消していく）。
+    [decay_s] は響きが 1/e になるまでの時間 [s]。[softness] が大きいほど、はじいた瞬間の雑音を丸めて、やわらかい音にする"""
     f = freq(m)
-    tau = 0.9 * (523.3 / f) ** 0.5  # 響きの長さ [s]（C5 で 0.9 秒。速い曲で、前の音の響きがにじまないくらい）
-    n = int(min(5 * tau, 4.0) * SR)
+    # 1 周の長さは点の数（整数）なので、そのままだと高い音ほど音程がずれる（E4 で 23 セント）。
+    # 4 倍細かい点で作ってから戻し、ずれを 4 分の 1 にする
+    sr = SR * PLUCK_OVERSAMPLE
+    period = max(2, int(round(sr / f - 0.5)))  # ならすと半周期ぶん遅れるので、その分だけ短くする
+    n = int(min(5 * decay_s, 3.0) * SR) * PLUCK_OVERSAMPLE
+    gain = np.exp(-period / (sr * decay_s))  # 1 周ごとの小さくなる割合
+    burst = rng.uniform(-1, 1, period)
+    width = softness * PLUCK_OVERSAMPLE  # 細かい点で作るぶん、ならす幅も広げて音の明るさをそろえる
+    burst = np.convolve(burst, np.ones(width) / width, mode="same")
+    burst -= burst.mean()
+    y = np.zeros(n + period + 1)
+    y[1:period + 1] = burst
+    for i in range(period + 1, len(y), period):
+        j = min(i + period, len(y))
+        y[i:j] = 0.5 * gain * (y[i - period:j - period] + y[i - period - 1:j - period - 1])
+    out = y[1:n + 1].reshape(-1, PLUCK_OVERSAMPLE).mean(axis=1)
+    attack = int(0.002 * SR)
+    out[:attack] *= np.linspace(0, 1, attack)
+    return out / (np.max(np.abs(out)) + 1e-9) * velocity
+
+
+def whistle(m: int, velocity: float, length: float) -> np.ndarray:
+    """口笛：ほぼ純音で、出だしは少し下からすくい上げ、のばすとゆるいビブラート。息の音を少しだけ混ぜる"""
+    f = freq(m)
+    n = int((length + 0.08) * SR)
     t = np.arange(n) / SR
-    tone = np.sin(2 * np.pi * f * t) * np.exp(-t / tau)
-    for ratio, amp, life in ((2.0, 0.3, 0.45), (5.4, 0.12, 0.06)):
-        if ratio * f < 0.45 * SR:
-            tone += amp * np.sin(2 * np.pi * ratio * f * t) * np.exp(-t / (tau * life))
-    attack = int(0.001 * SR)
+    scoop = 1 - 0.02 * np.exp(-t / 0.03)  # 出だしの 30 ms で、少し下から正しい高さへ
+    vibrato = 1 + 0.006 * np.clip((t - 0.15) / 0.2, 0, 1) * np.sin(2 * np.pi * 5.5 * t)
+    phase = 2 * np.pi * np.cumsum(f * scoop * vibrato) / SR
+    tone = np.sin(phase) + 0.03 * np.sin(2 * phase)
+    breath = rng.standard_normal(n)
+    breath = np.convolve(breath, np.ones(3) / 3, mode="same") * 0.04
+    env = np.ones(n)
+    attack = int(0.04 * SR)
+    env[:attack] = np.linspace(0, 1, attack)
+    release = t > length
+    env[release] *= np.exp(-(t[release] - length) / 0.025)
+    return (tone + breath) * env * velocity
+
+
+def upright_bass(m: int, velocity: float, length: float) -> np.ndarray:
+    """やわらかい低い弦（ウッドベースのような、はじいてすぐ丸く消える音）"""
+    f = freq(m)
+    n = int(0.9 * SR)
+    t = np.arange(n) / SR
+    tone = (np.sin(2 * np.pi * f * t) + 0.35 * np.sin(4 * np.pi * f * t) * np.exp(-t / 0.08)) * np.exp(-t / 0.35)
+    attack = int(0.004 * SR)
     tone[:attack] *= np.linspace(0, 1, attack)
     return tone * velocity
+
+
+SHAKER, CLAP, THUMP = -4, -5, -6  # 小さな打楽器は MIDI 番号の代わりにこれで選ぶ
+
+
+def hand_percussion(kind: int, velocity: float, length: float) -> np.ndarray:
+    """シェイカー（シャッ）・手拍子（パン）・低くやわらかい「トン」"""
+    if kind == SHAKER:
+        n = int(0.06 * SR)
+        t = np.arange(n) / SR
+        noise = rng.standard_normal(n)
+        noise -= np.convolve(noise, np.ones(3) / 3, mode="same")
+        env = np.minimum(t / 0.01, 1) * np.exp(-t / 0.02)
+        return noise * env * 0.5 * velocity
+    if kind == CLAP:
+        # 手拍子は、何人かの手が少しずつずれて鳴る（10 ms ずつ 3 回）
+        n = int(0.15 * SR)
+        t = np.arange(n) / SR
+        noise = rng.standard_normal(n)
+        noise = noise - np.convolve(noise, np.ones(6) / 6, mode="same")
+        env = np.zeros(n)
+        for k, d in enumerate((0.0, 0.01, 0.02)):
+            on = t >= d
+            env[on] += np.exp(-(t[on] - d) / (0.012 if k < 2 else 0.04))
+        return noise * env * 0.35 * velocity
+    n = int(0.2 * SR)
+    t = np.arange(n) / SR
+    pitch = 55 + 45 * np.exp(-t / 0.04)
+    return np.sin(2 * np.pi * np.cumsum(pitch) / SR) * np.exp(-t / 0.09) * velocity
 
 
 # ---- 「いつもの」の並べ方（はじめからの曲。音を変えないよう、前と同じ順に並べる） ----
@@ -309,48 +383,135 @@ def arrange_chip(song) -> list:
     return out
 
 
-# ---- 「オルゴール」（3 拍子・132 BPM）：キラキラした高い音で、メリーゴーラウンドのように弾む曲 ----
-# はじめは 84 BPM のゆっくりしたワルツにしたが、B が聞いて「眠くなる」ので、速くして旋律を細かく動かした
+# ---- 「ウクレレ」（112 BPM）：ウクレレをジャカジャカ刻み、口笛が旋律を吹く。晴れた日に外を歩くような曲 ----
 
-MUSIC_BOX_HARMONY = [
-    ["C"], ["G"], ["Am"], ["F"], ["C"], ["F"], ["G"], ["C"],
-    ["Am"], ["Em"], ["F"], ["C"], ["Dm"], ["G"], ["C"], ["G"],
+UKULELE_HARMONY = [
+    ["C"], ["F"], ["G"], ["C"], ["Am"], ["F"], ["G"], ["G"],
+    ["C"], ["Em"], ["F"], ["C"], ["Dm"], ["G"], ["C"], ["F", "G"],
 ]
 
-# 拍は小節の頭から 0〜3。8 分音符（0.5 拍）で細かく動く
-MUSIC_BOX_MELODY = [
-    [(0, "G5"), (0.5, "C6"), (1, "E6"), (1.5, "G6"), (2, "E6")],
-    [(0, "D6"), (0.5, "B5"), (1, "G5"), (2, "B5"), (2.5, "D6")],
-    [(0, "C6"), (0.5, "E6"), (1, "A6"), (2, "G6"), (2.5, "E6")],
-    [(0, "F6"), (1, "C6"), (1.5, "A5"), (2, "C6")],
-    [(0, "E6"), (0.5, "F6"), (1, "G6"), (1.5, "E6"), (2, "C6"), (2.5, "E6")],
-    [(0, "A6"), (1, "F6"), (2, "C6")],
-    [(0, "B5"), (0.5, "D6"), (1, "G6"), (1.5, "F6"), (2, "D6"), (2.5, "B5")],
-    [(0, "C6"), (1, "G5"), (2, "C6")],
-    [(0, "E6"), (0.5, "D6"), (1, "C6"), (1.5, "B5"), (2, "A5"), (2.5, "C6")],
-    [(0, "B5"), (0.5, "E6"), (1, "G6"), (2, "E6")],
-    [(0, "F6"), (0.5, "E6"), (1, "D6"), (1.5, "C6"), (2, "A5"), (2.5, "C6")],
-    [(0, "E6"), (1, "G6"), (2, "C7")],
-    [(0, "D6"), (0.5, "F6"), (1, "A6"), (1.5, "F6"), (2, "D6")],
-    [(0, "G6"), (0.5, "F6"), (1, "D6"), (1.5, "B5"), (2, "G5")],
-    [(0, "C6"), (0.5, "E6"), (1, "G6"), (2, "C7")],
-    [(0, "B6"), (0.5, "A6"), (1, "G6"), (1.5, "F6"), (2, "D6"), (2.5, "B5")],
+# ウクレレの押さえ方（4 弦から 1 弦へ：G・C・E・A の弦。いちばん上の弦がいちばん低くない「リエントラント」）
+UKULELE_CHORDS = {
+    "C": ("G4", "C4", "E4", "C5"),
+    "F": ("A4", "C4", "F4", "A4"),
+    "G": ("G4", "D4", "G4", "B4"),
+    "Am": ("A4", "C4", "E4", "A4"),
+    "Em": ("G4", "E4", "G4", "B4"),
+    "Dm": ("A4", "D4", "F4", "A4"),
+}
+
+# 口笛の旋律（書いた高さの 1 オクターブ上で吹く）
+UKULELE_MELODY = [
+    [(0, "G5"), (1, "E5"), (1.5, "F5"), (2, "G5"), (3, "C6")],
+    [(0, "A5"), (1, "F5"), (2, "A5"), (2.5, "G5"), (3, "F5")],
+    [(0, "D5"), (1, "G5"), (2, "B5"), (3, "A5")],
+    [(0, "G5"), (2, "E5")],
+    [(0, "E5"), (1, "A5"), (1.5, "B5"), (2, "C6"), (3, "A5")],
+    [(0, "C6"), (1, "A5"), (2, "F5"), (3, "A5")],
+    [(0, "G5"), (1, "B5"), (2, "D6"), (2.5, "C6"), (3, "B5")],
+    [(0, "G5"), (2, "D5")],
+    [(0, "E5"), (0.5, "G5"), (1, "C6"), (2, "E6"), (3, "D6")],
+    [(0, "B5"), (1, "G5"), (2, "E5"), (3, "G5")],
+    [(0, "A5"), (1, "C6"), (2, "F6"), (3, "E6")],
+    [(0, "C6"), (2, "G5")],
+    [(0, "F5"), (1, "A5"), (2, "D6"), (3, "C6")],
+    [(0, "B5"), (1, "D6"), (2, "G5"), (3, "A5"), (3.5, "B5")],
+    [(0, "C6"), (1, "G5"), (2, "E5"), (3, "G5")],
+    [(0, "A5"), (1, "F5"), (2, "G5"), (2.5, "A5"), (3, "B5")],
 ]
 
+# 刻み方（1 小節 8 つの 8 分音符のうち、どこで振り下ろす D・振り上げる U か）：D・D U・U D U
+UKULELE_STRUM = [(0, "D"), (1, "D"), (1.5, "U"), (2.5, "U"), (3, "D"), (3.5, "U")]
 
-def arrange_music_box(song) -> list:
+
+def strum(out, at, chord, beat, down):
+    """1 回ぶん弦をかき鳴らす。振り下ろしは 4 弦から、振り上げは 1 弦から、少しずつずらして鳴らす（振り上げは少し弱く）"""
+    notes = [midi(x) for x in UKULELE_CHORDS[chord]]
+    order = notes if down else notes[::-1]
+    for k, m in enumerate(order):
+        out.append((at + k * 0.012, m, 0.16 if down else 0.11, lambda mm, v, d: pluck(mm, v, d, decay_s=0.45, softness=2), 0.0))
+
+
+def arrange_ukulele(song) -> list:
     out = []
     beat = song.beat
     for bar in range(BARS):
-        bar_start = bar * 3 * beat
-        root, third, fifth = CHORDS[MUSIC_BOX_HARMONY[bar][0]]
-        # ワルツの伴奏：1 拍目に低めの根音、2・3 拍目に 3 度と 5 度を小さく
-        out.append((bar_start, nearest_at_or_above(root, midi("C4")), 0.32, music_box, 0.0))
-        for b in (1, 2):
-            for letter in (third, fifth):
-                out.append((bar_start + b * beat, nearest_at_or_above(letter, midi("E5")), 0.13, music_box, 0.0))
-        for b, note in MUSIC_BOX_MELODY[bar]:
-            out.append((bar_start + b * beat, midi(note), 0.6, music_box, 0.0))
+        bar_start = bar * 4 * beat
+        chords = UKULELE_HARMONY[bar]
+        for b, way in UKULELE_STRUM:
+            chord = chords[0] if len(chords) == 1 or b < 2 else chords[1]
+            strum(out, bar_start + b * beat, chord, beat, down=(way == "D"))
+        # 低い音：和音の頭に根音、3 拍目に 5 度
+        for k, name in enumerate(chords):
+            root, _, fifth = CHORDS[name]
+            beat0 = k * (4 / len(chords))
+            r = nearest_at_or_above(root, midi("E2"))
+            out.append((bar_start + beat0 * beat, r, 0.5, upright_bass, 0.0))
+            if len(chords) == 1:
+                out.append((bar_start + 2 * beat, nearest_at_or_above(fifth, r + 1), 0.4, upright_bass, 0.0))
+        # シェイカーは 8 分音符（裏を少し強く）、手拍子は 2・4 拍に小さく
+        for i in range(8):
+            out.append((bar_start + 0.5 * i * beat, SHAKER, 0.35 if i % 2 else 0.2, hand_percussion, 0.0))
+        for b in (1, 3):
+            out.append((bar_start + b * beat, CLAP, 0.3, hand_percussion, 0.0))
+        notes = UKULELE_MELODY[bar]
+        for i, (b, note) in enumerate(notes):
+            end = notes[i + 1][0] if i + 1 < len(notes) else 4
+            out.append((bar_start + b * beat, midi(note) + 12, 0.30, whistle, (end - b) * beat * 0.9))
+    return out
+
+
+# ---- 「ギター」（100 BPM）：アコースティックギターの弾き語りのような指弾きと手拍子。山道や公園を歩くハイキングのように、前へ進む曲 ----
+
+GUITAR_HARMONY = [
+    ["C"], ["G"], ["Am"], ["F"], ["C"], ["G"], ["F"], ["G"],
+    ["Am"], ["Em"], ["F"], ["C"], ["F"], ["G"], ["C"], ["G"],
+]
+
+GUITAR_MELODY = [
+    [(0, "E5"), (1, "G5"), (2, "G5"), (3, "A5")],
+    [(0, "G5"), (2, "D5")],
+    [(0, "C5"), (1, "E5"), (2, "A5"), (3, "G5")],
+    [(0, "F5"), (2, "C5")],
+    [(0, "E5"), (1, "G5"), (2, "C6"), (3, "B5")],
+    [(0, "B5"), (1, "A5"), (2, "G5")],
+    [(0, "A5"), (1, "G5"), (2, "F5"), (3, "E5")],
+    [(0, "D5"), (2, "G5")],
+    [(0, "A5"), (1, "B5"), (2, "C6"), (3, "A5")],
+    [(0, "G5"), (1, "E5"), (2, "B4"), (3, "E5")],
+    [(0, "F5"), (1, "A5"), (2, "C6"), (3, "A5")],
+    [(0, "G5"), (2, "E5")],
+    [(0, "A5"), (1, "C6"), (2, "A5"), (3, "F5")],
+    [(0, "G5"), (1, "B5"), (2, "D6"), (3, "B5")],
+    [(0, "C6"), (2, "G5")],
+    [(0, "B5"), (1, "A5"), (2, "G5"), (3, "D5")],
+]
+
+
+def arrange_guitar(song) -> list:
+    out = []
+    beat = song.beat
+    guitar = lambda m, v, d: pluck(m, v, d, decay_s=1.2, softness=1)  # noqa: E731（鉄の弦のような明るい音）
+    for bar in range(BARS):
+        bar_start = bar * 4 * beat
+        root, third, fifth = CHORDS[GUITAR_HARMONY[bar][0]]
+        r = nearest_at_or_above(root, midi("E2"))
+        f = nearest_at_or_above(fifth, r + 1)
+        highs = [nearest_at_or_above(third, midi("G3")), nearest_at_or_above(fifth, midi("C4")), nearest_at_or_above(root, midi("E4"))]
+        # 指弾き（親指が 1 拍ごとに根音と 5 度を交互に、ほかの指が裏拍で上の弦をはじく）
+        for i in range(8):
+            if i % 2 == 0:
+                out.append((bar_start + 0.5 * i * beat, r if i % 4 == 0 else f, 0.42, guitar, 0.0))
+            else:
+                out.append((bar_start + 0.5 * i * beat, highs[(i // 2) % 3], 0.24, guitar, 0.0))
+        # 1・3 拍に低い「トン」、2・4 拍に手拍子で、前へ進む足どりにする
+        for b in (0, 2):
+            out.append((bar_start + b * beat, THUMP, 0.55, hand_percussion, 0.0))
+        for b in (1, 3):
+            out.append((bar_start + b * beat, CLAP, 0.5, hand_percussion, 0.0))
+        # 旋律もギターで（少し強く、高めの弦で）
+        for b, note in GUITAR_MELODY[bar]:
+            out.append((bar_start + b * beat, midi(note), 0.42, guitar, 0.0))
     return out
 
 
@@ -378,7 +539,8 @@ class Song:
 SONGS = [
     Song("bgm.ogg", 88, 4, arrange_usual, seed=20261108),
     Song("bgm_chip.ogg", 140, 4, arrange_chip, seed=20261109, jitter_s=0.0, room_s=0.2, wet=0.06),
-    Song("bgm_musicbox.ogg", 132, 3, arrange_music_box, seed=20261110, room_s=0.45, wet=0.25),
+    Song("bgm_ukulele.ogg", 112, 4, arrange_ukulele, seed=20261111, jitter_s=0.003, room_s=0.3, wet=0.15),
+    Song("bgm_guitar.ogg", 100, 4, arrange_guitar, seed=20261112, jitter_s=0.004, room_s=0.4, wet=0.2),
 ]
 
 
@@ -425,8 +587,12 @@ def main():
             music *= PEAK / np.max(np.abs(music))
             reference_rms = np.sqrt(np.mean(music ** 2))
         else:
-            # ほかの曲は、「いつもの」と同じくらいの大きさに聞こえるよう RMS をそろえる（-1 dB は超えない）
+            # ほかの曲は、「いつもの」と同じくらいの大きさに聞こえるよう RMS をそろえる。
+            # 弦をはじいた瞬間のような鋭い山があると、-1 dB に収めるために全体が小さくなってしまうので、
+            # 大きいところだけを丸く抑えて（tanh。小さい音はそのまま）から、-1 dB に収める
             music *= reference_rms / np.sqrt(np.mean(music ** 2))
+            if np.max(np.abs(music)) > PEAK:
+                music = PEAK * np.tanh(music / PEAK)
             music *= min(1.0, PEAK / np.max(np.abs(music)))
         pcm = np.round(music * 32767).astype("<i2")
         out = OUT_DIR / song.file
