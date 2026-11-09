@@ -37,15 +37,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -73,6 +77,8 @@ import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.ZoomInFrom
+import com.rein4ce.roadcollector.ui.common.zoomOrigin
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -108,52 +114,71 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
 
-    when (mode) {
-        PlayMode.NORMAL -> {
-            // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
-            val vm: StackViewModel = viewModel()
-            val repository = RoadCollectorApp.from(LocalContext.current).partRepository
-            // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして、次に通常を開いたときは新しいゲームから（決定 75）。
-            // ほかのタブへ行って戻ったときは、今までどおり続きから。終わったゲームの最高の記録は、終わったときにもう数えてある
-            val leave = {
-                vm.restart(repository.arrangedNow(), repository.origins.value)
-                chosen = null
+    // 「‹ 戻る」で選ぶ画面に戻るときだけ、選ぶ画面を「‹ 戻る」の所から大きくして出す（ホームの家のボタンと同じ。決定 78）。
+    // 値は大きくなり始める点（画面の中の割合）。端末の「戻る」では null にして、今までどおりすぐ切り替える
+    var selectZoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
+    // この画面（積むタブの中身）の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため）
+    val area = remember { arrayOf(Rect.Zero) }
+
+    // 選ぶ画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
+    fun backToSelect(center: Offset?) {
+        selectZoomFrom = center?.let { zoomOrigin(it, area[0]) ?: SELECT_ZOOM_FALLBACK }
+        chosen = null
+    }
+
+    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { area[0] = it.boundsInRoot() }) {
+        when (mode) {
+            PlayMode.NORMAL -> {
+                // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
+                val vm: StackViewModel = viewModel()
+                val repository = RoadCollectorApp.from(LocalContext.current).partRepository
+                // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして、次に通常を開いたときは新しいゲームから（決定 75）。
+                // ほかのタブへ行って戻ったときは、今までどおり続きから。終わったゲームの最高の記録は、終わったときにもう数えてある
+                val leave = { center: Offset? ->
+                    vm.restart(repository.arrangedNow(), repository.origins.value)
+                    backToSelect(center)
+                }
+                BackHandler { leave(null) }
+                ModePlayPage(PlayMode.NORMAL, onBack = { leave(it) }) { leading ->
+                    StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
+                }
+                // 終わって塔が止まり、道が残ったら（「保存」できる結果）、通常の最高を更新する。
+                // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
+                val canUpload = vm.canUpload
+                LaunchedEffect(vm.runId, canUpload) {
+                    if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
+                }
             }
-            BackHandler(onBack = leave)
-            ModePlayPage(PlayMode.NORMAL, onBack = leave) { leading ->
-                StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
+            PlayMode.CHALLENGE -> {
+                BackHandler { backToSelect(null) }
+                // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
+                ModePlayPage(PlayMode.CHALLENGE, onBack = ::backToSelect) { leading -> ChallengeScreen(leading = leading) }
             }
-            // 終わって塔が止まり、道が残ったら（「保存」できる結果）、通常の最高を更新する。
-            // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
-            val canUpload = vm.canUpload
-            LaunchedEffect(vm.runId, canUpload) {
-                if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
+            PlayMode.DAILY -> {
+                BackHandler { backToSelect(null) }
+                ModePlayPage(PlayMode.DAILY, onBack = ::backToSelect) { leading -> DailyScreen(leading = leading) }
             }
-        }
-        PlayMode.CHALLENGE -> {
-            BackHandler { chosen = null }
-            // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
-            ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
-        }
-        PlayMode.DAILY -> {
-            BackHandler { chosen = null }
-            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading -> DailyScreen(leading = leading) }
-        }
-        null -> {
-            val best by records.normalBest.collectAsStateWithLifecycle()
-            // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
-            // 画面で遊べる遊び方（自分で落とす。決定 69）の記録の最高
-            val directory = LocalContext.current.applicationContext.filesDir
-            val challengeBest by produceState<Double?>(null, directory) {
-                value = runCatching { ChallengeStorage(directory).ranking(ChallengeViewModel.PLAYABLE_STYLE.ruleId).maxOfOrNull { it.height } }.getOrNull()
+            null -> {
+                val best by records.normalBest.collectAsStateWithLifecycle()
+                // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
+                // 画面で遊べる遊び方（自分で落とす。決定 69）の記録の最高
+                val directory = LocalContext.current.applicationContext.filesDir
+                val challengeBest by produceState<Double?>(null, directory) {
+                    value = runCatching { ChallengeStorage(directory).ranking(ChallengeViewModel.PLAYABLE_STYLE.ruleId).maxOfOrNull { it.height } }.getOrNull()
+                }
+                // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
+                val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
+                val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
+                ZoomInFrom(selectZoomFrom) {
+                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
+                }
             }
-            // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
-            val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
-            val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
-            ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
         }
     }
 }
+
+/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、選ぶ画面が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
+private val SELECT_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
 
 /**
  * モードを選ぶ画面（ゲームのタイトル画面のように）。ホームと同じ組み方：
@@ -367,7 +392,7 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
 @Composable
 private fun ModePlayPage(
     mode: PlayMode,
-    onBack: () -> Unit,
+    onBack: (center: Offset) -> Unit,
     content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
@@ -386,17 +411,21 @@ private fun ModePlayPage(
  * 前は小さな札（字 14sp・見た目の高さ 28dp ほど）で押しにくかったので（B の希望）、字を大きくし（16dp。[small] なら 15dp）、
  * 見た目の高さ 42dp・幅 88dp 以上の積み木にした（押せる範囲も同じ大きさ）。上の行に収めるため、文字の大きさの設定では大きくしない
  *
+ * @param onBack 押したとき。ボタンのまん中（アプリの画面の左上から）を渡す。選ぶ画面はここから大きくなって出てくる（決定 78）
  * @param small 小さい画面か、幅の狭い端末。一回り小さくする
  */
 @Composable
-private fun BackButton(onBack: () -> Unit, small: Boolean) {
+private fun BackButton(onBack: (center: Offset) -> Unit, small: Boolean) {
     val source = remember { MutableInteractionSource() }
     val size = with(LocalDensity.current) { (if (small) 15.dp else 16.dp).toSp() }
+    // 置かれた所のまん中。押したときに渡すだけなので、変わっても描き直さない（State にしない）
+    val center = remember { arrayOf(Offset.Unspecified) }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
             .pressFeel(source)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る", onClick = onBack)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る") { onBack(center[0]) }
             .popBlock(face = Pop.Yellow, corner = 50.dp, depth = 3.dp)
             .sizeIn(minWidth = if (small) 80.dp else 88.dp, minHeight = if (small) 40.dp else 42.dp)
             .padding(horizontal = 14.dp),

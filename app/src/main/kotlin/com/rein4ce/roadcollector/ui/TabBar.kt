@@ -51,6 +51,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -88,10 +90,11 @@ import kotlin.math.min
  * ピルの左には、ホームへ戻る丸いボタン（家）を、ピルとは別に浮かせて置く（決定 52）。ピルの中に入れると、
  * タブを押すつもりで家に当たってホームに出てしまうので、すき間をあけて形も変える。なぞる操作もピルの中だけで効く
  *
- * @param onHome 家のボタンを押したとき（ホームへ戻る）
+ * @param onHome 家のボタンを押したとき（ホームへ戻る）。家のボタンのまん中（アプリの画面の左上から）を渡す。
+ *   ホームはここから大きくなって出てくる（AppNav。決定 78）
  */
 @Composable
-internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit, onHome: () -> Unit) {
+internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit, onHome: (center: Offset) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -375,18 +378,21 @@ private const val SelectedScale = 1.18f
  * 押すと、ほかのボタンと同じく縮んで、振動と押した音を返す（ui/common/PressFeel）
  */
 @Composable
-private fun HomeBubble(onClick: () -> Unit) {
+private fun HomeBubble(onClick: (center: Offset) -> Unit) {
     val source = remember { MutableInteractionSource() }
+    // 置かれた所のまん中。押したときに渡すだけなので、変わっても描き直さない（State にしない）
+    val center = remember { arrayOf(Offset.Unspecified) }
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(BarHeight)
+            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
             .pressFeel(source)
             .shadow(elevation = 6.dp, shape = CircleShape, ambientColor = Fieldbook.Ink, spotColor = Fieldbook.Ink)
             .background(Fieldbook.Paper.copy(alpha = 0.88f), CircleShape)
             .border(1.dp, Fieldbook.GridMajor, CircleShape)
             .clip(CircleShape)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "ホームへ戻る", onClick = onClick)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "ホームへ戻る") { onClick(center[0]) }
             .semantics { contentDescription = "ホーム" },
     ) {
         Icon(AppIcons.HomeOutline, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(26.dp))
