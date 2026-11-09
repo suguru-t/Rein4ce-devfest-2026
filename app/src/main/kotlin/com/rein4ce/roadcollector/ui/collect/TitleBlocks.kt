@@ -134,7 +134,7 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                             running[i] = scope.launch {
                                 if (isLast) {
                                     // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
-                                    sfx.play(Sfx.HOP, BlockNotes.rate(i))
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, Blocks.size))
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
                                     val camera = cameraPoint(view, blockPx = TITLE_BLOCK_DP * density.density)
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
@@ -145,8 +145,8 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                                     }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                    // 「ぴょん」の高さは積み木ごとに変える（左から ド・レ・ミ・ファ…。audio/SoundEffects.kt の BlockNotes）
-                                    sfx.play(Sfx.HOP, BlockNotes.rate(i))
+                                    // 「ぴょん」の高さは積み木ごとに変える（左から ソ・ラ・シ・ド と上がり、最後の「ミ」が上のド。audio/SoundEffects.kt の BlockNotes）
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, Blocks.size))
                                     motion.hop(sign = if (block.tiltDeg < 0f) -1f else 1f, spec = TitleMotion)
                                 }
                             }

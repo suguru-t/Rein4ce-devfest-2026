@@ -348,7 +348,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                             running[i] = scope.launch {
                                 if (isLast) {
                                     // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
-                                    sfx.play(Sfx.HOP, BlockNotes.rate(i))
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
                                     val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
@@ -358,8 +358,8 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                    // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（左から ド・レ・ミ・ファ…）
-                                    sfx.play(Sfx.HOP, BlockNotes.rate(i))
+                                    // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
                                     motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = WordMotion)
                                 }
                             }
