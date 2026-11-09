@@ -99,6 +99,21 @@ internal fun FlagMarker(color: Color, mirrored: Boolean = false, tilt: Float = 0
 internal val FlagAnchor: Offset
     get() = Offset(0.5f, 1f - 3f / (FlagPoleHeight.value + 6f))
 
+/**
+ * スタートの赤い旗と、ゴールの青い旗を立てる（[goal] が null ならゴールは立てない。記録中など）。
+ * 2 本の根もとが旗の幅より近いと、後の旗に隠れて 1 本に見えるので、赤い旗は右へ、青い旗は左右を反転して左へ、
+ * [FLAG_SPREAD_DEGREES] ずつ傾けて根もとから開く（一周した道・同じ道を戻ってきた道・輪）。
+ * 画面に絵として描くところで共通に使う：記録画面の地図なしの図（CollectScreen の TrackCanvas）と、
+ * コレクションの「もう一度歩く」（ui/inventory/Fieldbook.kt）。
+ * 地図ありの記録画面は地図の印なので、開くかどうかを地図の拡大で決める（[flagWidthMeters]）が、開き方は同じ
+ */
+internal fun DrawScope.drawStartGoalFlags(start: Offset, goal: Offset?) {
+    val spread = goal != null && (goal - start).getDistance() < FlagWidth.toPx()
+    val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+    if (goal != null) drawFlag(goal, GoalFlagColor, mirrored = spread, tilt = -tilt)
+    drawFlag(start, StartFlagColor, tilt = tilt)
+}
+
 /** 2 点の間のおおよその距離 [m]（旗を開くかどうかを決めるだけなので、平面で近似） */
 internal fun roughMeters(a: TrackPoint, b: TrackPoint): Double {
     val cosLat = cos(Math.toRadians((a.lat + b.lat) / 2))
