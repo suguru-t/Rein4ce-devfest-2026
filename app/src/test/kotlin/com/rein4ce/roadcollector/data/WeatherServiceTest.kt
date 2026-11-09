@@ -37,12 +37,13 @@ class WeatherServiceTest {
     /** テストの「今」：2026-11-07 12:00（世界時） */
     private val now = 1_794_052_800_000L
 
-    private fun walk(id: String, ageMs: Long) = Part(
+    /** [at] の [ageMs] 前に歩き終えたパーツ（ふつうは、テストの「今」の [ageMs] 前） */
+    private fun walk(id: String, ageMs: Long, at: Long = now) = Part(
         id = id,
         points = listOf(Pt(-0.5f, 0f), Pt(0.5f, 0f)),
         kind = Kind.BAR,
         distanceM = 341,
-        walkedAt = now - ageMs,
+        walkedAt = at - ageMs,
     )
 
     private val place = PartPlace(lat = 35.7501, lng = 139.8055, sizeM = 341.0)
@@ -69,17 +70,20 @@ class WeatherServiceTest {
         repo: PartRepository,
         fetch: suspend (String) -> String? = { answer(it) },
         location: Pair<Double, Double>? = null,
+        clock: Long = now,
     ): WeatherService {
         // backgroundScope は advanceUntilIdle() で進まないので、同じ時計の別のスコープを使う
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + Job()).also { scopes += it }
-        return WeatherService(repo, scope, fetch = fetch, lastLocation = { location }, now = { now })
+        return WeatherService(repo, scope, fetch = fetch, lastLocation = { location }, now = { clock })
     }
 
     @Test
     fun `a part just collected gets the weather now`() = runTest {
+        // 今は 12:40。12:35 に歩き終えた（同じ 12 時台なので、今の天気）
+        val clock = now + 40 * MIN
         val repo = repository()
-        service(repo)
-        repo.add(walk("w1", ageMs = 5 * 60_000L), place)
+        service(repo, clock = clock)
+        repo.add(walk("w1", ageMs = 5 * MIN, at = clock), place)
         advanceUntilIdle()
 
         assertEquals(WalkWeather(63, 2.5), repo.weatherOf("w1"))
@@ -97,6 +101,44 @@ class WeatherServiceTest {
 
         assertEquals(WalkWeather(3, 0.0), repo.weatherOf("w2"))
         assertTrue(asked.single().contains("start_hour=2026-11-05T12:00"))
+    }
+
+    @Test
+    fun `a long walk gets the weather of the hour it started, not when it ended`() = runTest {
+        // 2 日前に歩き始めて、5 分前に歩き終えた（途中で天気が変わっていても、歩き始めたときの天気にする。決定 55）
+        val repo = repository()
+        service(repo)
+        repo.add(walk("long", ageMs = 5 * 60_000L), place.copy(startedAt = now - 2 * DAY))
+        advanceUntilIdle()
+
+        assertEquals(WalkWeather(3, 0.0), repo.weatherOf("long"))
+        assertTrue(asked.single().contains("start_hour=2026-11-05T12:00"))
+    }
+
+    @Test
+    fun `a short walk that started in the previous hour gets the weather of the hour it started`() = runTest {
+        // 今は 12:10。11:50 に歩き始めて、12:05 に歩き終えた（1 時間に満たない散歩でも、歩き始めの 11 時台の天気。#103 の C のレビュー）
+        val clock = now + 10 * MIN
+        val repo = repository()
+        service(repo, clock = clock)
+        repo.add(walk("short", ageMs = 5 * MIN, at = clock), place.copy(startedAt = clock - 20 * MIN))
+        advanceUntilIdle()
+
+        assertEquals(WalkWeather(3, 0.0), repo.weatherOf("short"))
+        assertTrue(asked.single().contains("start_hour=2026-11-07T11:00"))
+    }
+
+    @Test
+    fun `a short walk within the same hour gets the weather now`() = runTest {
+        // 今は 12:40。12:05 に歩き始めて、12:35 に歩き終えた（同じ 12 時台なので、今の天気）
+        val clock = now + 40 * MIN
+        val repo = repository()
+        service(repo, clock = clock)
+        repo.add(walk("same", ageMs = 5 * MIN, at = clock), place.copy(startedAt = clock - 35 * MIN))
+        advanceUntilIdle()
+
+        assertEquals(WalkWeather(63, 2.5), repo.weatherOf("same"))
+        assertTrue(asked.single().contains("current="))
     }
 
     @Test
@@ -126,9 +168,11 @@ class WeatherServiceTest {
 
     @Test
     fun `the weather is saved apart from the parts, survives a restart and goes with the part`() = runTest {
+        // 今は 12:40。12:39 に歩き終えた（同じ時台なので、今の天気）
+        val clock = now + 40 * MIN
         val repo = repository()
-        service(repo)
-        repo.add(walk("w5", ageMs = 60_000L), place)
+        service(repo, clock = clock)
+        repo.add(walk("w5", ageMs = MIN, at = clock), place)
         advanceUntilIdle()
         assertFalse(File(tmp.root, "parts.json").readText().contains("weather"))
         assertTrue(File(tmp.root, "parts_weather.json").readText().contains("\"code\":63"))
@@ -176,6 +220,7 @@ class WeatherServiceTest {
     }
 
     private companion object {
-        const val DAY = 24 * 60 * 60 * 1000L
+        const val MIN = 60 * 1000L
+        const val DAY = 24 * 60 * MIN
     }
 }

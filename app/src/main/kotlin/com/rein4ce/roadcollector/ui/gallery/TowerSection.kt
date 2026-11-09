@@ -105,7 +105,7 @@ internal fun TowerSection(
         val h = size.height
         // 枠がとても低いとき（小さい画面・大きい文字）は、つぶれた絵を出すより何も描かない。下の 2 行が残る
         if (h < MIN_HEIGHT_DP.dp.toPx()) return@Canvas
-        // 紙の色を半分透かして敷く。方眼の線は消えるが（paperBand）、雨や太陽の光は通るので、その上で絵が読めるように
+        // 紙の色を半分透かして敷く。雨や太陽の光は通るので、その上で絵が読めるように
         drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(SECTION_CORNER.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()

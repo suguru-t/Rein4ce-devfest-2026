@@ -106,7 +106,8 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
         val page = Rect(spine, top, spine + w, top + h)
         drawRect(Fieldbook.Paper, topLeft = page.topLeft, size = page.size)
         if (t > 0f) {
-            val grid = ink.copy(alpha = ink.alpha * 0.2f * t)
+            // ページの中の線は、紙の色に合わせた墨で引く（[ink] はアイコンの色で、ホームのボタンでは白。白い紙の上で見えなくなるため）
+            val grid = Fieldbook.Ink.copy(alpha = 0.2f * t)
             var x = page.left + 2.6f
             while (x < page.right - 0.5f) { drawLine(grid, Offset(x, page.top + 0.8f), Offset(x, page.bottom - 0.8f), strokeWidth = 0.35f); x += 2.6f }
             var y = page.top + 2.6f
@@ -128,7 +129,8 @@ private fun DrawScope.drawOpeningNotebook(open: Float, ink: Color) {
                     drawPath(AppIcons.notebookCoverPath, ink)
                 } else {
                     drawRect(Fieldbook.Paper, topLeft = Offset(left, top), size = Size(w, h))
-                    val line = ink.copy(alpha = ink.alpha * 0.45f)
+                    // 罫線も、紙の色に合わせた墨（ホームのボタンのように、アイコンが白でも見えるように）
+                    val line = Fieldbook.Ink.copy(alpha = 0.45f)
                     var y = top + 4.4f
                     while (y < top + h - 2f) { drawLine(line, Offset(left + 2.6f, y), Offset(left + w - 1.6f, y), strokeWidth = 0.6f); y += 2.9f }
                     drawRoundRect(ink, topLeft = Offset(left, top), size = Size(w, h), cornerRadius = corner, style = Stroke(width = 1.3f))
