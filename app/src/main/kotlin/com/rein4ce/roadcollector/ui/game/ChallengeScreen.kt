@@ -246,6 +246,8 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 
 /**
  * 「次」の形（決定 69）。見出しは「模型の高さ」と同じ字、形は大きめ（前は 22dp の小さな絵）、下に形の名前。
+ * 名前は墨で 13dp（小さい画面は 12dp）。棒は細い横線 1 本で形からは分かりにくく、名前がいちばんの手がかりになるため
+ * （前は 11dp の薄い墨で読みにくかった。#126 のレビュー）。
  * 大きさは dp で決め、文字の大きさの設定では大きくしない（情報の段が伸びて、塔を描く所が狭くならないように。HeightMeter と同じ）
  */
 @Composable
@@ -262,7 +264,7 @@ private fun NextPiece(next: Part, compact: Boolean) {
             Canvas(Modifier.size(icon)) {
                 drawPart(next, Offset(size.width / 2, size.height / 2), size.width * 0.75f)
             }
-            SkyText(next.name ?: "", color = Fieldbook.Muted, fontSize = fixed(11f), maxLines = 1, softWrap = false)
+            SkyText(next.name ?: "", color = Fieldbook.Ink, fontSize = fixed(if (compact) 12f else 13f), maxLines = 1, softWrap = false)
         }
     }
 }
