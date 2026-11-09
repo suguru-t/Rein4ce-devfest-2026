@@ -422,4 +422,6 @@ private val CardShape = RoundedCornerShape(CARD_CORNER)
 private val SketchShape = RoundedCornerShape(8.dp)
 
 internal fun formatDate(epochMs: Long): String =
-    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d HH:mm", Locale.JAPAN).format(Date(epochMs))
+    // 日付だけ（時刻は出さない）。歩いてすぐ積んで送ると、送った時刻から歩いた時刻が分かってしまうため。
+    // 一覧は 1 週間ごとに入れ替える予定なので、日付で足りる（#92・決定 47。アプリも送る前に日付に丸める）
+    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))

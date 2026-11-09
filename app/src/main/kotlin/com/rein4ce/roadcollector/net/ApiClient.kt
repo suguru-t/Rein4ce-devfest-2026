@@ -78,12 +78,12 @@ object ApiClient {
 
     /**
      * タワーを送る。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる。
-     * 送ったタワーは誰でも読めるので、パーツを歩いた時刻は日付までに丸めてから送る（[withDayOnlyWalkTimes]）
+     * 送ったタワーは誰でも読めるので、パーツを歩いた時刻とタワーを作った時刻は、日付までに丸めてから送る（[withDayOnlyTimes]）
      */
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
-            setBody(withOwner(withAuthor(withDayOnlyWalkTimes(tower), authorName()), ownerId()))
+            setBody(withOwner(withAuthor(withDayOnlyTimes(tower), authorName()), ownerId()))
         }.body<TowerCreated>().also(onPosted)
 
     /**
@@ -135,20 +135,21 @@ internal fun withOwner(tower: Tower, owner: String?): Tower =
     if (owner.isNullOrBlank()) tower else tower.copy(ownerId = owner)
 
 /**
- * 送るタワーの、パーツを歩いた時刻を日付まで（日本時間の 0 時）に丸める。送ったタワーは誰でも読める（GET /towers/{id}）ので、
- * 何時何分に歩いたか（ふだん家を出る時刻など）が分からないようにする。時刻はどの画面にも共有ページにも出していないので、見た目は変わらない。
- * 分からない時刻（0）はそのまま。AI の名前付け（[namingRequest]）は「夕方」などを手がかりにするので、こちらは丸めない（決定 47）
+ * 送るタワーの、パーツを歩いた時刻と、タワーを作った時刻を日付まで（日本時間の 0 時）に丸める。送ったタワーは誰でも読める（GET /towers/{id}）ので、
+ * 何時何分に歩いたか（ふだん家を出る時刻など）が分からないようにする。作った時刻も、歩いてすぐ積んで送ると歩いた時刻が分かるので丸める
+ * （「みんな」に出す日時も日付だけにした。一覧は 1 週間ごとに入れ替える予定なので、日付で足りる。新しい順の並びで同じ日のタワーは高い順）。
+ * 分からない時刻（0 以下）はそのまま（サーバが受け取った時刻を入れる）。AI の名前付け（[namingRequest]）は「夕方」などを手がかりにするので、
+ * こちらは丸めない（決定 47）
  */
-internal fun withDayOnlyWalkTimes(tower: Tower, zone: ZoneId = JAPAN): Tower =
+internal fun withDayOnlyTimes(tower: Tower, zone: ZoneId = JAPAN): Tower =
     tower.copy(
-        parts = tower.parts.map { p ->
-            if (p.walkedAt <= 0L) {
-                p
-            } else {
-                p.copy(walkedAt = Instant.ofEpochMilli(p.walkedAt).atZone(zone).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli())
-            }
-        },
+        parts = tower.parts.map { p -> if (p.walkedAt <= 0L) p else p.copy(walkedAt = startOfDay(p.walkedAt, zone)) },
+        createdAt = if (tower.createdAt <= 0L) tower.createdAt else startOfDay(tower.createdAt, zone),
     )
+
+/** [epochMs] の日の 0 時（[zone] の時間で） */
+private fun startOfDay(epochMs: Long, zone: ZoneId): Long =
+    Instant.ofEpochMilli(epochMs).atZone(zone).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli()
 
 /** 歩いた時刻を日付に丸めるときの時間帯（日本時間） */
 private val JAPAN: ZoneId = ZoneId.of("Asia/Tokyo")
