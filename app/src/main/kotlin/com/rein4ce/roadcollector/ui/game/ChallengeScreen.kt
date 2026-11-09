@@ -67,15 +67,15 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.rankOf
+import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.gallery.Pop
-import com.rein4ce.roadcollector.ui.gallery.SECTION_CORNER
-import com.rein4ce.roadcollector.ui.gallery.popBlock
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.isActive
 import java.util.Locale
@@ -279,7 +279,11 @@ private fun ChallengeScreen() {
                             RunControls(onRestart = { confirming = ChallengeConfirm.RESTART }, onAbandon = { confirming = ChallengeConfirm.ABANDON })
                         }
                         ChallengeRun.Phase.FALLING -> {
-                            Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
+                            // 狙うときの「◀ ⟲ 置く ⟳ ▶」の行と同じ高さを「落下中…」で取っておき、下の「やり直す」「中断」を
+                            // 動かさない（前は「置く」があった場所に「中断」が来て、続けて「置く」を押すと確かめの窓が開いていた）
+                            Box(Modifier.fillMaxWidth().heightIn(min = AIM_ROW_HEIGHT), contentAlignment = Alignment.Center) {
+                                Text("落下中…", style = MaterialTheme.typography.bodyMedium, color = ink)
+                            }
                             RunControls(onRestart = { confirming = ChallengeConfirm.RESTART }, onAbandon = { confirming = ChallengeConfirm.ABANDON })
                         }
                         ChallengeRun.Phase.FINALIZING ->
@@ -509,6 +513,9 @@ private const val MOVE_STEP_CHALLENGE_M = 0.1
 
 /** ◀▶ のボタンの幅 */
 private val ARROW_BUTTON_WIDTH = 48.dp
+
+/** 狙う操作の行の高さ（ボタンの押せる高さ 48dp）。落下中もこの高さを取っておく */
+private val AIM_ROW_HEIGHT = 48.dp
 
 /** 回転・置くのボタンの中の余白（1 行に入るように狭める。通常のモードと同じ） */
 private val AimButtonPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)

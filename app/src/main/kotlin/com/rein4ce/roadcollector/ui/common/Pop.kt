@@ -1,10 +1,5 @@
-package com.rein4ce.roadcollector.ui.gallery
+package com.rein4ce.roadcollector.ui.common
 
-import android.os.Build
-import android.view.View
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseInQuad
-import androidx.compose.animation.core.EaseOutQuad
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.rememberCoroutineScope
@@ -14,11 +9,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.zIndex
-import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -29,11 +21,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.ui.text.style.TextOverflow
-import com.rein4ce.roadcollector.core.model.TowerSummary
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,7 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -56,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,13 +59,14 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.R
-import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
+import com.rein4ce.roadcollector.audio.BlockNotes
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
- * 「みんな」のポップな見た目。題字「ミチツミ」（ui/collect/TitleBlocks.kt）の積み木に合わせて、
+ * ポップな見た目の部品（「みんな」とコレクションで共通。決定 44・45）。題字「ミチツミ」（ui/collect/TitleBlocks.kt）の積み木に合わせて、
  * 太い丸ゴシック、アイコンの 4 色、下に濃い色がのぞく「ブロック」の面でそろえる。
+ * 「みんな」だけで使うもの（物差しの色・タワーの注記の行）は ui/gallery/GalleryPop.kt
  *
  * 字の色の決まり：白い字を載せる面は、紙の上で 4.5:1 を超える濃い色（[OrangeDeep]・[TealDeep]・[Navy]）。
  * 明るい色（[Yellow] など）の面には墨の字。アイコンや飾りだけの面は明るい色のまま（3:1 を超える）
@@ -115,24 +108,11 @@ internal object Pop {
     fun side(face: Color): Color = lerp(face, Color.Black, 0.3f)
 
     /**
-     * 太い丸ゴシック（M PLUS Rounded 1c Black を「みんな」で使う字だけに切り出したもの。出どころとライセンスは app/fonts/）。
+     * 太い丸ゴシック（M PLUS Rounded 1c Black を「みんな」とコレクションで使う字だけに切り出したもの。tools/subset_rounded_font.py で作る。
+     * 出どころとライセンスは app/fonts/）。
      * 作者名のような、人が入れる字は入っていないので使わない（入っていない字は端末の字体で出る）
      */
-    val Rounded = FontFamily(Font(R.font.mplus_rounded_gallery, FontWeight.Black))
-}
-
-/** 物差しの色の面（白い字を載せる）：高い順はオレンジ、多い順は青緑、新しい順は紺 */
-internal fun sortFace(sort: TowerSort): Color = when (sort) {
-    TowerSort.HEIGHT -> Pop.OrangeDeep
-    TowerSort.PARTS -> Pop.TealDeep
-    TowerSort.NEWEST -> Pop.Navy
-}
-
-/** 物差しの色の字（紙の上に直接書く）。ダークモードでは濃い色が紙に沈むので、明るい色にする */
-internal fun sortInk(sort: TowerSort): Color = if (!Fieldbook.dark) sortFace(sort) else when (sort) {
-    TowerSort.HEIGHT -> Pop.Orange
-    TowerSort.PARTS -> Pop.Teal
-    TowerSort.NEWEST -> Color(0xFFB9BCD0)
+    val Rounded = FontFamily(Font(R.font.mplus_rounded_ui, FontWeight.Black))
 }
 
 /**
@@ -163,9 +143,13 @@ internal fun Modifier.popBlock(face: Color, corner: Dp = 12.dp, depth: Dp = 4.dp
 /**
  * ブロックのボタン。押すとほかのボタンと同じ押し心地（ui/common/PressFeel）で縮む。押せる高さは 48dp 以上
  *
- * @param face   面の色
- * @param text   字の色
- * @param edge   縁取り（白い面に色の縁の、二番手のボタン）
+ * @param face    面の色（押せるとき）
+ * @param text    字の色（押せるとき）
+ * @param edge    縁取り（白い面に色の縁の、二番手のボタン）
+ * @param enabled false なら押せない。面は灰色・字は薄い色・縁なしにする（押せないボタンの見た目を、使う所ごとに書かないように）
+ * @param padding 面の内側の余白（狭い所に 2 つ並べるときに、字を 1 行に入れやすくするため左右を狭くする）
+ * @param reserveLabels 押すと字が入れ替わるボタンで、入れ替わる字（[label] も含めてよい）。どの字でもボタンの大きさが
+ *   変わらないよう、いちばん大きい字の分の場所を取っておく（見えない・読み上げない字を重ねる）
  */
 @Composable
 internal fun PopButton(
@@ -178,6 +162,8 @@ internal fun PopButton(
     fontSize: TextUnit = 16.sp,
     enabled: Boolean = true,
     corner: Dp = 14.dp,
+    padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+    reserveLabels: List<String> = emptyList(),
 ) {
     val source = remember { MutableInteractionSource() }
     Box(
@@ -185,12 +171,35 @@ internal fun PopButton(
         modifier = modifier
             .pressFeel(source)
             .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .popBlock(face = face, corner = corner, edge = edge)
+            .popBlock(face = if (enabled) face else Fieldbook.GridMajor, corner = corner, edge = if (enabled) edge else null)
             .heightIn(min = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(padding),
     ) {
-        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fontSize, color = text, maxLines = 2)
+        // 入れ替わるほかの字の分の場所（見えない・読み上げない）。字が変わっても、ボタンと並ぶ段の高さが変わらないように
+        for (other in reserveLabels) {
+            if (other != label) {
+                PopButtonLabel(other, fontSize, Color.Transparent, Modifier.alpha(0f).clearAndSetSemantics {})
+            }
+        }
+        PopButtonLabel(label, fontSize, if (enabled) text else Fieldbook.Muted)
     }
+}
+
+/** [PopButton] の字 */
+@Composable
+private fun PopButtonLabel(label: String, fontSize: TextUnit, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        label,
+        fontFamily = Pop.Rounded,
+        fontWeight = FontWeight.Black,
+        fontSize = fontSize,
+        color = color,
+        maxLines = 2,
+        // 文字を大きくして 2 行になるときは、言葉の切れ目（「もう一度」「歩く」）で折り返して、まん中にそろえる
+        textAlign = TextAlign.Center,
+        style = noteStyle,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -263,76 +272,6 @@ internal fun PopTag(label: String, face: Color, modifier: Modifier = Modifier, f
 internal val SECTION_CORNER: Dp = 14.dp
 
 /**
- * タワーの注記の行：本数・作者・日時を「・」でつなぐ。本数と日時は太い丸ゴシックで、前の細い字より一回り大きく（13sp）。
- * 囲みはしない（札で囲むと、高さや呼び名より目立ってしまうため）。並びの物差しに使っている値
- * （多い順なら本数、新しい順なら日時）だけ墨の字にし、ほかは薄い墨。
- * 作者は人が入れる字で、丸ゴシックの切り出しに入っていないので、端末の字体の太字（長ければ「…」で詰める）
- *
- * @param partsLabel 本数に「パーツ」を付けるか（ランキングと紙片。断面図の下の行は短く「5 本」）
- * @param dateOnNewLine 日時を 2 行目に回すか（幅の狭いランキングの紙片）
- */
-@Composable
-internal fun TowerMeta(
-    tower: TowerSummary,
-    sort: TowerSort,
-    modifier: Modifier = Modifier,
-    partsLabel: Boolean = false,
-    dateOnNewLine: Boolean = false,
-) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
-    val parts: @Composable () -> Unit = {
-        MetaText(if (partsLabel) "パーツ ${tower.partCount} 本" else "${tower.partCount} 本", strong = sort == TowerSort.PARTS)
-    }
-    val date: @Composable () -> Unit = {
-        MetaText(formatDate(tower.createdAt), strong = sort == TowerSort.NEWEST)
-    }
-    val dot: @Composable () -> Unit = { MetaText(" ・ ", strong = false) }
-    val authorText: @Composable RowScope.() -> Unit = {
-        Text(
-            author,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = Fieldbook.Muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-    }
-    if (dateOnNewLine) {
-        Column(modifier = modifier) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                parts()
-                dot()
-                authorText()
-            }
-            date()
-        }
-    } else {
-        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-            parts()
-            dot()
-            authorText()
-            dot()
-            date()
-        }
-    }
-}
-
-/** 注記の字（太い丸ゴシック、13sp）。[strong] なら墨、そうでなければ薄い墨 */
-@Composable
-private fun MetaText(label: String, strong: Boolean) {
-    Text(
-        label,
-        fontFamily = Pop.Rounded,
-        fontWeight = FontWeight.Black,
-        fontSize = 13.sp,
-        color = if (strong) Fieldbook.Ink else Fieldbook.Muted,
-        maxLines = 1,
-        softWrap = false,
-    )
-}
-
-/**
  * リロードの印：青緑のブロックに白い矢印。少し傾けて、題字の積み木と並べたときに浮かないように。
  * 取り直している間は矢印が回る（端末で動きを減らしていれば回さない）
  */
@@ -383,12 +322,11 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
  * - 最後以外のブロック：その場で軽く跳ね、1 回はねて元に戻る
  * - 最後のブロック：画面の上のカメラの穴のあたりから、回りながら斜めに落ちてきて、1 回はねて収まる
  *
- * 動きの形は題字（ui/collect/TitleBlocks.kt の hop・dropIn）と同じで、ブロックが小さいぶん跳ねる高さを少し低くしている。
- * 題字のほうは B の担当で中の関数が private なので、ここに同じ形を書いている（動きを変えるときは両方そろえる）。
- * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。飾りなので読み上げではボタンにせず、字そのものを読む。
+ * 動きは題字と共通（ui/common/BlockMotion.kt）で、大きさだけ変えている（[WordMotion]）。
+ * 動くのは見た目だけ（graphicsLayer）で、まわりの配置は変わらない。飾りなので読み上げではボタンにせず、字そのものを見出しとして読む。
  * 押したときの振動は設定（振動のオン・オフ）に従う。端末で動きを減らしていれば、動きは飛ばされてすぐ元の位置に戻る
  *
- * @param blockDp ブロック 1 つの大きさ（題字は 32dp）
+ * @param blockDp ブロック 1 つの大きさ（題字は 38dp）
  */
 @Composable
 internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp = 26.dp) {
@@ -396,6 +334,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
     val shape = RoundedCornerShape(blockDp * 0.22f)
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    val sfx = rememberSfx()
     val view = LocalView.current
     val motions = remember(text) { List(text.length) { BlockMotion() } }
     val running = remember(text) { arrayOfNulls<Job>(text.length) }
@@ -433,13 +372,20 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                             running[i]?.cancel()
                             running[i] = scope.launch {
                                 if (isLast) {
-                                    val camera = cameraPoint(view, offscreenPx = (blockDp * 0.75f).toPx())
+                                    // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
+                                    val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
-                                    motion.dropIn(fromDx, fromDy) { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) }
+                                    motion.dropIn(fromDx, fromDy, WordMotion) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                        sfx.play(Sfx.LAND)
+                                    }
                                 } else {
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                    motion.hop(sign = if (tilt < 0f) -1f else 1f)
+                                    // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
+                                    sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
+                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = WordMotion)
                                 }
                             }
                         }
@@ -466,74 +412,11 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
     }
 }
 
-/** ブロック 1 つの、ふだんの位置からのずれ（横・縦 [dp]、回転 [度]）。押したときだけ動く */
-private class BlockMotion {
-    val dx = Animatable(0f)
-    val dy = Animatable(0f)
-    val turn = Animatable(0f)
-}
-
 /**
- * その場で軽く跳ねる：傾きを少し増しながら上がって落ち、1 回小さくはねて戻る（題字の hop と同じ形。高さは 26/32）。
- * [sign] は傾ける向き（ふだんの傾きと同じ向きに増す）
+ * 画面名の積み木の動きの大きさ（ui/common/BlockMotion.kt。題字と同じ動きで、大きさだけ違う）。
+ * ブロックが題字より小さいので跳ねる高さを少し低く（題字の 32dp のときの 26/32）、題字より下にあって落ちる距離が長いので、落ちる時間を少し長くする
  */
-private suspend fun BlockMotion.hop(sign: Float) = coroutineScope {
-    launch {
-        turn.animateTo(8f * sign, tween(HOP_UP_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
-        turn.animateTo(-3f * sign, tween(BOUNCE_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-    }
-    dy.animateTo(-10f, tween(HOP_UP_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(HOP_UP_MS, easing = EaseInQuad))
-    dy.animateTo(-3f, tween(BOUNCE_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-}
-
-/**
- * カメラの穴のあたり（ふだんの位置から [fromDx], [fromDy] [dp] ずれた所）から回りながら斜めに落ちてきて、
- * 止まる位置の少し右に着き、左へ弧を描いて 1 回はねて収まる（題字の dropIn と同じ形）。[onLand] は着いたとき（手ごたえの振動）。
- * 画面名は題字より下にあって落ちる距離が長いので、落ちる時間を少しだけ長くする
- */
-private suspend fun BlockMotion.dropIn(fromDx: Float, fromDy: Float, onLand: () -> Unit) = coroutineScope {
-    dx.snapTo(fromDx)
-    dy.snapTo(fromDy)
-    turn.snapTo(60f)
-    val fallMs = 220
-    launch {
-        dx.animateTo(10f, tween(fallMs, easing = LinearEasing))
-        dx.animateTo(0f, tween(BOUNCE_MS * 2, easing = LinearEasing))
-    }
-    launch {
-        turn.animateTo(10f, tween(fallMs, easing = LinearEasing))
-        turn.animateTo(-6f, tween(BOUNCE_MS, easing = EaseOutQuad))
-        turn.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-    }
-    dy.animateTo(0f, tween(fallMs, easing = EaseInQuad))
-    onLand()
-    dy.animateTo(-6f, tween(BOUNCE_MS, easing = EaseOutQuad))
-    dy.animateTo(0f, tween(BOUNCE_MS, easing = EaseInQuad))
-}
-
-/**
- * 落ち始めの点：画面の上のカメラの穴のまん中（画面の左上から [px]）。
- * 穴のない端末では、画面のまん中の、上の端より [offscreenPx] だけ上（ブロックが画面の外に隠れている所）
- */
-private fun cameraPoint(view: View, offscreenPx: Float): Offset {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        val hole = view.rootWindowInsets?.displayCutout?.boundingRects
-            ?.filter { it.top <= 0 && !it.isEmpty }
-            ?.minByOrNull { abs(it.exactCenterX() - view.rootView.width / 2f) }
-        if (hole != null) return Offset(hole.exactCenterX(), hole.exactCenterY())
-    }
-    return Offset(view.rootView.width / 2f, -offscreenPx)
-}
-
-/** 跳ねるときの、上がる（下がる）時間 [ms]。題字と同じ */
-private const val HOP_UP_MS = 120
-
-/** 1 回はねるときの、上がる（下がる）時間 [ms]。題字・起動画面の「ミ」と同じ */
-private const val BOUNCE_MS = 55
+private val WordMotion = BlockMotionSpec(hopDp = 10f, hopBounceDp = 3f, fallMs = 220, landDxDp = 10f, landBounceDp = 6f)
 
 /** ブロックの色：アイコンの 4 色を順に */
 private val BlockColors = listOf(Pop.Orange, Pop.Teal, Pop.Yellow, Pop.Navy)

@@ -62,12 +62,19 @@ import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopTag
+import com.rein4ce.roadcollector.ui.common.PopRefreshButton
+import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
  * ランキング：全部のタワーを紙片（カード）で 1 列に、[PAGE_SIZE] 個ずつ。「みんな」の「ランキングを見る」から来て、「‹ 戻る」で戻る。
  * [mineOnly] なら「あなたのタワー」：自分のタワーだけを同じ形で並べる。番号はその中での順番（1、2、3）で、
  * 「最長」「最多」の札は付けない（全部の中での 1 番ではないので）。送っていなければ案内。
- * 見た目は「みんな」の最初の画面と同じポップなブロック（Pop.kt）。
+ * 見た目は「みんな」の最初の画面と同じポップなブロック（ui/common/Pop.kt）。
  * 順位の積み木（1〜3 位は金・銀・銅）、タワーの絵（一覧の中で同じ縮尺）、高さ（主役）、1 番の値を 100% にした横棒（物差しの色）、パーツ数・作者・日時。
  * 1 番には「最長」「最多」の札、自分のタワーには「あなた」の札。カードを押すと紙片（TowerSheet）が開く。
  * 読み込み中・取り直せなかったときの知らせと、リロードの印は「みんな」の最初の画面と同じ（[GalleryStatusRow]）
@@ -422,4 +429,6 @@ private val CardShape = RoundedCornerShape(CARD_CORNER)
 private val SketchShape = RoundedCornerShape(8.dp)
 
 internal fun formatDate(epochMs: Long): String =
-    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d HH:mm", Locale.JAPAN).format(Date(epochMs))
+    // 日付だけ（時刻は出さない）。歩いてすぐ積んで送ると、送った時刻から歩いた時刻が分かってしまうため。
+    // 一覧は 1 週間ごとに入れ替える予定なので、日付で足りる（#92・決定 47。アプリも送る前に日付に丸める）
+    if (epochMs <= 0L) "—" else SimpleDateFormat("M/d", Locale.JAPAN).format(Date(epochMs))

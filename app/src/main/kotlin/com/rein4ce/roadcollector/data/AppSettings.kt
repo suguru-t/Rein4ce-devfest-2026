@@ -24,6 +24,22 @@ enum class ThemeMode(val label: String) {
 }
 
 /**
+ * BGM の曲（決定 48）。テーマの違う 3 曲で、どれも tools/make_bgm.py で作る（ファイルは audio/BgmPlayer.kt が選ぶ）。
+ * 3 曲とも効果音と同じハ長調の音だけなので、どの曲でも効果音と重なって濁らない。
+ * 設定では「‹ ›」でこの並びの順に切り替える。保存は名前（MARIMBA など）なので、並べ替えても前の設定は読める
+ */
+enum class BgmTrack(val label: String) {
+    /** はじめからある曲。木琴で、歩く速さくらい（88 BPM）のゆったりした曲。はじめは「いつもの」と呼んでいた */
+    MARIMBA("トコトコ"),
+
+    /** 昔のゲーム機のような音（140 BPM）。速い分散和音と太鼓で、冒険に出るような曲 */
+    CHIP("ピコピコ"),
+
+    /** ウクレレの刻みと口笛（112 BPM）。晴れた日に外を歩くような曲 */
+    UKULELE("ウクレレ"),
+}
+
+/**
  * 背景の天気（雨・雪・雲・太陽）の動き。なめらかさと電池の持ちのかね合い。
  * 並びは動きの少ない順（設定のスライダーの左から）。保存は名前なので、並べ替えても前の設定は読める
  *
@@ -51,7 +67,7 @@ enum class WeatherMotion(val label: String, val note: String) {
 const val DEMO_SETTINGS = true
 
 /**
- * 発表（デモ）で見せる天気。本当の天気の代わりに、記録とみんなの背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
+ * 発表（デモ）で見せる天気。本当の天気の代わりに、記録・みんな・コレクションの一覧の背景（今の天気）と、デモ散歩でできるパーツの天気をこれにする。
  * 審査のときに、その日の天気に関係なく、雨・雪・夜の月などを見せるため。ふだんは本当の天気（[REAL]）。保存は名前
  *
  * @property weather 見せる天気。本当の天気なら null
@@ -176,6 +192,29 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _bgmVolume.value = v
     }
 
+    private val _bgmTrack = MutableStateFlow(readEnum(KEY_BGM_TRACK, BgmTrack.MARIMBA))
+
+    /** BGM の曲。初めは「トコトコ」。選ぶとすぐに切り替わる（流している途中なら、新しい曲の頭から） */
+    val bgmTrack: StateFlow<BgmTrack> = _bgmTrack
+
+    fun setBgmTrack(track: BgmTrack) {
+        store.put(KEY_BGM_TRACK, track.name)
+        _bgmTrack.value = track
+    }
+
+    private val _sfxOn = MutableStateFlow(readBoolean(KEY_SFX_ON, true))
+
+    /**
+     * 効果音（ボタンを押したとき・題字や画面名の積み木を押したとき・道を 1 本集めたとき）を鳴らすか。初めはオン。
+     * BGM とは別に切り替えられる。鳴らすかは鳴らす瞬間に読む（audio/SoundEffects.kt）
+     */
+    val sfxOn: StateFlow<Boolean> = _sfxOn
+
+    fun setSfxOn(on: Boolean) {
+        store.put(KEY_SFX_ON, on.toString())
+        _sfxOn.value = on
+    }
+
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
     /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
@@ -252,6 +291,8 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_BGM_ON = "bgm_on"
         private const val KEY_BGM_VOLUME = "bgm_volume"
+        private const val KEY_SFX_ON = "sfx_on"
+        private const val KEY_BGM_TRACK = "bgm_track"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"
