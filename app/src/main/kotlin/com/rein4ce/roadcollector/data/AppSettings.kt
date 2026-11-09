@@ -24,6 +24,23 @@ enum class ThemeMode(val label: String) {
 }
 
 /**
+ * BGM の曲（決定 48）。どれも木琴の音で、tools/make_bgm.py で作る（ファイルは audio/BgmPlayer.kt が選ぶ）。
+ * 効果音と同じハ長調の音だけなので、どの曲でも効果音と重なって濁らない。保存は名前なので、並べ替えても前の設定は読める
+ *
+ * @property note 設定で曲を選ぶ行に、名前の下に出す説明
+ */
+enum class BgmTrack(val label: String, val note: String) {
+    /** はじめからある曲。歩く速さくらい（88 BPM）でゆったり */
+    USUAL("いつもの", "ゆったり歩く速さの曲"),
+
+    /** 速め（112 BPM）で弾む */
+    LIGHT("軽やか", "速めで弾む曲"),
+
+    /** ゆっくり（66 BPM）で静か */
+    NIGHT("夜", "ゆっくりで静かな曲"),
+}
+
+/**
  * 背景の天気（雨・雪・雲・太陽）の動き。なめらかさと電池の持ちのかね合い。
  * 並びは動きの少ない順（設定のスライダーの左から）。保存は名前なので、並べ替えても前の設定は読める
  *
@@ -176,6 +193,16 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _bgmVolume.value = v
     }
 
+    private val _bgmTrack = MutableStateFlow(readEnum(KEY_BGM_TRACK, BgmTrack.USUAL))
+
+    /** BGM の曲。初めは「いつもの」。選ぶとすぐに切り替わる（流している途中なら、新しい曲の頭から） */
+    val bgmTrack: StateFlow<BgmTrack> = _bgmTrack
+
+    fun setBgmTrack(track: BgmTrack) {
+        store.put(KEY_BGM_TRACK, track.name)
+        _bgmTrack.value = track
+    }
+
     private val _sfxOn = MutableStateFlow(readBoolean(KEY_SFX_ON, true))
 
     /**
@@ -266,6 +293,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         private const val KEY_BGM_ON = "bgm_on"
         private const val KEY_BGM_VOLUME = "bgm_volume"
         private const val KEY_SFX_ON = "sfx_on"
+        private const val KEY_BGM_TRACK = "bgm_track"
         private const val KEY_NICKNAME = "nickname"
         private const val KEY_HOWTO_SEEN = "howto_seen"
         private const val KEY_DEMO_SKY = "demo_sky"

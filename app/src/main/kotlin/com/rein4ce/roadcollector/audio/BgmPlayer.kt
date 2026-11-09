@@ -7,9 +7,11 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.util.Log
 import com.rein4ce.roadcollector.R
+import com.rein4ce.roadcollector.data.BgmTrack
 
 /**
- * アプリの BGM（res/raw/bgm。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
+ * アプリの BGM（res/raw/bgm・bgm_light・bgm_night。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
+ * 曲は設定で選ぶ（[setTrack]。決定 48）。
  *
  * 流すか止めるかの決まりは [BgmControl]（アプリが前に出ていて、設定でオンのときだけ。ほかのアプリの音楽を止めない、など）。
  * ここは、その決まりを MediaPlayer と音の出番（オーディオフォーカス）につなぐ。
@@ -25,6 +27,12 @@ class BgmPlayer(context: Context) {
         .build()
 
     private var player: MediaPlayer? = null
+
+    /** 流す曲（設定の「BGM の曲」） */
+    private var track: BgmTrack = BgmTrack.USUAL
+
+    /** いま流している大きさ（曲を切り替えたときに、同じ大きさで流し始めるため） */
+    private var gain: Float = 1f
 
     private val focusRequest: AudioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(attributes)
@@ -59,6 +67,7 @@ class BgmPlayer(context: Context) {
 
         override fun play(gain: Float): Boolean {
             val p = player ?: create() ?: return false
+            this@BgmPlayer.gain = gain
             p.setVolume(gain, gain)
             p.start()
             return true
@@ -69,6 +78,7 @@ class BgmPlayer(context: Context) {
         }
 
         override fun setGain(gain: Float) {
+            this@BgmPlayer.gain = gain
             player?.setVolume(gain, gain)
         }
     })
@@ -79,11 +89,39 @@ class BgmPlayer(context: Context) {
     /** 設定の BGM のオン・オフと音量（1〜10） */
     fun setSettings(on: Boolean, volume: Int) = control.setSettings(on, volume)
 
+    /**
+     * 設定の「BGM の曲」。変わったら、今の曲を片付ける。流している途中なら、すぐに新しい曲を頭から同じ大きさで流す
+     * （音の出番はそのまま持っているので、頼み直さない）。止めている・一時的に譲っているときは、次に流すときに新しい曲を読む。
+     * 流す・止めるの決まり（[BgmControl]）は、曲によらないので変えない
+     */
+    fun setTrack(next: BgmTrack) {
+        if (next == track) return
+        track = next
+        val p = player ?: return
+        val wasPlaying = p.isPlaying
+        p.release()
+        player = null
+        if (wasPlaying) {
+            create()?.apply {
+                setVolume(gain, gain)
+                start()
+            }
+        }
+    }
+
     private fun create(): MediaPlayer? = runCatching {
-        MediaPlayer.create(context, R.raw.bgm, attributes, audio.generateAudioSessionId())?.apply {
+        MediaPlayer.create(context, track.res, attributes, audio.generateAudioSessionId())?.apply {
             isLooping = true
         }
     }.onFailure { Log.w(TAG, "BGM could not be loaded", it) }.getOrNull().also { player = it }
+
+    /** 曲のファイル（tools/make_bgm.py の SONGS と同じ名前） */
+    private val BgmTrack.res: Int
+        get() = when (this) {
+            BgmTrack.USUAL -> R.raw.bgm
+            BgmTrack.LIGHT -> R.raw.bgm_light
+            BgmTrack.NIGHT -> R.raw.bgm_night
+        }
 
     private companion object {
         const val TAG = "BgmPlayer"

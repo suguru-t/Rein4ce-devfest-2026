@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
         // BGM：設定は、画面ができる前に渡しておく（オフにしている人に、開いた瞬間だけ鳴らないように）
         volumeControlStream = volumeStreamFor(settings.bgmOn.value, settings.sfxOn.value)
         val bgm = RoadCollectorApp.from(this).bgm
+        bgm.setTrack(settings.bgmTrack.value)
         bgm.setSettings(settings.bgmOn.value, settings.bgmVolume.value)
         // 効果音は、最初に押したボタンから鳴るように、画面ができる前に読み込みを始めておく
         RoadCollectorApp.from(this).sfx
@@ -88,6 +89,9 @@ class MainActivity : ComponentActivity() {
             val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
             val sfxOn by settings.sfxOn.collectAsStateWithLifecycle()
             LaunchedEffect(bgmOn, bgmVolume) { bgm.setSettings(bgmOn, bgmVolume) }
+            // 曲を選び直したら、すぐに切り替える（設定の画面で聞き比べられる）
+            val bgmTrack by settings.bgmTrack.collectAsStateWithLifecycle()
+            LaunchedEffect(bgmTrack) { bgm.setTrack(bgmTrack) }
             LaunchedEffect(bgmOn, sfxOn) { volumeControlStream = volumeStreamFor(bgmOn, sfxOn) }
             // 記録中は画面を消さない（設定でオンにしたときだけ。地図を見ながら歩くとき用）。記録を止めたら元に戻す
             val keepOn by settings.keepScreenOn.collectAsStateWithLifecycle()

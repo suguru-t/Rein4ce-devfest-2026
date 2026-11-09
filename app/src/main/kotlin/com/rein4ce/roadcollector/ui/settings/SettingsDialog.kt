@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -53,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.data.AppSettings
+import com.rein4ce.roadcollector.data.BgmTrack
 import com.rein4ce.roadcollector.data.DEMO_SETTINGS
 import com.rein4ce.roadcollector.data.DemoSky
 import com.rein4ce.roadcollector.data.ThemeMode
@@ -70,7 +72,7 @@ import kotlin.math.roundToInt
  * 選ぶ画面に切り替わる（枠の下の丸いボタンが「＜」になり、それか戻る・枠の外で一覧に戻る。一覧では「×」で設定を閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
- * - BGM：オン・オフのスイッチと、その下に音量のスライダー（10 段階。オフのときは動かせない）、初期設定に戻すボタン
+ * - BGM：オン・オフのスイッチと、曲（いつもの・軽やか・夜）、音量のスライダー（10 段階）。オフのときは曲と音量を選べない。初期設定に戻すボタン
  * - 効果音：オン・オフのスイッチ（ボタン・積み木・道を 1 本集めたときの木琴の音。BGM とは別に切り替えられる）
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
@@ -90,6 +92,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     val haptics by settings.haptics.collectAsStateWithLifecycle()
     val bgmOn by settings.bgmOn.collectAsStateWithLifecycle()
     val bgmVolume by settings.bgmVolume.collectAsStateWithLifecycle()
+    val bgmTrack by settings.bgmTrack.collectAsStateWithLifecycle()
     val sfxOn by settings.sfxOn.collectAsStateWithLifecycle()
     val nickname by settings.nickname.collectAsStateWithLifecycle()
     val demoSky by settings.demoSky.collectAsStateWithLifecycle()
@@ -124,7 +127,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     ItemDivider()
                     LinkRow(Page.HAPTICS.title, onOff(haptics)) { page = Page.HAPTICS }
                     ItemDivider()
-                    LinkRow(Page.BGM.title, if (bgmOn) "音量 $bgmVolume" else "オフ") { page = Page.BGM }
+                    LinkRow(Page.BGM.title, if (bgmOn) "${bgmTrack.label}・音量 $bgmVolume" else "オフ") { page = Page.BGM }
                     ItemDivider()
                     LinkRow(Page.SFX.title, onOff(sfxOn)) { page = Page.SFX }
                 }
@@ -166,11 +169,14 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             )
             Page.BGM -> BgmPage(
                 on = bgmOn,
+                track = bgmTrack,
                 volume = bgmVolume,
                 onOnChange = settings::setBgmOn,
+                onTrackChange = settings::setBgmTrack,
                 onVolumeChange = settings::setBgmVolume,
                 onReset = {
                     settings.setBgmOn(true)
+                    settings.setBgmTrack(BgmTrack.USUAL)
                     settings.setBgmVolume(AppSettings.DEFAULT_BGM_VOLUME)
                 },
             )
@@ -334,19 +340,29 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
 }
 
 /**
- * BGM の画面：いちばん上にオン・オフのスイッチ、その下に音量のスライダー（1〜10。オフのときは、うすくして動かせない）、
- * 説明、いちばん下に「初期設定に戻す」（オン・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。動かすとすぐに音が変わる
+ * BGM の画面：いちばん上にオン・オフのスイッチ、その下に曲（いつもの・軽やか・夜）と音量のスライダー（1〜10）。
+ * オフのときは、曲と音量をうすくして選べない。説明、いちばん下に「初期設定に戻す」（オン・いつもの・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。
+ * 選ぶ・動かすとすぐに音が変わる（曲は、新しい曲の頭から流れる）
  */
 @Composable
 private fun BgmPage(
     on: Boolean,
+    track: BgmTrack,
     volume: Int,
     onOnChange: (Boolean) -> Unit,
+    onTrackChange: (BgmTrack) -> Unit,
     onVolumeChange: (Int) -> Unit,
     onReset: () -> Unit,
 ) {
     Toggle(label = if (on) "オン" else "オフ", note = null, checked = on, onChange = onOnChange)
     Column(modifier = Modifier.padding(top = 8.dp).alpha(if (on) 1f else 0.45f)) {
+        Text("曲", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.semantics { heading() })
+        Column(modifier = Modifier.selectableGroup()) {
+            for (t in BgmTrack.entries) {
+                Choice(label = t.label, note = t.note, selected = t == track, enabled = on, onSelect = { onTrackChange(t) })
+            }
+        }
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("音量", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
             Text("$volume", fontFamily = Fieldbook.Data, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
@@ -386,8 +402,8 @@ private fun BgmPage(
         color = Fieldbook.Ink,
         modifier = Modifier.padding(top = 10.dp),
     )
-    // 初期設定（オン・音量 まん中）に戻す。すでに初期設定なら押せない
-    val isDefault = on && volume == AppSettings.DEFAULT_BGM_VOLUME
+    // 初期設定（オン・いつもの・音量 まん中）に戻す。すでに初期設定なら押せない
+    val isDefault = on && track == BgmTrack.USUAL && volume == AppSettings.DEFAULT_BGM_VOLUME
     PressTextButton(onClick = onReset, enabled = !isDefault, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
         Text("初期設定に戻す", color = if (isDefault) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
     }
@@ -442,17 +458,18 @@ private fun ItemDivider() {
 
 /** 1 つだけ選ぶ項目の 1 行（行ごと押せる） */
 @Composable
-private fun Choice(label: String, note: String?, selected: Boolean, onSelect: () -> Unit) {
+private fun Choice(label: String, note: String?, selected: Boolean, onSelect: () -> Unit, enabled: Boolean = true) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton),
+            .selectable(selected = selected, onClick = onSelect, enabled = enabled, role = Role.RadioButton),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(
             selected = selected,
             onClick = null, // 行ごと押せる（selectable）
+            enabled = enabled,
             colors = RadioButtonDefaults.colors(selectedColor = Fieldbook.Survey, unselectedColor = Fieldbook.Muted),
         )
         Spacer(Modifier.width(8.dp))
