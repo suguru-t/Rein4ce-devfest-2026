@@ -5,7 +5,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,8 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -42,19 +39,16 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -65,117 +59,15 @@ import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
-import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.rankOf
-import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PressButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
-import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
-import com.rein4ce.roadcollector.ui.common.popBlock
-import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.isActive
 import java.util.Locale
 
-
-/** 積むタブの 2 つの遊び方 */
-private enum class StackMode(val label: String) {
-    NORMAL("通常"),
-    CHALLENGE("3分チャレンジ"),
-}
-
-/** 選んでいる札の面（白い字を載せる。紙の上で 4.5:1 を超える濃い色。「みんな」の札と同じ決まり） */
-private val StackMode.face: Color
-    get() = when (this) {
-        StackMode.NORMAL -> Pop.TealDeep
-        StackMode.CHALLENGE -> Pop.OrangeDeep
-    }
-
-/** 選んでいない札の縁と字。ダークモードでは濃い色が紙に沈むので、明るい色にする */
-private val StackMode.ink: Color
-    get() = when (this) {
-        StackMode.NORMAL -> Pop.TealLine
-        StackMode.CHALLENGE -> if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
-    }
-
-/**
- * 積むタブ：上の白いラベルの札で「通常」と「3分チャレンジ」を切り替える。通常のモード（StackScreen）には手を入れない。
- * コレクションや「パーツを選ぶ」で選んで始めたときは、通常のモードに戻す
- */
-@Composable
-fun StackModes(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
-    var mode by rememberSaveable { mutableStateOf(StackMode.NORMAL) }
-    val request = GameSession.startRequest
-    LaunchedEffect(request) { if (request != null && !request.started) mode = StackMode.NORMAL }
-    Column(Modifier.fillMaxSize()) {
-        ModeTabs(mode, onSelect = { mode = it })
-        Box(Modifier.weight(1f)) {
-            when (mode) {
-                StackMode.NORMAL -> StackScreen(onGoInventory, onGoGallery)
-                StackMode.CHALLENGE -> ChallengeScreen()
-            }
-        }
-    }
-}
-
-/**
- * 「通常」「3分チャレンジ」の切り替え。地の方眼や天気の上に字を直接載せず、白い紙のラベルの上に置く（読みやすく）。
- * 札は「みんな」の並びの切り替え（RankingScreen の SortTabs）と同じ形：選んでいる札は色の面に白い字で少し傾け、
- * 選んでいない札は白い面に色の縁と字。読み上げでも、どちらを選んでいるか分かるようにする（Role.Tab）。
- * 字は端末の字体の極太（丸ゴシックは「みんな」で使う字だけを切り出したもので、「通常」「チャレンジ」の字が入っていないため）
- */
-@Composable
-private fun ModeTabs(mode: StackMode, onSelect: (StackMode) -> Unit) {
-    val label = if (Fieldbook.dark) Fieldbook.Card else Color.White
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .popBlock(face = label, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        StackMode.entries.forEachIndexed { i, m ->
-            val selected = m == mode
-            val source = remember { MutableInteractionSource() }
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .pressFeel(source)
-                    .selectable(
-                        selected = selected,
-                        interactionSource = source,
-                        indication = null,
-                        role = Role.Tab,
-                        onClick = { onSelect(m) },
-                    ),
-            ) {
-                Text(
-                    m.label,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 15.sp,
-                    color = if (selected) Pop.Letter else m.ink,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .graphicsLayer { rotationZ = if (selected) (if (i % 2 == 0) -2f else 2f) else 0f }
-                        .popBlock(
-                            face = if (selected) m.face else label,
-                            corner = 50.dp,
-                            depth = if (selected) 4.dp else 2.dp,
-                            edge = if (selected) null else m.ink,
-                        )
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-            }
-        }
-    }
-}
 
 /** 確かめてから行うこと（どちらも、その回は記録に残さない） */
 private enum class ChallengeConfirm { RESTART, ABANDON }
@@ -188,9 +80,13 @@ private enum class ChallengeConfirm { RESTART, ABANDON }
  * - 毎コマ変わるのは塔の図形（キャンバスの描画の中だけで読む）と、秒が変わったときの残り時間（時計の字だけ）。
  *   画面全体は、操作したときと次の形に進んだときだけ組み立て直す（#78 のレビュー）
  * - 「やり直す」「中断」は確かめの窓を出し、出している間は時計と物理を止める
+ * - 地は塗らない。ほかの画面と同じ方眼の紙と今の天気（決定 59）
+ *
+ * @param leading 上の行の左に置くもの。遊び方を選ぶ画面（ModeSelect.kt の ModePlayPage）から「‹ 戻る」と今のモードの札が来る。
+ *   compact は小さい画面（積む画面の高さが 600dp 未満。札を出さず「‹ 戻る」だけにする）
  */
 @Composable
-private fun ChallengeScreen() {
+internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
     val directory = LocalContext.current.applicationContext.filesDir
     val factory = remember(directory) {
         object : ViewModelProvider.Factory {
@@ -218,9 +114,14 @@ private fun ChallengeScreen() {
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxHeight < COMPACT_HEIGHT
         if (frame == null) {
-            ChallengeIntro(vm)
+            // 始める前の説明の画面でも、上の行に「‹ 戻る」（遊び方を選ぶ画面へ）
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) { leading(compact) }
+                Box(Modifier.weight(1f)) { ChallengeIntro(vm) }
+            }
             return@BoxWithConstraints
         }
         val ink = MaterialTheme.colorScheme.onBackground
@@ -230,23 +131,29 @@ private fun ChallengeScreen() {
         val density = LocalDensity.current
         var controlsMinHeightDp by rememberSaveable(vm.generation) { mutableStateOf(0f) }
         Column(Modifier.fillMaxSize()) {
-            // 1 段目：情報。主役の残り時間は、通常のモードの「模型の高さ」と同じ大きさ（headlineSmall）
+            // 1 段目：情報。上の行の左に「‹ 戻る」（leading）、右に主役の残り時間（通常のモードの「模型の高さ」と同じ大きさ。headlineSmall）。
+            // 次の行に「模型の高さ」と「次」の形。「‹ 戻る」の行を別に足さず、残り時間と同じ行に置く（塔を描く所を狭くしないように）
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                leading(compact)
                 ChallengeClock(vm, ink)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("模型の高さ %.2f m".format(Locale.JAPAN, frame.towerHeight), style = MaterialTheme.typography.bodyMedium, color = ink)
-                    if (!frame.terminal) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("次 ", style = MaterialTheme.typography.bodyMedium, color = ink)
-                            Canvas(Modifier.size(22.dp)) {
-                                drawPart(frame.next, Offset(size.width / 2, size.height / 2), size.width * 0.7f)
-                            }
-                            Text(" ${frame.next.name ?: ""}", style = MaterialTheme.typography.bodyMedium, color = ink)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("模型の高さ %.2f m".format(Locale.JAPAN, frame.towerHeight), style = MaterialTheme.typography.bodyMedium, color = ink)
+                if (!frame.terminal) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("次 ", style = MaterialTheme.typography.bodyMedium, color = ink)
+                        Canvas(Modifier.size(22.dp)) {
+                            drawPart(frame.next, Offset(size.width / 2, size.height / 2), size.width * 0.7f)
                         }
+                        Text(" ${frame.next.name ?: ""}", style = MaterialTheme.typography.bodyMedium, color = ink)
                     }
                 }
             }
@@ -525,6 +432,9 @@ private val LastSecondsRed = Color(0xFFD64545)
 
 /** 操作の段の高さの上限（画面の高さに対する割合） */
 private const val CONTROLS_MAX_FRACTION = 0.45f
+
+/** これより低い画面（端末のバーとタブバーを除いた高さ）では、上の行の「‹ 戻る」の隣にモードの札を出さない（積む画面と同じ） */
+private val COMPACT_HEIGHT = 600.dp
 
 /** カメラを上げるときにかける時間 [ms]（通常のモードと同じ） */
 private const val CAMERA_ANIMATION_MS = 400
