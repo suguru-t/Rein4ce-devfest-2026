@@ -29,16 +29,18 @@ import kotlin.math.min
  *   指定すると、幅も一覧で同じ範囲（[RANKING_WIDTH_M]）で見て、台の中心を枠の真ん中・台の下を枠の下に置くので、
  *   どのカードも同じ縮尺・同じ台の位置になり、高いタワーほど大きく描かれる（はみ出した所は呼ぶ側の枠で切れる）。
  *   null なら、このタワーが枠いっぱいに入る縮尺で真ん中に描く（紙片・共有の絵）
+ * @param referenceWidth [referenceHeight] を指定したときに、枠の幅に入れる範囲 [m]。一覧で同じ縮尺にするので、呼ぶ側が
+ *   一覧でいちばん広い台のタワーに合わせて渡す（[rankingWidthFor]。広い台で積んだタワーがはみ出さないように。決定 66）
  */
 @Composable
-fun TowerSketch(tower: Tower, modifier: Modifier = Modifier, referenceHeight: Float? = null) {
+fun TowerSketch(tower: Tower, modifier: Modifier = Modifier, referenceHeight: Float? = null, referenceWidth: Float = RANKING_WIDTH_M) {
     Canvas(modifier) {
         val sx: (Float) -> Float
         val sy: (Float) -> Float
         val scale: Float
         if (referenceHeight != null) {
-            // 一覧で同じ縮尺：幅は 3 m、高さは一覧でいちばん高い範囲。台の中心を真ん中、範囲の下を枠の下に
-            scale = min(size.width / RANKING_WIDTH_M, size.height / referenceHeight)
+            // 一覧で同じ縮尺：幅は一覧でいちばん広い範囲、高さは一覧でいちばん高い範囲。台の中心を真ん中、範囲の下を枠の下に
+            scale = min(size.width / referenceWidth, size.height / referenceHeight)
             sx = { x -> size.width / 2 + x * scale }
             sy = { y -> size.height - (y + PLATFORM_THICKNESS + 0.1f) * scale }
         } else {
@@ -50,11 +52,12 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier, referenceHeight: Fl
             sy = { y -> size.height - (offY + (y - b.minY) * scale) }
         }
 
-        // 台：上面が y=0。墨で塗る
+        // 台：上面が y=0。墨で塗る。幅はタワーが持つ台の幅（広い台で積んだタワーは広い台。決定 66）
+        val platformWidth = tower.platformWidth
         drawRoundRect(
             color = Fieldbook.Ink,
-            topLeft = Offset(sx(-PLATFORM_WIDTH / 2), sy(0f)),
-            size = Size(PLATFORM_WIDTH * scale, PLATFORM_THICKNESS * scale),
+            topLeft = Offset(sx(-platformWidth / 2), sy(0f)),
+            size = Size(platformWidth * scale, PLATFORM_THICKNESS * scale),
             cornerRadius = CornerRadius(1.5f * scale * 0.05f),
         )
         drawTowerParts(tower, at = { x, y -> Offset(sx(x), sy(y)) }, pxPerM = scale)
@@ -90,7 +93,7 @@ internal fun DrawScope.drawTowerParts(tower: Tower, at: (Float, Float) -> Offset
     }
 }
 
-/** 台の幅と厚さ [m]。物理と共有ページの絵と同じ値（StackWorld が持つ） */
+/** 台の幅と厚さ [m]。物理と共有ページの絵と同じ値（StackWorld が持つ）。幅は今までの台。広い台で積んだタワーは [Tower.platformWidth] を使う */
 internal const val PLATFORM_WIDTH = StackWorld.PLATFORM_WIDTH.toFloat()
 internal const val PLATFORM_THICKNESS = StackWorld.PLATFORM_THICKNESS.toFloat()
 
@@ -108,7 +111,10 @@ internal val MAX_PART_SCALE: Float = PartSize.MAX.toFloat()
  * ランキングの絵で、どのカードにも同じ幅で入れる範囲 [m]：台の幅と、台の両端からいちばん大きいパーツが届く範囲
  * （この 3 つの定義のあとに置く）
  */
-internal val RANKING_WIDTH_M: Float = PLATFORM_WIDTH + 2 * PART_REACH * MAX_PART_SCALE
+internal val RANKING_WIDTH_M: Float get() = rankingWidthFor(PLATFORM_WIDTH)
+
+/** 台の幅 [platformWidth] のタワーを、ランキングの絵に入れる範囲の幅 [m]（台と、台の両端からいちばん大きいパーツが届く範囲） */
+internal fun rankingWidthFor(platformWidth: Float): Float = platformWidth + 2 * PART_REACH * MAX_PART_SCALE
 
 /** 絵に入れる範囲 [m]（ワールド座標。台の上面が y=0、y は上向き） */
 internal data class SketchBounds(val minX: Float, val maxX: Float, val minY: Float, val maxY: Float) {
@@ -122,8 +128,9 @@ internal data class SketchBounds(val minX: Float, val maxX: Float, val minY: Flo
  * 高さが 1 m 未満でも 1 m ぶんは見せて、低いタワーがやたら大きく描かれないようにする。
  */
 internal fun sketchBounds(tower: Tower): SketchBounds {
-    var minX = -PLATFORM_WIDTH / 2 - 0.3f
-    var maxX = PLATFORM_WIDTH / 2 + 0.3f
+    val halfPlatform = tower.platformWidth / 2
+    var minX = -halfPlatform - 0.3f
+    var maxX = halfPlatform + 0.3f
     var minY = -PLATFORM_THICKNESS - 0.1f
     var maxY = max(tower.height, 1f) + 0.3f
     for (p in tower.placements) {
@@ -133,7 +140,7 @@ internal fun sketchBounds(tower: Tower): SketchBounds {
         maxY = max(maxY, p.y + reach)
         // 台の上に乗っているパーツは台より下には行けないので、下に広げるのは台の端より外に置かれたものだけ。
         // 全部に広げると、台の下に無駄な余白ができてタワーが小さく描かれる
-        if (abs(p.x) > PLATFORM_WIDTH / 2) minY = min(minY, p.y - reach)
+        if (abs(p.x) > halfPlatform) minY = min(minY, p.y - reach)
     }
     return SketchBounds(minX, maxX, minY, maxY)
 }

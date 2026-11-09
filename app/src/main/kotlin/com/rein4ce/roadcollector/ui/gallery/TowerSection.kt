@@ -110,8 +110,10 @@ internal fun TowerSection(
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()
         val slotW = (w - staffW) / max(1, slots.size)
-        // 縮尺の上限（幅から）：台と張り出しがスロットの幅に収まる
-        val widthBound = slotW / SLOT_WIDTH_M
+        // 縮尺の上限（幅から）：台と張り出しがスロットの幅に収まる。広い台で積んだタワー（絵が届いているもの）があれば、それに合わせる（決定 66）
+        val slotWidthM = slots.mapNotNull { s -> s.tower?.let { sketches[it.id]?.platformWidth } }.maxOfOrNull { slotWidthFor(it) }
+            ?.coerceAtLeast(SLOT_WIDTH_M) ?: SLOT_WIDTH_M
+        val widthBound = slotW / slotWidthM
         // 下の余白：名札の台（呼び名の高さ＋上下の余白）と、その下にのぞく側面。枠の外には描かないので、ここに収める
         val captionH = measurer.measure("あ", caption).size.height
         val plateH = captionH + 8.dp.toPx()
@@ -147,10 +149,11 @@ internal fun TowerSection(
         slots.forEachIndexed { i, s ->
             val cx = staffW + slotW * (i + 0.5f)
             val t = s.tower
-            // 名札の台：上面が baseY。幅は台（PLATFORM_WIDTH）か呼び名の長いほう（スロットに収める）。
+            // 名札の台：上面が baseY。幅は台（タワーの台の幅。絵がまだなら今までの台）か呼び名の長いほう（スロットに収める）。
             // 自分のはオレンジ、ほかの人のは紺のブロックに白い字。タワーが無い枠は、破線の名札に薄い字
             val label = measurer.measure(s.caption, caption.copy(color = if (t == null) Fieldbook.Muted else Pop.Letter))
-            val plateW = max(PLATFORM_WIDTH * pxPerM, label.size.width + 18.dp.toPx()).coerceAtMost(slotW - 8.dp.toPx())
+            val platformWidth = t?.let { sketches[it.id]?.platformWidth } ?: PLATFORM_WIDTH
+            val plateW = max(platformWidth * pxPerM, label.size.width + 18.dp.toPx()).coerceAtMost(slotW - 8.dp.toPx())
             val plate = Rect(Offset(cx - plateW / 2, baseY), Size(plateW, plateH))
             if (t == null) {
                 drawRoundRect(Fieldbook.Mark, plate.topLeft, plate.size, CornerRadius(PLATE_CORNER_DP.dp.toPx()), style = Stroke(width = 1.dp.toPx(), pathEffect = dash))
@@ -239,4 +242,7 @@ private const val TOP_PAD_DP = 16f
 private const val MIN_HEIGHT_DP = 80f
 
 /** 1 スロットに必要な幅 [m]：台 1.4 m と、台からはみ出して静止したパーツのぶん（いちばん大きいパーツで見る） */
-private val SLOT_WIDTH_M = PLATFORM_WIDTH + 0.8f * MAX_PART_SCALE
+private val SLOT_WIDTH_M get() = slotWidthFor(PLATFORM_WIDTH)
+
+/** 台の幅 [platformWidth] のタワーを 1 スロットに入れるのに必要な幅 [m] */
+private fun slotWidthFor(platformWidth: Float): Float = platformWidth + 0.8f * MAX_PART_SCALE

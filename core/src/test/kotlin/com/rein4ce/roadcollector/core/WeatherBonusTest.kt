@@ -75,6 +75,7 @@ class WeatherBonusTest {
             placements = listOf(Placement("sample-bar", x = 0.4f, y = 0.1f, angleRad = 0.3f, scale = 0.8f)),
             height = 1.25f,
             createdAt = 0L,
+            platformWidth = 2.8f,
         )
         val big = tower.enlarged(1.3)
         val p = big.placements.single()
@@ -83,6 +84,7 @@ class WeatherBonusTest {
         assertEquals(1.04f, p.scale, 1e-5f)
         assertEquals(0.3f, p.angleRad, 0f)
         assertEquals(1.625f, big.height, 1e-5f)
+        assertEquals(3.64f, big.platformWidth, 1e-5f) // 台ごと大きくする
         assertEquals(tower, tower.enlarged(1.0))
     }
 

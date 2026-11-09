@@ -8,7 +8,8 @@ import com.rein4ce.roadcollector.core.model.Tower
  *
  * - 倍率は 1 に、残っていたパーツ 1 個ずつの [Grip.bonusPercent] を足したもの（雨の日の道が 3 個なら 1 + 0.10 × 3 = 1.30 倍）。
  *   同じパーツを何度も置いたら、置いた数だけ足す。落ちたパーツは塔に入っていないので数えない
- * - 上限は [MAX_MULTIPLIER] 倍（「みんな」に送る大きさが、サーバの受け付ける範囲（パーツの大きさ 5 倍まで）に収まるように）
+ * - 上限は [MAX_MULTIPLIER] 倍（「みんな」に送る大きさが、サーバの受け付ける範囲（パーツの大きさ 5 倍まで・台の幅 10 m まで）に収まるように。
+ *   パーツの大きさは最大 1.4 倍、通常の台は 2.8 m なので、3 倍で 4.2 倍・8.4 m）
  * - 倍率は百分の一の単位の整数で足す（0.1 を足し続けたときの小数のずれで、1.30 が 1.2999… にならないように）
  */
 object WeatherBonus {
@@ -45,7 +46,8 @@ object WeatherBonus {
 /**
  * タワーを、台の上面のまん中（原点）を中心に [factor] 倍に大きくする（天気のボーナス。決定 68）。
  * 置いた位置と大きさ（[com.rein4ce.roadcollector.core.model.Placement.scale]）と高さに同じ倍率をかけるので、
- * 形も並び方も変わらず、そのまま大きくなる（世界の点 = 回転(大きさ × 形の点) + 位置 なので、両方に掛ければ全体が掛かる）
+ * 形も並び方も変わらず、そのまま大きくなる（世界の点 = 回転(大きさ × 形の点) + 位置 なので、両方に掛ければ全体が掛かる）。
+ * 台の幅（[Tower.platformWidth]）にも同じ倍率をかけ、台ごと大きくする（積む画面で見せた姿と同じ）
  */
 fun Tower.enlarged(factor: Double): Tower {
     if (factor == 1.0) return this
@@ -53,5 +55,6 @@ fun Tower.enlarged(factor: Double): Tower {
     return copy(
         placements = placements.map { it.copy(x = it.x * f, y = it.y * f, scale = it.scale * f) },
         height = height * f,
+        platformWidth = platformWidth * f,
     )
 }

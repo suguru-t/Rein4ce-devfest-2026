@@ -51,6 +51,8 @@ SOURCES = [
     APP / "ui/common/NameField.kt",
     # 積む画面のモードを選ぶ画面（画面名「みちをつむ」・モードの名前と一言・記録・「‹ 戻る」）
     APP / "ui/game/ModeSelect.kt",
+    # 毎日 1 つずつ積む画面（一言・塔の高さ。決定 61）
+    APP / "ui/game/DailyScreen.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）

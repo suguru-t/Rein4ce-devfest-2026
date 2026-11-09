@@ -69,7 +69,11 @@ internal object TowerIds {
 }
 
 /** 一覧の 1 行。持ち主の印は入れず、[owner] と同じかどうかだけを入れる */
-internal fun Tower.toSummary(owner: String? = null) = TowerSummary(id, height, parts.size, createdAt, author, mine = isOwnedBy(owner))
+/**
+ * 一覧用の形。パーツ数は台に残った数（配置の数）で数える。通常は同じパーツが何度も出る（#108）ので、`parts`（同じパーツを 1 つにまとめる）
+ * だと置いた数より少なく出るため（決定 66）。今までのタワーは 1 本 1 回ずつなので、数は変わらない
+ */
+internal fun Tower.toSummary(owner: String? = null) = TowerSummary(id, height, placements.size, createdAt, author, mine = isOwnedBy(owner))
 
 /** [owner] が送ったタワーか。印が無いタワー・印を送っていない相手は、どちらも「違う」 */
 internal fun isOwnedBy(ownerId: String?, owner: String?): Boolean = !owner.isNullOrBlank() && ownerId == owner

@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.core.model
 
+import com.rein4ce.roadcollector.core.physics.StackWorld
 import kotlinx.serialization.Serializable
 
 /**
@@ -26,6 +27,8 @@ data class Placement(
  * @property ownerId 持ち主の印。アプリが端末ごとに作る 64 桁の 16 進（端末の id を塩を付けてハッシュしたもの。元の id は分からない）。
  *   サーバはこれを保存して「あなたのタワーか」を答えるのに使い、**誰にも返さない**（一覧は [TowerSummary.mine] だけ、
  *   1 基の JSON では null にして返す）。古いアプリは送らないので null
+ * @property platformWidth 台の幅 [m]。積む画面の通常（#108・決定 62）は広い台（2.8 m）で積むので、送ったあとの絵（「みんな」・共有ページ）も
+ *   同じ幅の台で描くために持つ（決定 66）。入れる前のタワーには無いので、今までの台の幅（[StackWorld.PLATFORM_WIDTH]、1.4 m）
  */
 @Serializable
 data class Tower(
@@ -37,6 +40,7 @@ data class Tower(
     val createdAt: Long,
     val author: String? = null,
     val ownerId: String? = null,
+    val platformWidth: Float = StackWorld.PLATFORM_WIDTH.toFloat(),
 )
 
 /**
