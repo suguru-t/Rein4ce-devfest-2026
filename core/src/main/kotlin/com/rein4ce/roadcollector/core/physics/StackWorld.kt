@@ -47,6 +47,13 @@ class StackWorld(
      */
     private val visuals = HashMap<Body, List<PartGeometry.Polygon>>()
 
+    /**
+     * 置いたパーツ 1 つずつの番号（描く図形の [RenderShape.body]）。置いた順に 1 から振り、使い回さない（台は 0）。
+     * 前は `System.identityHashCode` を使っていたが、重ならないことが約束されていないので、2 つが 1 つの積み木として描かれることがあった（#129 の C のレビュー）
+     */
+    private val bodyIds = HashMap<Body, Int>()
+    private var nextBodyId = 1
+
     /** 置いたパーツの大きさ（長辺 [m]）。保存する配置（[placements]）に入れる */
     private val scales = HashMap<Body, Double>()
 
@@ -110,6 +117,7 @@ class StackWorld(
         world.addBody(body)
         placed[body] = part
         visuals[body] = PartGeometry.shapes(part, scale)
+        bodyIds[body] = nextBodyId++
         scales[body] = scale
         grips[body] = grip
         return body
@@ -171,6 +179,7 @@ class StackWorld(
         val parts = fallen.map { placed.remove(it)!! }
         fallen.forEach {
             visuals.remove(it)
+            bodyIds.remove(it)
             scales.remove(it)
             grips.remove(it)
             frozen.remove(it)
@@ -205,6 +214,7 @@ class StackWorld(
         placed.keys.forEach { world.removeBody(it) }
         placed.clear()
         visuals.clear()
+        bodyIds.clear()
         scales.clear()
         grips.clear()
         frozen.clear()
@@ -250,7 +260,7 @@ class StackWorld(
                 xs[i] = v.x
                 ys[i] = v.y
             }
-            out += RenderShape.Poly(part, xs, ys, System.identityHashCode(body))
+            out += RenderShape.Poly(part, xs, ys, bodyIds[body] ?: PLATFORM_BODY_ID)
         }
     }
 
@@ -267,11 +277,11 @@ class StackWorld(
                         xs[i] = w.x
                         ys[i] = w.y
                     }
-                    out += RenderShape.Poly(part, xs, ys, System.identityHashCode(body))
+                    out += RenderShape.Poly(part, xs, ys, bodyIds[body] ?: PLATFORM_BODY_ID)
                 }
                 is Circle -> {
                     val c = t.getTransformed(shape.center)
-                    out += RenderShape.Disc(part, c.x, c.y, shape.radius, System.identityHashCode(body))
+                    out += RenderShape.Disc(part, c.x, c.y, shape.radius, bodyIds[body] ?: PLATFORM_BODY_ID)
                 }
                 else -> Unit
             }
@@ -319,6 +329,9 @@ class StackWorld(
 
     companion object {
         const val PLATFORM_TAG = "platform"
+
+        /** 台の図形の [RenderShape.body]（置いたパーツは 1 から） */
+        const val PLATFORM_BODY_ID = 0
 
         /** 台の面の摩擦 */
         const val PLATFORM_FRICTION = 0.9

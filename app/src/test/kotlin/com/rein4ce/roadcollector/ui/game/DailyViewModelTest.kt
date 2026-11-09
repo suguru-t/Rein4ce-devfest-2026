@@ -28,8 +28,11 @@ import org.junit.Test
 class DailyViewModelTest {
     private val day = "2026-11-10"
 
-    /** 最後に保存した塔（保存は IO のスレッドで書く） */
+    /** 最後に保存した塔 */
     @Volatile private var saved: DailyTower? = null
+
+    /** 保存した塔の、今日落ちた回数（書いた順） */
+    private val savedFalls = java.util.concurrent.CopyOnWriteArrayList<Int>()
 
     @Before fun setUp() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
     @After fun cleanup() { Dispatchers.resetMain() }
@@ -38,10 +41,16 @@ class DailyViewModelTest {
 
     private fun newVm(initial: DailyTower): DailyViewModel {
         val text = AppJson.encodeToString(DailyTower.serializer(), initial)
+        // 読み書きは同じスレッドで終わらせる（裏のスレッドに残すと、テストが終わったあとに保存が残り、次のテストに例外を持ち込む）
         val store = DailyTowerStore(
             read = { text },
-            write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) },
+            write = {
+                val tower = AppJson.decodeFromString(DailyTower.serializer(), it)
+                saved = tower
+                savedFalls += tower.fallsOn(day)
+            },
             quarantine = {},
+            io = Dispatchers.Unconfined,
         )
         val vm = DailyViewModel(store, today = { day })
         waitUntil { vm.phase != DailyViewModel.Phase.Loading }
@@ -117,5 +126,43 @@ class DailyViewModelTest {
         vm.runUntilStill()
         val kept = vm.tower.blocks.single { it.part.id == "yesterday" }
         assertEquals(yesterday, kept.placement)
+    }
+
+    @Test fun `塔は 1 つずつ順に保存し、最後に書くのはいちばん新しい形（落ちた回数を減らして書かない）`() {
+        // 前は落ちるたびに保存を別々に始めていて、裏のスレッドで書き終わる順が決まらず、古い形があとから書かれることがあった
+        val vm = newVm(DailyTower())
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.dragBy(10f) // 台の外まで寄せる
+        repeat(DailyTower.MAX_RETRIES + 1) {
+            vm.place()
+            vm.runUntilStill()
+        }
+        waitUntil { saved?.fallsOn(day) == DailyTower.MAX_RETRIES + 1 }
+        assertEquals("書いた順に、落ちた回数が減らない", savedFalls.sorted(), savedFalls.toList())
+        assertEquals(DailyTower.MAX_RETRIES + 1, savedFalls.last())
+    }
+
+    @Test fun `今日のパーツが台に残ったら、塔を自動で「みんな」に送り、送れた日を残す（決定 77）`() {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<com.rein4ce.roadcollector.core.model.Tower>()
+        val text = AppJson.encodeToString(DailyTower.serializer(), DailyTower())
+        val store = DailyTowerStore(read = { text }, write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) }, quarantine = {}, io = Dispatchers.Unconfined)
+        val vm = DailyViewModel(store, today = { day }, sendTower = { tower ->
+            sent += tower
+            com.rein4ce.roadcollector.core.model.TowerCreated("d1", "https://example.test/towers/d1")
+        })
+        waitUntil { vm.phase != DailyViewModel.Phase.Loading }
+        assertTrue("まだ積んでいなければ送らない", sent.isEmpty())
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.place() // 台のまん中に落とす
+        vm.runUntilStill()
+        assertTrue(vm.placedToday)
+        waitUntil { vm.sendState == DailyViewModel.SendState.SENT }
+        val tower = sent.single()
+        assertEquals(com.rein4ce.roadcollector.core.model.TowerMode.DAILY, tower.mode)
+        assertEquals(1, tower.streakDays)
+        assertEquals(day, tower.lastDay)
+        assertEquals(StackViewModel.PLATFORM_WIDTH_M.toFloat(), tower.platformWidth)
+        waitUntil { saved?.sentDay == day }
+        assertFalse(vm.tower.needsSend)
     }
 }

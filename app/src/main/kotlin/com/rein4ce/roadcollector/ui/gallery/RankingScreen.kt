@@ -133,7 +133,8 @@ internal fun RankingScreen(
             Spacer(Modifier.weight(1f))
             // 天気の雲の上に直接書くので、紙の色の縁取りを付ける（ダークのくもりで沈まないように）
             SkyText(
-                if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
+                // どの遊び方のランキングか（決定 77）
+                "${gallery.mode.shortLabel}・" + if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(end = 4.dp),
@@ -142,8 +143,9 @@ internal fun RankingScreen(
         }
         // 読み込み中・つながらない・取り直せなかった、のときの知らせ（最初の画面と同じ）
         GalleryStatusRow(gallery)
-        // 「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
-        SortTabs(sort = sort, options = if (mineOnly) TowerSort.entries else TowerSort.COMPARABLE, onSelect = { onSort(it); page = 0 })
+        // 物差しは遊び方ごと（決定 77）。「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
+        val comparable = TowerSort.comparableFor(gallery.mode)
+        SortTabs(sort = sort, options = if (mineOnly) comparable + TowerSort.NEWEST else comparable, onSelect = { onSort(it); page = 0 })
         if (mineOnly && listed.isEmpty()) {
             // まだ送っていない（送ったタワーの印は、サーバの持ち主の印か、この端末の記録）
             Column(
@@ -154,7 +156,7 @@ internal fun RankingScreen(
                     .padding(14.dp),
             ) {
                 Text("まだ送っていません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("積んで「保存」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("${howToSend(gallery.mode)}、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
             }
         }
         LazyColumn(

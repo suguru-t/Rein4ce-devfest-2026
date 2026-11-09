@@ -1,6 +1,9 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
+import com.rein4ce.roadcollector.ui.game.PlayMode
+import java.time.LocalDate
 
 /**
  * 「みんなのタワー」の並び順（＝比べる物差し）。画面の上の切り替えで選ぶ。
@@ -9,39 +12,105 @@ import com.rein4ce.roadcollector.core.model.TowerSummary
  * @property label    切り替えに出す字
  * @property spoken   読み上げ（TalkBack）で言う言葉
  * @property topLabel その物差しで 1 番のタワーの呼び名（断面図の下の字、ランキングの 1 番の札、見出し）
- * @property unit     値の単位（高さは m、パーツは本）
+ * @property unit     値の単位（高さは m、パーツは本、連続日数は日）
+ * @property mineLabel 見出しで自分のいちばん良い値に付ける呼び名（「あなたの最高」など）
  */
-internal enum class TowerSort(val label: String, val spoken: String, val topLabel: String, val unit: String) {
-    HEIGHT("高い順", "高い順に並べる", "最長", "m"),
-    PARTS("多い順", "パーツの多い順に並べる", "最多", "本"),
+internal enum class TowerSort(val label: String, val spoken: String, val topLabel: String, val unit: String, val mineLabel: String) {
+    HEIGHT("高い順", "高い順に並べる", "最長", "m", "あなたの最高"),
+    PARTS("多い順", "パーツの多い順に並べる", "最多", "本", "あなたの最多"),
 
-    /** 新しい順。「あなたのタワー」だけで使う（断面図とランキングは、値で比べられる高い順・多い順だけ） */
-    NEWEST("新しい順", "新しい順に並べる", "最新", "m"),
+    /**
+     * 連続日数順（毎日 1 つずつ積むだけ。決定 77）。今も続いている日数（[currentStreak]）で並べる。
+     * 最後に積んだ日が今日か昨日なら、その日までの連続日数。それより前なら 0（積むのをやめると、日がたつと 0 になる）
+     */
+    STREAK("連続日数順", "今も続いている連続日数の多い順に並べる", "最長連続", "日", "あなたの連続"),
+
+    /** 新しい順。「あなたのタワー」だけで使う（断面図とランキングは、値で比べられる物差しだけ） */
+    NEWEST("新しい順", "新しい順に並べる", "最新", "m", "あなたの最新"),
     ;
 
     val comparator: Comparator<TowerSummary>
         get() = when (this) {
             HEIGHT -> compareByDescending<TowerSummary> { it.height }.thenByDescending { it.createdAt }
             PARTS -> compareByDescending<TowerSummary> { it.partCount }.thenByDescending { it.height }.thenByDescending { it.createdAt }
+            STREAK -> {
+                val today = LocalDate.now()
+                compareByDescending<TowerSummary> { it.currentStreak(today) }.thenByDescending { it.height }.thenByDescending { it.createdAt }
+            }
             NEWEST -> compareByDescending<TowerSummary> { it.createdAt }.thenByDescending { it.height }
         }
 
-    /** この物差しでのタワーの値（高さ [m] か、パーツの本数）。新しい順には値の物差しが無いので、横棒は高さで出す */
+    /** この物差しでのタワーの値（高さ [m]・パーツの本数・今の連続日数）。新しい順には値の物差しが無いので、横棒は高さで出す */
     fun valueOf(t: TowerSummary): Float = when (this) {
         HEIGHT, NEWEST -> t.height
         PARTS -> t.partCount.toFloat()
+        STREAK -> t.currentStreak().toFloat()
     }
 
-    /** 値を字にする（高さは小数 2 桁、本数は整数） */
+    /** 値を字にする（高さは小数 2 桁、本数・日数は整数） */
     fun format(value: Float): String = when (this) {
         HEIGHT, NEWEST -> "%.2f".format(java.util.Locale.US, value)
-        PARTS -> "${value.toInt()}"
+        PARTS, STREAK -> "${value.toInt()}"
     }
 
+    /** 読み上げの単位 */
+    val spokenUnit: String
+        get() = when (this) {
+            HEIGHT, NEWEST -> "メートル"
+            PARTS -> "本"
+            STREAK -> "日"
+        }
+
     companion object {
-        /** 断面図とランキングで選べる並び（値で比べられるものだけ） */
+        /** 断面図とランキングで選べる並び（通常の、値で比べられるもの） */
         val COMPARABLE: List<TowerSort> = listOf(HEIGHT, PARTS)
+
+        /**
+         * 遊び方ごとに、断面図とランキングで選べる並び（決定 77）。
+         * 通常と 3 分チャレンジは高い順・多い順、毎日 1 つずつ積むは高い順・連続日数順
+         */
+        fun comparableFor(mode: TowerMode): List<TowerSort> = when (mode) {
+            TowerMode.NORMAL, TowerMode.CHALLENGE -> COMPARABLE
+            TowerMode.DAILY -> listOf(HEIGHT, STREAK)
+        }
     }
+}
+
+/**
+ * 遊び方の名前（みちをつむのモードの名前と同じ。決定 77）。みちをつむの名前（[PlayMode.label]）から取るので、
+ * モードの名前が変わっても（3 分チャレンジ → 90 秒チャレンジなど）ここは直さなくてよい
+ */
+internal val TowerMode.fullLabel: String
+    get() = playModeOf(this).label
+
+/** ランキングの上の個数の行に出す短い名前（空白を詰める。毎日 1 つずつ積むは「毎日積む」） */
+internal val TowerMode.shortLabel: String
+    get() = if (this == TowerMode.DAILY) "毎日積む" else fullLabel.replace(" ", "")
+
+/** 遊び方 → みちをつむのモード（ホームの行の色・アイコン・名前を同じにする） */
+internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
+    TowerMode.NORMAL -> PlayMode.NORMAL
+    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
+    TowerMode.DAILY -> PlayMode.DAILY
+}
+
+/**
+ * まだ自分のタワーが無いときの、ランキングに並ぶまでの一言（「〜すると、ここに立ちます」の前半。決定 77）。
+ * 通常は終わりのカードの「保存」で送る。3 分チャレンジと毎日 1 つずつ積むは、結果が出たら・積んで止まったら自動で送る
+ */
+internal fun howToSend(mode: TowerMode): String = when (mode) {
+    TowerMode.NORMAL -> "積んで「保存」すると"
+    TowerMode.CHALLENGE -> "${PlayMode.CHALLENGE.label}で記録を出すと"
+    TowerMode.DAILY -> "毎日 1 つずつ積むで積むと"
+}
+
+/**
+ * 毎日 1 つずつ積むの、今も続いている連続日数（決定 77）。最後に積んだ日（[TowerSummary.lastDay]）が [today] か前の日なら、
+ * その日までの連続日数（[TowerSummary.streakDays]）。それより前・日付が読めない・ほかの遊び方なら 0
+ */
+internal fun TowerSummary.currentStreak(today: LocalDate = LocalDate.now()): Int {
+    val last = lastDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return 0
+    return if (!last.isBefore(today.minusDays(1))) streakDays else 0
 }
 
 /** 一覧を [sort] の順に並べ直す */

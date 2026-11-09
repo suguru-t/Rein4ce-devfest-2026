@@ -61,8 +61,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.sizeIn
-import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import com.rein4ce.roadcollector.core.daily.DailyTower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -107,16 +107,18 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
+    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 77）
+    val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     when (mode) {
         PlayMode.NORMAL -> {
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
             val vm: StackViewModel = viewModel()
-            val repository = RoadCollectorApp.from(LocalContext.current).partRepository
-            // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして、次に通常を開いたときは新しいゲームから（決定 75）。
-            // ほかのタブへ行って戻ったときは、今までどおり続きから。終わったゲームの最高の記録は、終わったときにもう数えてある
+            // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして止め、次に通常を開いたときに
+            // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは、今までどおり続きから。
+            // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
             val leave = {
-                vm.restart(repository.arrangedNow(), repository.origins.value)
+                vm.leave()?.let { records.submitNormal(it.finalHeight) }
                 chosen = null
             }
             BackHandler(onBack = leave)
@@ -133,11 +135,16 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
             // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
-            ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
+            // 結果のカードの「ランキング」は、「みんな」を 3 分チャレンジのランキングにしてから開く（決定 77）
+            ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading ->
+                ChallengeScreen(leading = leading, onGoRanking = { gallery.open(TowerMode.CHALLENGE); onGoGallery() })
+            }
         }
         PlayMode.DAILY -> {
             BackHandler { chosen = null }
-            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading -> DailyScreen(leading = leading) }
+            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading ->
+                DailyScreen(leading = leading, onGoRanking = { gallery.open(TowerMode.DAILY); onGoGallery() })
+            }
         }
         null -> {
             val best by records.normalBest.collectAsStateWithLifecycle()
@@ -264,10 +271,11 @@ private fun dailyRecord(tower: DailyTower?): String =
 /**
  * モードの行 1 つ。左に色の積み木（モードのアイコン）、右に紙のカード（名前・一言・記録・›）。
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
- * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）
+ * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
+ * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 77。一言だけ [note] で替える）
  */
 @Composable
-private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
+internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
     val look = lookOf(mode)
     val source = remember { MutableInteractionSource() }
     val action = if (mode.ready) {
@@ -278,7 +286,7 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
         Modifier
             .alpha(NOT_READY_ALPHA)
             .clearAndSetSemantics {
-                contentDescription = "${mode.label}、準備中。${mode.note}"
+                contentDescription = "${mode.label}、準備中。$note"
                 disabled()
             }
     }
@@ -322,7 +330,7 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
                     style = noteStyle,
                 )
                 Text(
-                    notes(mode.note),
+                    notes(note),
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp,

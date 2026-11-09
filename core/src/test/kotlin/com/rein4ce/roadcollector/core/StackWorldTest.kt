@@ -222,6 +222,28 @@ class StackWorldTest {
     }
 
     @Test
+    fun `描く図形のボディの番号：台は 0、置いたパーツは同じパーツでも 1 つずつ違い、落ちたあとも使い回さない`() {
+        val world = StackWorld()
+        val bar = SampleParts.all.first { it.kind.name == "BAR" }
+        world.place(bar, 0.0, 0.5, 0.0)
+        world.place(bar, 0.0, 1.0, 0.0)
+        val first = world.renderShapes()
+        assertTrue("台", first.first().body == StackWorld.PLATFORM_BODY_ID)
+        val ids = first.drop(1).map { it.body }.distinct()
+        assertEquals("同じパーツを 2 つ置いたら 2 つの積み木", 2, ids.size)
+        assertTrue("置いたパーツは台と別の番号", StackWorld.PLATFORM_BODY_ID !in ids)
+        // 台の外へ落として外し、もう一度置く
+        world.place(bar, 10.0, -50.0, 0.0)
+        val third = world.renderShapes().drop(1).map { it.body }.distinct() - ids.toSet()
+        assertEquals(1, third.size)
+        world.removeFallen()
+        world.place(bar, 0.0, 2.0, 0.0)
+        val now = world.renderShapes().drop(1).map { it.body }.distinct()
+        assertEquals(3, now.size)
+        assertTrue("外したパーツの番号は使い回さない", third.single() !in now)
+    }
+
+    @Test
     fun `重なりの問い合わせ：台や置いたパーツに重なるかだけを答え、ワールドは変えない`() {
         val world = StackWorld()
         val bar = SampleParts.all.first { it.kind.name == "BAR" }

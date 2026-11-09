@@ -2,8 +2,11 @@ package com.rein4ce.roadcollector.core.daily
 
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Placement
+import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.physics.Grip
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 /**
  * 「毎日 1 つずつ積む」の塔に積んだパーツ 1 つ（決定 61・#106）。
@@ -29,6 +32,7 @@ data class DailyBlock(
  * @property height 止まったときの塔の高さ [m]（台の上面からいちばん上まで。選ぶ画面のカードに出す）
  * @property fellDay 今日のパーツが台から落ちた日（[fellCount] を数えている日。"2026-11-10"）
  * @property fellCount [fellDay] に今日のパーツが台から落ちた回数。保存するので、画面を出入りしても置き直しは増えない
+ * @property sentDay 「みんな」のランキングに送れた塔の、最後に積んだ日（[lastDay]）。これと違えば、まだ送っていない形がある（決定 77）
  */
 @Serializable
 data class DailyTower(
@@ -36,6 +40,7 @@ data class DailyTower(
     val height: Double = 0.0,
     val fellDay: String = "",
     val fellCount: Int = 0,
+    val sentDay: String = "",
 ) {
 
     /** [day] にもう積んだか（1 日 1 つまで） */
@@ -55,6 +60,45 @@ data class DailyTower(
 
     /** 積んだ日の数（落ちて外れたパーツの日は数えない。塔に残っているパーツの日数） */
     val days: Int get() = blocks.map { it.day }.distinct().size
+
+    /** 最後に積んだ日（まだ積んでいなければ null） */
+    val lastDay: String? get() = blocks.maxOfOrNull { it.day }
+
+    /**
+     * 最後に積んだ日（[lastDay]）までの連続日数（決定 77）。最後に積んだ日から 1 日ずつさかのぼって、積んだ日が続くあいだを数える。
+     * 積んでいなければ 0
+     */
+    val streakDays: Int
+        get() {
+            val days = blocks.mapNotNull { runCatching { LocalDate.parse(it.day) }.getOrNull() }.toSet()
+            var day = days.maxOrNull() ?: return 0
+            var count = 0
+            while (day in days) {
+                count++
+                day = day.minusDays(1)
+            }
+            return count
+        }
+
+    /** まだ「みんな」に送っていない形があるか（積んでいて、送れた日が最後に積んだ日と違う） */
+    val needsSend: Boolean get() = lastDay != null && sentDay != lastDay
+
+    /**
+     * 「みんな」に送るタワー（決定 77）。パーツは同じものを 1 つにまとめ、配置は積んだ数だけ。
+     * スマホ 1 台につき 1 基で、送るたびにサーバの同じ 1 基を新しい形にする（`PUT /towers/daily`）
+     *
+     * @param platformWidth 台の幅 [m]（通常と同じ 2.8 m。決定 71）
+     */
+    fun toTower(platformWidth: Double, createdAt: Long): Tower = Tower(
+        parts = blocks.map { it.part }.distinctBy { it.id },
+        placements = blocks.map { it.placement },
+        height = height.toFloat(),
+        createdAt = createdAt,
+        platformWidth = platformWidth.toFloat(),
+        mode = TowerMode.DAILY,
+        streakDays = streakDays,
+        lastDay = lastDay,
+    )
 
     /**
      * 積んで止まったあとの塔にする。[added] が今日積んだパーツ、[settled] が止まったあとの全部のパーツの配置（パーツの id ごと）。

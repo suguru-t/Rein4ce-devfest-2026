@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
@@ -22,14 +23,17 @@ import kotlinx.coroutines.launch
  * 2026-11-07 のログで 5.3〜5.8 秒。起きていれば 0.1 秒）。「みんな」を開いてから取りに行くと、その 5 秒を画面の前で待つ。
  * 起動時に裏で取り始めておけば（[prefetch]）、タブを押すころには届いていることが多く、サーバも起きている。
  *
+ * 一覧は遊び方（[TowerMode]。通常・3 分チャレンジ・毎日 1 つずつ積む）ごとに別に持つ（決定 77）。画面が見ている遊び方は [mode]。
+ * [state]・[refreshing]・[refreshFailed] は、いま見ている遊び方のもの。
+ *
  * サーバが無いときはこの画面にエラーを出すだけで、他の画面には影響しない。
  *
- * @param listTowers 一覧を取る（テストでは差し替える）
+ * @param listTowers 遊び方ごとの一覧を取る（テストでは差し替える）
  * @param getTower   タワー 1 基の中身を取る
  * @param scope      通信を走らせる scope。アプリと同じ寿命
  */
 class TowerGallery(
-    private val listTowers: suspend () -> List<TowerSummary> = { ApiClient.listTowers() },
+    private val listTowers: suspend (TowerMode) -> List<TowerSummary> = { ApiClient.listTowers(it) },
     private val getTower: suspend (String) -> Tower = { ApiClient.getTower(it) },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) {
@@ -39,12 +43,49 @@ class TowerGallery(
         data class Loaded(val towers: List<TowerSummary>) : State()
     }
 
-    var state: State by mutableStateOf(State.Loading)
-        private set
+    /**
+     * いま「みんな」で見ている遊び方。上の切り替えで変わる。3 分チャレンジや毎日 1 つずつ積むの「ランキング」から開くときは、
+     * 先にその遊び方にしてから「みんな」へ行く
+     */
+    var mode: TowerMode by mutableStateOf(TowerMode.NORMAL)
+
+    /** 次に「みんな」を開いたとき、ホームではなく [mode] のランキングから見せるか（[open]） */
+    private var openRequested = false
+
+    /**
+     * 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から呼ぶ（決定 77）。次に「みんな」を開いたとき、ホーム（どのランキングを見に行くか）を
+     * 飛ばして、[mode] のランキングから見せる
+     */
+    fun open(mode: TowerMode) {
+        this.mode = mode
+        openRequested = true
+    }
+
+    /** [open] で頼まれていたら true を返し、頼みを消す（「みんな」の画面を作るときに 1 回だけ見る） */
+    fun consumeOpenRequest(): Boolean = openRequested.also { openRequested = false }
+
+    /** 遊び方 1 つぶんの一覧と、取り直しのようす */
+    private inner class ModeList(val mode: TowerMode) {
+        var state: State by mutableStateOf(State.Loading)
+        var refreshing: Boolean by mutableStateOf(false)
+        var refreshFailed: Boolean by mutableStateOf(false)
+
+        /** 取っている最中に [refresh] が呼ばれた。今の分が取れたら、もう一度だけ取り直す */
+        var refreshAgain = false
+    }
+
+    private val lists: Map<TowerMode, ModeList> = TowerMode.entries.associateWith { ModeList(it) }
+
+    /** いま見ている遊び方の一覧 */
+    val state: State get() = lists.getValue(mode).state
+
+    /** [mode] の遊び方の一覧（遊び方を切り替えずに見る） */
+    fun stateOf(mode: TowerMode): State = lists.getValue(mode).state
 
     /**
      * 絵を描くためのタワーの中身（id → Tower）。一覧の JSON には置き方が入っていないので、カードが見えたときに 1 基ずつ取る。
-     * タワーは保存後に変わらないので、一度取れたら再読み込みでも捨てない
+     * 通常と 3 分チャレンジのタワーは保存後に変わらないので、一度取れたら再読み込みでも捨てない。
+     * 毎日 1 つずつ積むの塔は送るたびに同じ id のまま新しくなるので、その一覧を取り直したら捨てて取り直す
      */
     val sketches = mutableStateMapOf<String, Tower>()
     private val fetching = mutableSetOf<String>()
@@ -55,23 +96,20 @@ class TowerGallery(
      */
     private val failed = mutableSetOf<String>()
 
-    /** 一覧を取っている最中か（表示中の一覧は残したまま）。「再読み込み」を押せなくするのに使う */
-    var refreshing: Boolean by mutableStateOf(false)
-        private set
+    /** いま見ている遊び方の一覧を取っている最中か（表示中の一覧は残したまま）。「再読み込み」を押せなくするのに使う */
+    val refreshing: Boolean get() = lists.getValue(mode).refreshing
 
-    /** 一覧が出たまま取り直しに失敗したか。一覧は残すが、黙って成功したように見せない */
-    var refreshFailed: Boolean by mutableStateOf(false)
-        private set
-
-    /** 取っている最中に [refresh] が呼ばれた。今の分が取れたら、もう一度だけ取り直す */
-    private var refreshAgain = false
+    /** いま見ている遊び方の一覧が出たまま、取り直しに失敗したか。一覧は残すが、黙って成功したように見せない */
+    val refreshFailed: Boolean get() = lists.getValue(mode).refreshFailed
 
     /**
      * アプリを立ち上げたときに呼ぶ（AppNav）。まだ一度も取れていなくて、取っている途中でもなければ取り始める。
-     * 画面の回転などで何度呼ばれても、取るのは 1 回だけ。取れなかったあとは勝手に取り直さず、「みんな」を開いたときか「再読み込み」で取る
+     * 画面の回転などで何度呼ばれても、取るのは 1 回だけ。取れなかったあとは勝手に取り直さず、「みんな」を開いたときか「再読み込み」で取る。
+     * 先に読むのは通常だけ（いちばん見られる。ほかの遊び方は切り替えたときに取る）
      */
     fun prefetch() {
-        if (state is State.Loading && !refreshing) refresh()
+        val normal = lists.getValue(TowerMode.NORMAL)
+        if (normal.state is State.Loading && !normal.refreshing) refresh(TowerMode.NORMAL)
     }
 
     /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
@@ -86,7 +124,7 @@ class TowerGallery(
     }
 
     /**
-     * 一覧を取り直す。画面を開くたび（タブを切り替えて戻ったときも）と、「再読み込み」で呼ぶ。
+     * [mode] の遊び方の一覧を取り直す。画面を開くたび（タブを切り替えて戻ったときも）、遊び方を切り替えたとき、「再読み込み」で呼ぶ。
      * アプリ全体で持っていて開くたびに取り直さないと、送信したばかりのタワーが出ない。
      *
      * - 既に一覧が出ているときは消さずに裏で取り直し、取れなかったら今の一覧を残す（通信が悪いときに一覧が消えないように）
@@ -94,32 +132,35 @@ class TowerGallery(
      *   サーバが起きるまでの待ちを最初からやり直すことになる）。今の分が取れたらそれを出し、そのあと 1 回だけ取り直す
      *   （先に走り出した古い結果が、送信したあとの一覧として残らないように）。取れなかったときは取り直さない（続けて待たせない）
      */
-    fun refresh() {
-        if (refreshing) {
-            refreshAgain = true
+    fun refresh(mode: TowerMode = this.mode) {
+        val list = lists.getValue(mode)
+        if (list.refreshing) {
+            list.refreshAgain = true
             return
         }
         failed.clear()
-        val shown = state as? State.Loaded
-        if (shown == null) state = State.Loading
-        refreshing = true
-        refreshFailed = false
-        refreshAgain = false
+        val shown = list.state as? State.Loaded
+        if (shown == null) list.state = State.Loading
+        list.refreshing = true
+        list.refreshFailed = false
+        list.refreshAgain = false
         scope.launch {
             var succeeded = false
             try {
-                val towers = listTowers()
+                val towers = listTowers(mode)
+                // 毎日 1 つずつ積むの塔は同じ id のまま新しくなるので、前に取った絵は捨てる（次に見えたときに取り直す）
+                if (mode == TowerMode.DAILY) towers.forEach { sketches.remove(it.id) }
                 // 高さの順位表。同じ高さなら新しいほうを上に
-                state = State.Loaded(towers.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt }))
+                list.state = State.Loaded(towers.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt }))
                 succeeded = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (shown == null) state = State.Error(e.message ?: e.toString()) else refreshFailed = true
+                if (shown == null) list.state = State.Error(e.message ?: e.toString()) else list.refreshFailed = true
             } finally {
-                refreshing = false
-                if (succeeded && refreshAgain && isActive) refresh()
-                refreshAgain = false
+                list.refreshing = false
+                if (succeeded && list.refreshAgain && isActive) refresh(mode)
+                list.refreshAgain = false
             }
         }
     }

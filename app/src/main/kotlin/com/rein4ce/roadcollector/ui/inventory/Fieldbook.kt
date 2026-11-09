@@ -72,11 +72,21 @@ object Fieldbook {
     val RoadCasing: Color get() = c(0xFF6E2A10, 0xFF5E2610)
 
     /**
-     * 天気の色（面と線）。積み木の配色（[PiecePalette]。決定 74）の昼の色：晴れはオレンジ、くもりは薄い紫がかった灰色、雨は青、雪はほぼ白の水色。
+     * 天気の色（面と線）。面は積み木の配色（[PiecePalette]。決定 74）の昼の色：晴れはオレンジ、くもりは薄い紫がかった灰色、雨は青、雪はほぼ白の水色。
      * 天気の印（コレクションの絞り込みの丸・天気のアイコン・積む画面のすべりやすさの札や天気のボーナスの札）に使い、積み木の色と合わせる。
-     * 積み木そのものは、歩いた時間帯で明るさも変わる（[PiecePalette.colors]）
+     * 積み木そのものは、歩いた時間帯で明るさも変わる（[PiecePalette.colors]）。
+     *
+     * 線は、積み木の線ではなく、面と同じ色相の濃い色にする。雪の積み木の線は明るい水色で、明るい紙の上では印の形
+     * （雪の結晶・札の丸と縁）がほとんど見えなくなるため（#129 の C のレビュー。前の印の線と同じくらいの濃さ）
      */
-    fun roadColors(sky: Sky?): Pair<Color, Color> = PiecePalette.colors(sky, Daypart.DAY).let { it.fill to it.outline }
+    fun roadColors(sky: Sky?): Pair<Color, Color> {
+        val fill = PiecePalette.fillHsl(sky, Daypart.DAY)
+        return fill.toColor() to fill.copy(s = min(fill.s, MARK_LINE_SATURATION), l = MARK_LINE_LIGHTNESS).toColor()
+    }
+
+    /** 天気の印の線の明るさ・あざやかさの上限（HSL）。紙 #F3F6F0 との差が 7:1 以上になる濃さ */
+    private const val MARK_LINE_LIGHTNESS = 0.28f
+    private const val MARK_LINE_SATURATION = 0.5f
     /** 測量の青。字やボタンの色。ボタンの地にも使い、その上の字は白（ダークでも白い字が読める明るさにしてある） */
     val Survey: Color get() = c(0xFF1F5FA8, 0xFF4A8BD6)
 
