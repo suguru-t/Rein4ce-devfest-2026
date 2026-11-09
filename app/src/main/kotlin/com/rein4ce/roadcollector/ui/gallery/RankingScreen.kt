@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
@@ -133,7 +132,7 @@ internal fun RankingScreen(
                 fontWeight = FontWeight.Black,
                 fontSize = 13.sp,
                 color = Fieldbook.Muted,
-                modifier = Modifier.padding(end = 4.dp).paperBand(),
+                modifier = Modifier.padding(end = 4.dp),
             )
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
@@ -359,7 +358,6 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
         modifier = Modifier
             .heightIn(min = 24.dp)
             .wrapContentWidth(Alignment.Start)
-            .then(if (status != null) Modifier.paperBand() else Modifier)
             .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -408,7 +406,6 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
             modifier = Modifier
                 .weight(1f)
                 .wrapContentWidth(Alignment.CenterHorizontally)
-                .paperBand()
                 .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )
         PopChip(

@@ -34,6 +34,8 @@ SOURCES = [
     APP / "ui/common/Pop.kt",
     # ホームのボタン（画面の名前と一言）
     APP / "ui/HomeScreen.kt",
+    # ホームの見出しの下の一言（「歩いた道を、積み上げよう」。開いたときのタイトルと同じ文）
+    APP / "ui/TitleIntro.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）
