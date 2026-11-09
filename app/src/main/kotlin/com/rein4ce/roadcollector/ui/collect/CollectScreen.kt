@@ -79,10 +79,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
@@ -113,6 +114,11 @@ import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlin.math.max
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 
 /**
  * A 担当：GPS 採集画面。見た目は手持ち画面と同じ「測量野帳」（Fieldbook.kt）。
@@ -266,9 +272,9 @@ fun CollectScreen(
                     .then(if (hasMap) Modifier.border(1.dp, Fieldbook.GridMajor, RoundedCornerShape(4.dp)) else Modifier),
             ) {
                 if (hasMap) {
-                    TrackMap(points)
+                    TrackMap(points, recording = isRecording)
                 } else {
-                    TrackCanvas(points, modifier = Modifier.fillMaxSize())
+                    TrackCanvas(points, recording = isRecording, modifier = Modifier.fillMaxSize())
                     Text(
                         "MAPS_API_KEY 未設定：軌跡のみ",
                         fontFamily = Fieldbook.Data,
@@ -541,7 +547,7 @@ private fun Modifier.fieldbookCorners(): Modifier = drawBehind {
 
 /** Google Maps に軌跡を描く（API キーがある場合）。地図の道路のように、暗い縁取りの上にオレンジを重ねる */
 @Composable
-private fun TrackMap(points: List<TrackPoint>) {
+private fun TrackMap(points: List<TrackPoint>, recording: Boolean) {
     val start = points.firstOrNull()?.let { LatLng(it.lat, it.lng) } ?: LatLng(35.7496, 139.8049)
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(start, 16f)
@@ -561,16 +567,58 @@ private fun TrackMap(points: List<TrackPoint>) {
             Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
             Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
         }
-        // 今いる場所（最後の点）：青い点
+        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く
+        val firstPt = points.firstOrNull()
+        val spread = !recording && firstPt != null && last != null && points.size >= 2 &&
+            roughMeters(firstPt, last) < FLAG_SPREAD_METERS
+        if (firstPt != null) {
+            val startState = rememberMarkerState()
+            startState.position = LatLng(firstPt.lat, firstPt.lng)
+            val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+            MarkerComposable(Fieldbook.dark, tilt, state = startState, anchor = FlagAnchor, zIndex = 4f, title = "スタート") {
+                FlagMarker(StartFlagColor, tilt = tilt)
+            }
+        }
         if (last != null) {
-            Circle(
-                center = LatLng(last.lat, last.lng),
-                radius = 4.0,
-                fillColor = Fieldbook.Survey,
-                strokeColor = Color.White,
-                strokeWidth = 4f,
-                zIndex = 3f,
-            )
+            val nowState = rememberMarkerState()
+            nowState.position = LatLng(last.lat, last.lng)
+            if (recording) {
+                // 記録中：今いる場所に足跡。決まった間隔で左右の足が入れ替わり、歩いているように見せる
+                // （点が届くたびに入れ替えると、点が速く届くデモ散歩でちらつくため）。
+                // 位置と向きは、点から点へ飛ばさず、なめらかに動かす
+                val step by produceState(0) { while (true) { delay(WALK_STEP_MS); value++ } }
+                val target = LatLng(last.lat, last.lng)
+                var shown by remember { mutableStateOf(target) }
+                LaunchedEffect(target) {
+                    val from = shown
+                    animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
+                        shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
+                    }
+                }
+                nowState.position = shown
+                // 向きは近い回り方で回す（359° → 1° を 358° 戻らずに 2° 進む）
+                val bearing = walkingBearing(points)
+                var heading by remember { mutableStateOf(bearing) }
+                LaunchedEffect(bearing) { heading += ((bearing - heading + 540f) % 360f) - 180f }
+                val rotation by animateFloatAsState(heading, tween(WALK_GLIDE_MS), label = "walkerHeading")
+                MarkerComposable(
+                    Fieldbook.dark, step % 2,
+                    state = nowState,
+                    anchor = Offset(0.5f, 0.5f),
+                    flat = true,
+                    rotation = rotation,
+                    zIndex = 5f,
+                    title = "いまの場所",
+                ) {
+                    WalkerMarker(step = step)
+                }
+            } else if (points.size >= 2) {
+                // 止めたあと：最後の点に青い旗（ゴール）
+                // （歩き始めの近くなら、左右を反転して左へ傾ける）
+                MarkerComposable(Fieldbook.dark, spread, state = nowState, anchor = FlagAnchor, zIndex = 5f, title = "ゴール") {
+                    FlagMarker(GoalFlagColor, mirrored = spread, tilt = if (spread) -FLAG_SPREAD_DEGREES else 0f)
+                }
+            }
         }
     }
 }
@@ -579,7 +627,7 @@ private fun TrackMap(points: List<TrackPoint>) {
  * API キーが無いときの代替：軌跡をメートル座標にして枠に収め、野帳の図として描く（縁取りの道・始点・北・縮尺）。
  */
 @Composable
-fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
+fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier, recording: Boolean = false) {
     val measurer = rememberTextMeasurer()
     val label = TextStyle(fontFamily = Fieldbook.Data, fontSize = 10.sp, color = Fieldbook.Ink)
     Canvas(modifier = modifier) {
@@ -616,14 +664,20 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
         val casing = road + 2 * 1.5.dp.toPx()
         drawPath(path, color = Fieldbook.RoadCasing, style = Stroke(width = casing, cap = StrokeCap.Round, join = StrokeJoin.Round))
         drawPath(path, color = Fieldbook.Road, style = Stroke(width = road, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        // 始点：測量の基準点のように、二重丸
+        // スタート（最初の点）：赤い旗。止めたあとは、最後の点に青い旗（ゴール）。記録中は今いる場所に青い点
         val first = xy.first()
-        drawCircle(Fieldbook.Ink, radius = 5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
-        drawCircle(Fieldbook.Paper, radius = 2.5.dp.toPx(), center = Offset(sx(first.x), sy(first.y)))
-        // 今いる場所（最後の点）：青い点（地図あり版と同じ）
         val lastPt = xy.last()
-        drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
-        drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+        val startAt = Offset(sx(first.x), sy(first.y))
+        val goalAt = Offset(sx(lastPt.x), sy(lastPt.y))
+        // ゴールが歩き始めの近く（画面の上で旗の幅くらい）なら、2 本が重なって見えないよう左右に開く
+        val spread = !recording && (goalAt - startAt).getDistance() < FlagWidth.toPx()
+        val tilt = if (spread) FLAG_SPREAD_DEGREES else 0f
+        if (!recording) drawFlag(goalAt, GoalFlagColor, mirrored = spread, tilt = -tilt)
+        drawFlag(startAt, StartFlagColor, tilt = tilt)
+        if (recording) {
+            drawCircle(Color.White, radius = 6.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+            drawCircle(Fieldbook.Survey, radius = 4.5.dp.toPx(), center = Offset(sx(lastPt.x), sy(lastPt.y)))
+        }
 
         // 縮尺：幅の 1/4 くらいを切りのいい長さに
         val barM = niceLength(size.width * 0.25f / scale)
@@ -636,3 +690,7 @@ fun TrackCanvas(points: List<TrackPoint>, modifier: Modifier = Modifier) {
         drawText(measurer, if (barM >= 1000) "${barM / 1000} km" else "$barM m", topLeft = Offset(x0 + barPx + 4.dp.toPx(), y0 - 8.dp.toPx()), style = label)
     }
 }
+
+/** 地図の足跡の左右が入れ替わる間隔 [ms] と、点から点へ足跡がなめらかに動く時間 [ms] */
+private const val WALK_STEP_MS = 350L
+private const val WALK_GLIDE_MS = 400
