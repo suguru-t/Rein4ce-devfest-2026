@@ -74,7 +74,7 @@ class ChallengeViewModelTest {
         assertFalse(vm.saveError)
     }
 
-    @Test fun `やり直すと中断は、その回を記録に残さない`() = runTest {
+    @Test fun `やり直すと画面を離れたときは、その回を記録に残さない`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         var writes = 0
@@ -92,13 +92,36 @@ class ChallengeViewModelTest {
         assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
         assertEquals(180, vm.remainingSeconds)
 
-        vm.abandon()
+        vm.leave()
         assertNull(vm.frame)
         assertTrue(vm.shapes.isEmpty())
         assertEquals(180, vm.remainingSeconds)
         runCurrent()
         assertEquals(0, writes)
         assertTrue(vm.canStart)
+    }
+
+    @Test fun `終わったあとに画面を離れても保存は続き、次に開いたときは新しい回から（決定 68）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        var runs = 0
+        val disk = CompletableDeferred<Unit>()
+        val vm = ChallengeViewModel(updateRecords = { score ->
+            if (score == null) emptyList() else { disk.await(); listOf(score) }
+        }, newRun = { runs++; ChallengeRun(runs.toLong(), clock = { now }) })
+        vm.start(); vm.resume(); now = ChallengeRules.DURATION_NS; vm.tick()
+        repeat(20) { now += 50_000_000; vm.tick() }
+        val score = vm.frame!!.score!!
+        assertTrue(vm.saving)
+        vm.leave()
+        assertNull("結果の画面は引き継がない", vm.frame)
+        assertTrue("保存の途中でも、次の回を始められる", vm.canStart)
+        disk.complete(Unit); runCurrent()
+        assertEquals("離れたあとも保存は続く", listOf(score), vm.ranking)
+        vm.start()
+        assertEquals(2, runs)
+        assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
+        assertEquals(180, vm.remainingSeconds)
     }
 
     @Test fun `何も起きないコマではフレームを変えず、残り時間は秒が変わったときだけ変える`() = runTest {
@@ -142,7 +165,7 @@ class ChallengeViewModelTest {
         assertEquals(1, vm.ranking.size)
     }
 
-    @Test fun `遊び方を選ぶと、その決まりの記録を読み直し、その遊び方で始める（決定 65）`() = runTest {
+    @Test fun `自動で落ちるだけで遊び、その決まりの記録を読む（決定 68）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val asked = mutableListOf<String>()
@@ -153,11 +176,8 @@ class ChallengeViewModelTest {
             loadRecords = { rule -> asked += rule; emptyList() },
         )
         runCurrent()
-        assertEquals(listOf(ChallengeRules.ID), asked)
-        vm.selectStyle(ChallengeStyle.AUTO)
-        runCurrent()
         assertEquals(ChallengeStyle.AUTO, vm.style)
-        assertEquals(listOf(ChallengeRules.ID, ChallengeRules.AUTO_ID), asked)
+        assertEquals(listOf(ChallengeRules.AUTO_ID), asked)
         vm.start(); vm.resume()
         assertEquals(listOf(ChallengeStyle.AUTO), styles)
         // 自動で落ちる形は、狙っている間も下がる（フレームではなく ghostY で知らせる）
@@ -166,8 +186,5 @@ class ChallengeViewModelTest {
         repeat(5) { now += 50_000_000; vm.tick() }
         assertTrue(vm.ghostY < start)
         assertEquals("下がるだけでは、フレームは変わらない", frame, vm.frame)
-        // 遊んでいる間は、遊び方を変えられない
-        vm.selectStyle(ChallengeStyle.MANUAL)
-        assertEquals(ChallengeStyle.AUTO, vm.style)
     }
 }

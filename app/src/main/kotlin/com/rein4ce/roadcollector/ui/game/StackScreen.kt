@@ -700,7 +700,7 @@ internal fun StackTitle(compact: Boolean) {
  * @param compact 小さい画面。数字を一回り小さくする
  */
 @Composable
-private fun HeightMeter(height: Float, compact: Boolean) {
+internal fun HeightMeter(height: Float, compact: Boolean) {
     val density = LocalDensity.current
     // dp で決めた大きさを、文字の大きさの設定に左右されない sp に直す
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
