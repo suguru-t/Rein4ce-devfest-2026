@@ -73,8 +73,8 @@ data class ChallengeScore(
  * 3分チャレンジの 1 回。時計はアプリが前に出ている間の経過時間（単調時計）で、端末の時刻や物理の時間の上限とは別に数える。
  *
  * カメラ：見せたいいちばん上（[cameraTop]、次の形が出てくる高さ＋どう回しても入る半径）が入るところまで、
- * 縮尺は変えずに視点を上げる（画面は通常モードと同じ StackViewport.follow）。次の形に進むときだけ変わるので、
- * 狙っている間と落下中はカメラが動かない
+ * 縮尺は変えずに視点を上げる（画面は通常モードと同じ StackViewport.follow）。次の形に進むときと、狙っている間に塔が崩れて
+ * 低くなったときだけ変わるので、ふだん狙っている間と落下中はカメラが動かない
  */
 class ChallengeRun(
     val seed: Long,
@@ -98,10 +98,10 @@ class ChallengeRun(
     /** 次の形が出てくる高さ [m]（塔の上 [SPAWN_ABOVE_M]） */
     var spawnY = SPAWN_ABOVE_M; private set
 
-    /** 止まった塔の高さ [m]。次の形に進むときと、終わったときに測り直す（画面の「模型の高さ」） */
+    /** 止まった塔の高さ [m]。次の形に進むときと、終わったときに測り直す（画面の「模型の高さ」）。狙っている間に崩れて低くなったら下げる */
     var towerHeight = 0.0; private set
 
-    /** 画面に入れたいいちばん上 [m]。次の形に進むときだけ変わる */
+    /** 画面に入れたいいちばん上 [m]。次の形に進むときと、狙っている間に塔が崩れて低くなったときだけ変わる */
     var cameraTop = spawnY + reachOf(current); private set
 
     private var active = false
@@ -140,6 +140,7 @@ class ChallengeRun(
         world.step(dt)
         world.removeFallen()
         shapes = world.renderShapes()
+        if (phase == Phase.AIMING) lowerToTower()
         if (phase == Phase.FALLING || phase == Phase.FINALIZING) {
             val waitDelta = if (crossedDeadline) (elapsed - beforeDeadline) / 1e9 else elapsed / 1e9
             settling += if (crossedDeadline) minOf(dt, waitDelta) else dt
@@ -161,6 +162,20 @@ class ChallengeRun(
                 nextPiece()
             }
         }
+    }
+
+    /**
+     * 狙っている間に塔が崩れて低くなったら、塔の高さ・次の形が出てくる高さ・見せたい上を、崩れたあとの高さまで下げる。
+     * 揺れ待ちの上限（[ChallengeRules.SETTLE_WAIT_S]）で、崩れている途中に次の形へ進むと、崩れる前の高さで決まってしまい、
+     * 何もない空を見ながら狙うことになっていた（#78 の suguru-t のレビュー）。高さは崩れたときにしか下がらないので、下げる向きだけ見る。
+     * 細かい揺れで毎コマ変わらないよう、[LOWER_STEP_M] 以上下がったときだけ
+     */
+    private fun lowerToTower() {
+        val height = world.height()
+        if (height > towerHeight - LOWER_STEP_M) return
+        towerHeight = height
+        spawnY = towerHeight + SPAWN_ABOVE_M
+        cameraTop = spawnY + reachOf(current)
     }
 
     private fun nextPiece() {
@@ -202,6 +217,9 @@ class ChallengeRun(
 
         /** 次の形を出す高さ（塔の上から）[m] */
         const val SPAWN_ABOVE_M = 1.3
+
+        /** 狙っている間に塔が崩れたとき、出てくる高さを下げ直す、いちばん小さい下がり幅 [m] */
+        const val LOWER_STEP_M = 0.05
 
         /** 左右に動かせる範囲 [m] */
         const val MOVE_LIMIT_M = 1.5

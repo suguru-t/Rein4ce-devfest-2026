@@ -86,6 +86,34 @@ class ChallengeRunTest {
         assertNotEquals(first, run.current.id)
     }
 
+    @Test fun `狙っている間に塔が崩れて低くなったら、出てくる高さと見せたい上も下がる（上がる向きには動かない）`() {
+        var now = 0L
+        val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
+        physics.world.setGravity(0.0, 0.0)
+        val run = ChallengeRun(1, clock = { now }, world = physics)
+        // 重さの無い世界で、出てきた高さに浮いたまま次の形へ進む（揺れ待ちの上限まで待つ）。塔の高さは浮いている形のてっぺん
+        run.resume(); run.place()
+        repeat(61) { now += 50_000_000; run.tick() }
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        val high = run.towerHeight
+        assertTrue(high > 1.0)
+        assertEquals(high + ChallengeRun.SPAWN_ABOVE_M, run.spawnY, 1e-9)
+
+        // 狙っている間に塔が崩れて、形が台の近くまで下がった
+        val body = physics.world.bodies.last()
+        body.translate(0.0, -(high - 0.4))
+        now += 50_000_000; run.tick()
+        assertTrue("崩れたあとの高さ（${run.towerHeight}）まで下がる", run.towerHeight < high - 0.5)
+        assertEquals(run.towerHeight + ChallengeRun.SPAWN_ABOVE_M, run.spawnY, 1e-9)
+        assertEquals(run.spawnY + ChallengeRun.reachOf(run.current), run.cameraTop, 1e-9)
+
+        // 狙っている間に高くなることはない（揺れで少し跳ねても、出てくる高さは上げない）
+        val low = run.towerHeight
+        body.translate(0.0, 0.5)
+        now += 50_000_000; run.tick()
+        assertEquals(low, run.towerHeight, 0.0)
+    }
+
     @Test fun `記録にはいまの決まりの ID を入れる`() {
         var now = 0L
         val run = ChallengeRun(5, clock = { now }, wallClock = { 42 })
