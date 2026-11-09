@@ -101,7 +101,7 @@ class ChallengeViewModelTest {
         assertTrue(vm.canStart)
     }
 
-    @Test fun `終わったあとに画面を離れても保存は続き、次に開いたときは新しい回から（決定 68）`() = runTest {
+    @Test fun `終わったあとに画面を離れても保存は続き、次に開いたときは新しい回から（決定 69）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         var runs = 0
@@ -165,7 +165,7 @@ class ChallengeViewModelTest {
         assertEquals(1, vm.ranking.size)
     }
 
-    @Test fun `自分で落とすだけで遊び、その決まりの記録を読む（決定 68）`() = runTest {
+    @Test fun `自分で落とすだけで遊び、その決まりの記録を読む（決定 69）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val asked = mutableListOf<String>()

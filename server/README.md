@@ -133,7 +133,8 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 
 | 断るもの | 上限・条件 |
 |---|---|
-| パーツ・配置が空、または多すぎ | 1〜10 本（`MAX_TOWER_PARTS`） |
+| パーツ・配置が空、または多すぎ | 1〜100 個（`MAX_TOWER_PARTS`。決定 66） |
+| 台の幅（`platformWidth`）がおかしい | 0.5〜10 m（`MIN_PLATFORM_WIDTH`〜`MAX_PLATFORM_WIDTH`。無ければ 1.4 m） |
 | パーツの id が空・重複 | |
 | パーツの頂点が 0 個・多すぎ | 1〜50 個（`MAX_PART_POINTS`。命名 API と同じ） |
 | 座標・高さ・太さが NaN・無限・巨大 | 絶対値 100 以下（`MAX_COORDINATE`）。太さは 0 より大きい。高さは 0 以上 |

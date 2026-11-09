@@ -39,7 +39,8 @@ object TowerPng {
         System.setProperty("java.awt.headless", "true")
     }
 
-    fun render(tower: Tower, widthPx: Int = WIDTH, heightPx: Int = HEIGHT, platformWidth: Double = StackWorld.PLATFORM_WIDTH): ByteArray {
+    /** @param platformWidth 台の幅 [m]。ふつうはタワーが持つ幅（広い台で積んだタワーは広い台で描く。決定 66） */
+    fun render(tower: Tower, widthPx: Int = WIDTH, heightPx: Int = HEIGHT, platformWidth: Double = tower.platformWidth.toDouble()): ByteArray {
         val img = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
         try {

@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -81,12 +82,12 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  *
  * - 通常：広い台に、コレクションの全部のパーツからランダムに 1 つずつ出て、終わりなく積む。台から落ちたら終わり（決定 62・#108）
  * - 3 分チャレンジ：#45・#78（D）。[StackTab] から ChallengeScreen を始める。カードには、この端末での最高の記録（ChallengeStorage）
- * - 毎日 1 つずつ積む：#106 で中身を決める
+ * - 毎日 1 つずつ積む：#106・決定 61。[StackTab] から DailyScreen を始める。カードには、今の塔の高さと日数（DailyTowerStore）
  */
 enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
     NORMAL("通常", "次々に出るパーツを、落とすまで積む", ready = true),
     CHALLENGE("3 分チャレンジ", "3 分のあいだに、ピースを高く積む", ready = true),
-    DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = false),
+    DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
 }
 
 /**
@@ -110,28 +111,35 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
             // 終わって塔が止まり、パーツが残ったら（「サーバに送信」できる結果）、通常の最高を更新する。
+            // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
             // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
             val vm: StackViewModel = viewModel()
             val canUpload = vm.canUpload
             LaunchedEffect(vm.runId, canUpload) {
-                if (canUpload) vm.result?.let { records.submitNormal(it.tower.height) }
+                if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
             }
         }
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
-            // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 68）
+            // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
             ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
         }
-        // 毎日 1 つずつ積むは、まだ選べない（[PlayMode.ready]）
-        null, PlayMode.DAILY -> {
+        PlayMode.DAILY -> {
+            BackHandler { chosen = null }
+            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading -> DailyScreen(leading = leading) }
+        }
+        null -> {
             val best by records.normalBest.collectAsStateWithLifecycle()
             // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
-            // 画面で遊べる遊び方（自分で落とす。決定 68）の記録の最高
+            // 画面で遊べる遊び方（自分で落とす。決定 69）の記録の最高
             val directory = LocalContext.current.applicationContext.filesDir
             val challengeBest by produceState<Double?>(null, directory) {
                 value = runCatching { ChallengeStorage(directory).ranking(ChallengeViewModel.PLAYABLE_STYLE.ruleId).maxOfOrNull { it.height } }.getOrNull()
             }
-            ModeSelectScreen(normalBest = best, challengeBest = challengeBest, onPick = { chosen = it })
+            // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
+            val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
+            val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
+            ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
         }
     }
 }
@@ -144,7 +152,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
  * 小さい画面や文字を大きくしている人の画面で入りきらないときは、画面ごと上下に動かせる
  */
 @Composable
-private fun ModeSelectScreen(normalBest: Float?, challengeBest: Double?, onPick: (PlayMode) -> Unit) {
+private fun ModeSelectScreen(normalBest: Float?, challengeBest: Double?, daily: DailyTower?, onPick: (PlayMode) -> Unit) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val viewport = maxHeight
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -162,7 +170,7 @@ private fun ModeSelectScreen(normalBest: Float?, challengeBest: Double?, onPick:
                                     record = when (mode) {
                                         PlayMode.NORMAL -> bestRecord(normalBest?.toDouble())
                                         PlayMode.CHALLENGE -> bestRecord(challengeBest)
-                                        PlayMode.DAILY -> null
+                                        PlayMode.DAILY -> dailyRecord(daily)
                                     },
                                     onClick = { onPick(mode) },
                                 )
@@ -237,6 +245,10 @@ private fun StackArt(modifier: Modifier = Modifier) {
 /** 通常と 3 分チャレンジのカードに出す自分の記録（「自分の最高 2.40 m」。まだ無ければその一言） */
 private fun bestRecord(best: Double?): String =
     if (best == null) "まだ記録はありません" else "自分の最高 %.2f m".format(best)
+
+/** 毎日 1 つずつ積むのカードに出す今の塔（「今の塔 1.23 m・3 日ぶん」。まだ無ければその一言） */
+private fun dailyRecord(tower: DailyTower?): String =
+    if (tower == null || tower.blocks.isEmpty()) "まだ積んでいません" else "今の塔 %.2f m・%d 日ぶん".format(tower.height, tower.days)
 
 /**
  * モードの行 1 つ。左に色の積み木（モードのアイコン）、右に紙のカード（名前・一言・記録・›）。

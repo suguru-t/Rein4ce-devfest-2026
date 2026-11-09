@@ -47,7 +47,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -82,6 +85,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.physics.Grip
+import com.rein4ce.roadcollector.core.physics.WeatherBonus
+import androidx.compose.ui.graphics.drawscope.withTransform
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
@@ -206,6 +211,11 @@ fun StackScreen(
     // 急に滑って驚かないよう、置く前に知らせる（置くボタンにも同じ値を渡す）
     val sky = vm.current?.let { repository.weatherOf(it.id, weathers)?.sky }
     val grip = Grip.of(sky)
+    // 終わったときの天気のボーナスの見せ方（決定 68。BonusShow.kt）。札を 1 つずつ出してから、塔を大きくする。
+    // 高さのメーターは、塔が大きくなるのに合わせて、ボーナスをかけた高さまで回る（見せ方の時計で動かすので、メーター自身では補間しない）
+    val bonusShow = rememberBonusShow(vm)
+    val shownHeight = bonusShow.meterHeight(vm.height)
+    val meterFollows = vm.result != null
 
     // 上から「情報」「キャンバス」「操作」の 3 段に分ける。ボタンや完成カードがキャンバスに重ならないので、
     // 台と塔の下の方がボタンの裏に隠れない（#42）。キャンバスは残りの高さを全部使う
@@ -238,9 +248,9 @@ fun StackScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.padding(end = 12.dp)) { leading(true) }
-                        HeightMeter(vm.height.toFloat(), compact = true)
+                        HeightMeter(shownHeight, compact = true, follow = meterFollows)
                         Spacer(Modifier.weight(1f))
-                        PlacedAndFallen(vm.placedCount, vm.fallenCount, compact = true)
+                        PlacedAndFallen(vm.placedCount, vm.fallenCount, vm.bonus, compact = true)
                     }
                 } else {
                     Row(
@@ -249,12 +259,12 @@ fun StackScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         leading(false)
-                        PlacedAndFallen(vm.placedCount, vm.fallenCount, compact = false)
+                        PlacedAndFallen(vm.placedCount, vm.fallenCount, vm.bonus, compact = false)
                     }
                     // 高さの右に「チェンジ」（狙っているパーツを替える。決定 62）。高さの数字より少し下げ、下の「○ m の道」の行の右にかかる所に置く
                     // （ずらすのは見た目だけで、段の高さは変えない。右側は空いているので、下の行の字には重ならない）
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        HeightMeter(vm.height.toFloat(), compact = false)
+                        HeightMeter(shownHeight, compact = false, follow = meterFollows)
                         Spacer(Modifier.weight(1f))
                         ChangeButton(
                             enabled = vm.canChange,
@@ -283,14 +293,16 @@ fun StackScreen(
                     val slippery = grip.label
                     if (sky != null && slippery != null) {
                         Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
-                        SlipperyNote(sky, slippery, compact)
+                        SlipperyNote(sky, slippery, grip.bonusPercent, compact)
                     }
                 }
             }
 
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                StackCanvas(vm = vm, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
+                StackCanvas(vm = vm, bonusShow = bonusShow, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
+                // 終わったときの天気のボーナスの倍率（札が出るたびに数え上がる。決定 68）
+                BonusBanner(bonusShow, compact, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
                 // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
                 // （段を伸ばすと塔を描く所が狭くなるため）
                 if (compact) {
@@ -383,6 +395,8 @@ fun StackScreen(
                                     unresolved = vm.phase == StackViewModel.Phase.Unresolved,
                                     onRetry = { vm.restart(repository.arrangedNow(), repository.origins.value) },
                                     onGoGallery = onGoGallery,
+                                    shownHeight = shownHeight,
+                                    bonusRevealed = bonusShow.revealed,
                                 )
                             }
                         }
@@ -395,11 +409,14 @@ fun StackScreen(
 }
 
 /**
- * 「雪の日の道 ・ とてもすべりやすい」。頭の丸は、コレクションで道に付く天気の色（雪は水色、雨は青）と同じ。
- * 字は道の色の縁取りの濃い色で、地の色（ライト・ダーク）の上でも読めるように、うすく色を敷いた札にする
+ * 「雪の日の道 ・ とてもすべりやすい ・ ボーナス +0.20」。頭の丸は、コレクションで道に付く天気の色（雪は水色、雨は青）と同じ。
+ * 字は道の色の縁取りの濃い色で、地の色（ライト・ダーク）の上でも読めるように、うすく色を敷いた札にする。
+ * 最後の「ボーナス」は、このパーツが終わりまで台に残ったら、模型を大きくする倍率に足す分（天気のボーナス。決定 68）
+ *
+ * @param bonusPercent 足す分 [百分の一]（[Grip.bonusPercent]）
  */
 @Composable
-private fun SlipperyNote(sky: Sky, label: String, compact: Boolean) {
+private fun SlipperyNote(sky: Sky, label: String, bonusPercent: Int, compact: Boolean) {
     val (road, casing) = Fieldbook.roadColors(sky)
     Row(
         modifier = Modifier
@@ -411,7 +428,7 @@ private fun SlipperyNote(sky: Sky, label: String, compact: Boolean) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(road).border(1.dp, casing, CircleShape))
         Spacer(Modifier.width(6.dp))
         Text(
-            "${sky.label}の日の道 ・ $label",
+            "${sky.label}の日の道 ・ $label ・ ボーナス ${bonusText(bonusPercent)}",
             style = MaterialTheme.typography.bodySmall,
             // ほかの字と同じ太い丸ゴシック（天気の名前とすべりやすさは、どちらもアプリの言葉）
             fontFamily = Pop.Rounded,
@@ -435,6 +452,8 @@ private fun ResultCard(
     unresolved: Boolean,
     onRetry: () -> Unit,
     onGoGallery: () -> Unit,
+    shownHeight: Float = result.finalHeight,
+    bonusRevealed: Boolean = true,
 ) {
     // 終わりのカード：「みんな」・コレクションのカードと同じ紙の面（縁と下にのぞく側面）。字は太い丸ゴシック、ボタンはブロック（決定 67）
     Column(
@@ -447,7 +466,8 @@ private fun ResultCard(
         val title = when {
             unresolved -> "揺れが止まりませんでした"
             result.remainingCount == 0 -> "全部落ちました"
-            else -> "おわり！ 模型の高さ %.2f m".format(result.tower.height)
+            // 天気のボーナスで大きくしていく途中は、高さのメーターと同じ高さ。大きくなり終わったら、ボーナスをかけた高さ（決定 68）
+            else -> "おわり！ 模型の高さ %.2f m".format(shownHeight)
         }
         Text(title, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink, textAlign = TextAlign.Center)
         Text(
@@ -458,6 +478,7 @@ private fun ResultCard(
             color = Fieldbook.Muted,
             textAlign = TextAlign.Center,
         )
+        WeatherBonusLines(result, bonusRevealed)
         // 使った道（本当に歩いた道の距離）。1 行目はふつうの字、2 行目（数えなかったパーツの断り）は小さい字
         walkedLines(result.walked).forEachIndexed { i, line ->
             Text(
@@ -518,7 +539,7 @@ private fun ResultCard(
  * 動くときは経過時間で補間するので、画面の更新の速さ（30Hz・120Hz）によらず同じ速さで動く
  */
 @Composable
-private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Modifier = Modifier) {
+private fun StackCanvas(vm: StackViewModel, bonusShow: BonusShowState, onRelease: () -> Unit, modifier: Modifier = Modifier) {
     // 落下ラインと台の色。ダークモード（地が暗い）では、暗い地の上でも見える明るさにする
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
@@ -562,6 +583,19 @@ private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Mod
     val textMeasurer = rememberTextMeasurer()
     // 目盛の字は「0m」〜「99m」くらいしか出ないので、測った結果を覚えておき、カメラが動いている間も毎コマ測り直さない
     val rulerLabels = remember(rulerStyle) { HashMap<String, TextLayoutResult>() }
+    // 天気のボーナスの札（「雪 +0.20」。決定 68）：紙の面に、道の天気の色の縁と丸（置く前のすべりやすさの札と同じ色）。字は太い丸ゴシックの墨
+    val tagInk = Fieldbook.Ink
+    val tagFace = Fieldbook.Card
+    val tagStyle = remember(tagInk, density) {
+        TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 12.dp.toSp() }, color = tagInk)
+    }
+    val bonusResult = bonusShow.result
+    val tags = remember(bonusResult, tagStyle) {
+        bonusResult?.bonusMarks.orEmpty().map { mark ->
+            val sky = mark.grip.sky
+            BonusTag(mark, textMeasurer.measure("${sky.label} ${bonusText(mark.grip.bonusPercent)}", tagStyle), Fieldbook.roadColors(sky))
+        }
+    }
     Canvas(
         modifier = modifier
             .onSizeChanged { canvasSize = it }
@@ -592,7 +626,11 @@ private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Mod
             strokeWidth = 2f,
         )
 
-        // 物理ワールドの図形
+        // 物理ワールドの図形（台も含む）。終わったあとは、天気のボーナスの倍率で、台の上面のまん中を中心に大きくして描く（BonusShow.kt の時間割）。
+        // 目盛は大きくしないので、大きくなった塔のてっぺんが、ボーナスをかけた高さ（メーターの数字）の目盛に届く
+        val grow = bonusShow.growth
+        val pivot = Offset(sx(0.0), sy(0.0))
+        withTransform({ if (grow != 1f) scale(grow, grow, pivot = pivot) }) {
         for (s in vm.shapes) {
             val color = s.part?.kind?.color() ?: platform
             when (s) {
@@ -611,6 +649,22 @@ private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Mod
                 }
             }
         }
+        }
+
+        // 天気のボーナスの札。ボーナスの付いたパーツの上に、低い順に 1 つずつポンと出し、塔と一緒に動かす（字は大きくしない）。
+        // 大きくなり終わったら薄くして消す
+        if (tags.isNotEmpty()) {
+            val t = bonusShow.elapsedMs
+            val alpha = bonusShow.timeline.tagAlpha(t)
+            tags.forEachIndexed { i, tag ->
+                val pop = bonusShow.timeline.tagPop(i, t)
+                if (pop > 0f && alpha > 0f) {
+                    val x = pivot.x + (sx(tag.mark.x) - pivot.x) * grow
+                    val y = pivot.y + (sy(tag.mark.topY) - pivot.y) * grow
+                    drawBonusTag(tag, Offset(x, y - 4.dp.toPx()), pop, alpha, tagFace)
+                }
+            }
+        }
 
         // ゴースト（これから置くパーツ）
         val current = vm.current
@@ -625,6 +679,51 @@ private fun StackCanvas(vm: StackViewModel, onRelease: () -> Unit, modifier: Mod
             )
         }
     }
+}
+
+/** 天気のボーナスの札 1 つ：どのパーツか・測った字・道の天気の色（面と縁） */
+private class BonusTag(val mark: StackWorld.PlacedMark, val text: TextLayoutResult, val colors: Pair<Color, Color>)
+
+/**
+ * 天気のボーナスの札を、[bottomCenter] の上に描く（下の辺のまん中が、パーツのてっぺんの少し上）。
+ * 紙の面に天気の色の縁、頭に天気の色の丸、字は墨。[pop] は大きさ（ポンと出る動き）、[alpha] は濃さ
+ */
+private fun DrawScope.drawBonusTag(tag: BonusTag, bottomCenter: Offset, pop: Float, alpha: Float, face: Color) {
+    val (road, casing) = tag.colors
+    val padX = 7.dp.toPx()
+    val padY = 3.dp.toPx()
+    val dot = 8.dp.toPx()
+    val gap = 4.dp.toPx()
+    val w = padX + dot + gap + tag.text.size.width + padX
+    val h = tag.text.size.height + padY * 2
+    val left = bottomCenter.x - w / 2
+    val top = bottomCenter.y - h
+    withTransform({ scale(pop, pop, pivot = bottomCenter) }) {
+        val corner = CornerRadius(h / 2)
+        drawRoundRect(face.copy(alpha = alpha), Offset(left, top), Size(w, h), corner)
+        drawRoundRect(casing.copy(alpha = alpha), Offset(left, top), Size(w, h), corner, style = Stroke(1.5.dp.toPx()))
+        drawCircle(road.copy(alpha = alpha), dot / 2, Offset(left + padX + dot / 2, top + h / 2))
+        drawCircle(casing.copy(alpha = alpha), dot / 2, Offset(left + padX + dot / 2, top + h / 2), style = Stroke(1.dp.toPx()))
+        drawText(tag.text, topLeft = Offset(left + padX + dot + gap, top + padY), alpha = alpha)
+    }
+}
+
+/**
+ * 終わったときの天気のボーナスの倍率（「天気ボーナス ×1.30」）。キャンバスの上のまん中に、札が出るたびに数え上がる（決定 68）。
+ * 字は情報の段と同じく、方眼紙の上に縁取りで浮かせる太い丸ゴシック（青緑）。ボーナスが無いとき・最初の札が出る前は出さない
+ */
+@Composable
+private fun BonusBanner(show: BonusShowState, compact: Boolean, modifier: Modifier = Modifier) {
+    if (!show.active) return
+    val t = show.elapsedMs
+    if (show.timeline.tagsShown(t) == 0) return
+    val size = with(LocalDensity.current) { (if (compact) 18.dp else 22.dp).toSp() }
+    SkyText(
+        "天気ボーナス ${multiplierText(show.timeline.shownMultiplier(t))}",
+        color = Pop.TealLine,
+        fontSize = size,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -664,6 +763,96 @@ private fun DrawScope.drawHeightRuler(
 }
 
 /**
+ * 終わりのカードの天気のボーナス（決定 68）。
+ * - ボーナスが付いた：「天気ボーナス ×1.30」と、積んだままの高さから大きくしたあとの高さ、天気ごとの数と足した分の札（「● 雨 3 個 +0.30」。
+ *   頭の丸は、置く前の「雨の日の道 ・ すべりやすい」の札と同じ天気の色）
+ * - 付かなかった（台に残ったのが晴れの道だけ）：雨や雪の日の道で大きくなることを一言で（知らない人に、遊び方を知らせる）
+ * - 台に 1 つも残らなかったときは、何も出さない
+ */
+@Composable
+private fun WeatherBonusLines(result: StackViewModel.StackResult, revealed: Boolean) {
+    val bonus = result.bonus
+    if (result.remainingCount == 0) return
+    // 塔の上に札を出して大きくしている間は、答え（倍率と内訳）を先に見せない。場所は取っておき（カードの高さが変わって、
+    // 塔を描く所の大きさが変わらないように）、大きくなり終わったら浮かび上がらせる
+    val alpha by animateFloatAsState(if (revealed) 1f else 0f, tween(durationMillis = 400), label = "WeatherBonusLines")
+    if (!bonus.active) {
+        Text(
+            "雨や雪の日の道を積むと、終わったときに模型が大きくなります",
+            style = MaterialTheme.typography.bodySmall,
+            color = Fieldbook.Muted,
+            textAlign = TextAlign.Center,
+        )
+        return
+    }
+    Column(
+        modifier = Modifier.alpha(alpha),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "天気ボーナス ${multiplierText(bonus.multiplier)}" + if (bonus.capped) "（上限）" else "",
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 17.sp,
+            color = Pop.TealLine,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "積んだ高さ %.2f m → %.2f m".format(Locale.JAPAN, result.tower.height, result.finalHeight),
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp,
+            color = Fieldbook.Muted,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(4.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            bonus.entries.forEach { (grip, count) -> BonusChip(grip, count) }
+        }
+        Spacer(Modifier.height(2.dp))
+    }
+}
+
+/** 天気のボーナスの札 1 つ（「● 雪 2 個 +0.40」）。形は置く前のすべりやすさの札（[SlipperyNote]）と同じ */
+@Composable
+private fun BonusChip(grip: Grip, count: Int) {
+    val sky = grip.sky
+    val (road, casing) = Fieldbook.roadColors(sky)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(road.copy(alpha = 0.22f))
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(9.dp).clip(CircleShape).background(road).border(1.dp, casing, CircleShape))
+        Spacer(Modifier.width(5.dp))
+        Text(
+            "${sky.label} $count 個 ${bonusText(grip.bonusPercent * count)}",
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 12.sp,
+            color = Fieldbook.Ink,
+        )
+    }
+}
+
+/** すべりやすさを、その元になった天気に戻す（札の色と名前に使う。雷雨は雨と同じすべりやすさなので「雨」） */
+private val Grip.sky: Sky
+    get() = when (this) {
+        Grip.NORMAL -> Sky.CLEAR
+        Grip.CLOUDY -> Sky.CLOUDY
+        Grip.FOGGY -> Sky.FOG
+        Grip.DAMP -> Sky.DRIZZLE
+        Grip.WET -> Sky.RAIN
+        Grip.ICY -> Sky.SNOW
+    }
+
+/**
  * 完成カードの「使った道」の行。
  * - 歩いて記録したパーツがある：「使った道：合計 1.23 km」。ほかのパーツも混ざっていれば、数えなかったことを 2 行目に
  * - 1 本も無い（見本やデモ散歩だけで積んだ）：「合計 0.00 km」は出さず、距離が出ないわけを 1 行で。
@@ -700,7 +889,7 @@ internal fun StackTitle(compact: Boolean) {
  * @param compact 小さい画面。数字を一回り小さくする
  */
 @Composable
-internal fun HeightMeter(height: Float, compact: Boolean) {
+internal fun HeightMeter(height: Float, compact: Boolean, follow: Boolean = false) {
     val density = LocalDensity.current
     // dp で決めた大きさを、文字の大きさの設定に左右されない sp に直す
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
@@ -710,7 +899,8 @@ internal fun HeightMeter(height: Float, compact: Boolean) {
     val reduceMotion = rememberReduceMotion()
     val shown by animateFloatAsState(
         targetValue = height,
-        animationSpec = if (reduceMotion) snap() else tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        // follow：天気のボーナスで大きくなっている間は、見せ方の時計（BonusShow.kt）で毎コマ高さが来るので、そのまま出す
+        animationSpec = if (reduceMotion || follow) snap() else tween(durationMillis = 700, easing = FastOutSlowInEasing),
         label = "HeightMeter",
     )
     // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（「みんな」の高い順の字と同じ）
@@ -737,15 +927,25 @@ private val COMPACT_HEIGHT = 600.dp
  *   （2 行あるので、大きくすると情報の段が伸びて、塔を描く所が狭くなるため。#116 のレビュー）
  */
 @Composable
-private fun PlacedAndFallen(placed: Int, fallen: Int, compact: Boolean) {
+private fun PlacedAndFallen(placed: Int, fallen: Int, bonus: WeatherBonus.Result, compact: Boolean) {
     val size = if (compact) with(LocalDensity.current) { 13.dp.toSp() } else 15.sp
     Column(horizontalAlignment = Alignment.End) {
         SkyText("置いた $placed 個", color = Fieldbook.Ink, fontSize = size)
-        // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
-        val fallenModifier = if (fallen > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
-        SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size, modifier = fallenModifier)
+        // 2 行目：落ちたら「落下 ○ 個」。落ちるまでは、台の上に残っているパーツの天気のボーナス（決定 68）を「ボーナス ×1.30」と出す。
+        // どちらも無いときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
+        when {
+            fallen > 0 -> SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size)
+            bonus.active -> SkyText("ボーナス ${multiplierText(bonus.multiplier)}", color = Pop.TealLine, fontSize = size)
+            else -> SkyText("落下 0 個", color = FALLEN_RED, fontSize = size, modifier = Modifier.alpha(0f).clearAndSetSemantics {})
+        }
     }
 }
+
+/** 天気のボーナスの倍率の字（「×1.30」） */
+internal fun multiplierText(multiplier: Double): String = "×%.2f".format(Locale.JAPAN, multiplier)
+
+/** 1 個ぶんの天気のボーナスの字（「+0.20」）。[percent] は百分の一 */
+internal fun bonusText(percent: Int): String = "+%d.%02d".format(Locale.JAPAN, percent / 100, percent % 100)
 
 /** 「回す」のボタンの幅（ボタンが 1 つだけなので、押しやすい幅にする。画面いっぱいには広げない） */
 private val TURN_BUTTON_MIN_WIDTH = 220.dp

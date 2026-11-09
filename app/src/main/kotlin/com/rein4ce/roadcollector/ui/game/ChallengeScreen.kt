@@ -91,11 +91,11 @@ import java.util.Locale
 /**
  * 3分チャレンジの画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
  *
- * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 68）。遊び方は自分で落とすだけ
+ * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 69）。遊び方は自分で落とすだけ
  *   （通常のモードと同じく、ドラッグして指を離すと落ちる。自動で落ちるはやめた）
- * - 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回は捨てる。次に開いたときは、その前の段階を引き継がず新しい回から（決定 68）。
+ * - 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回は捨てる。次に開いたときは、その前の段階を引き継がず新しい回から（決定 69）。
  *   アプリが裏に回ったときは、時計と物理を止めて、戻ったら続きから（画面を離れたことにはしない）
- * - 情報の段の「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter）、「次」は右に大きめの形（決定 68）
+ * - 情報の段の「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter）、「次」は右に大きめの形（決定 69）
  * - キャンバス：縮尺は変えず（通常のモードと同じ 1 m の大きさ）、台はキャンバスの下のほう（上から 78%）。塔が高くなったら、
  *   次の形が出てくる高さが入るところまで、視点を少しずつ（0.4 秒かけて）上げる（StackViewport.follow）。引かない
  * - 毎コマ変わるのは塔の図形（キャンバスの描画の中だけで読む）と、秒が変わったときの残り時間（時計の字だけ）。
@@ -121,11 +121,11 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
     // 「やり直す」の確かめの窓を出しているところ
     var confirming by rememberSaveable { mutableStateOf(false) }
 
-    // 開いたらすぐ始める（決定 68）。画面を離れて捨てた回のあとも、次に開いたときにここで新しい回が始まる
+    // 開いたらすぐ始める（決定 69）。画面を離れて捨てた回のあとも、次に開いたときにここで新しい回が始まる
     LaunchedEffect(frame == null) {
         if (vm.frame == null) vm.start()
     }
-    // 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回を捨てる（決定 68）。画面の作り直し（ダークモードの切り替えなど）では捨てない
+    // 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回を捨てる（決定 69）。画面の作り直し（ダークモードの切り替えなど）では捨てない
     val activity = LocalActivity.current
     DisposableEffect(vm) {
         onDispose { if (activity?.isChangingConfigurations != true) vm.leave() }
@@ -171,7 +171,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                 ChallengeClock(vm, compact)
             }
             // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）、
-            // 右に「次」の形を大きめに（決定 68。前は小さな 1 行の字だった）
+            // 右に「次」の形を大きめに（決定 69。前は小さな 1 行の字だった）
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -245,7 +245,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 }
 
 /**
- * 「次」の形（決定 68）。見出しは「模型の高さ」と同じ字、形は大きめ（前は 22dp の小さな絵）、下に形の名前。
+ * 「次」の形（決定 69）。見出しは「模型の高さ」と同じ字、形は大きめ（前は 22dp の小さな絵）、下に形の名前。
  * 大きさは dp で決め、文字の大きさの設定では大きくしない（情報の段が伸びて、塔を描く所が狭くならないように。HeightMeter と同じ）
  */
 @Composable
@@ -326,7 +326,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             cameraY.animateTo(target.cameraY, tween(durationMillis = CAMERA_ANIMATION_MS, easing = FastOutSlowInEasing))
         }
     }
-    // 横にドラッグすると、前の ◀▶ と同じ 10 cm きざみで動く（決定 67）。遊べるのは自分で落とすだけなので（決定 68）、
+    // 横にドラッグすると、前の ◀▶ と同じ 10 cm きざみで動く（決定 67）。遊べるのは自分で落とすだけなので（決定 69）、
     // 指を離すとその位置で落ちる（通常のモードと同じ）。落とすのは狙っている間だけ（core の place が見る）
     val steps = remember(vm.generation) { DragSteps(MOVE_STEP_CHALLENGE_M) }
     Canvas(
@@ -404,7 +404,7 @@ private fun AimControls(vm: ChallengeViewModel) {
 }
 
 /**
- * 狙う操作の上の一言（決定 67）。遊べるのは自分で落とすだけなので「指を離すと落ちる」（決定 68）。
+ * 狙う操作の上の一言（決定 67）。遊べるのは自分で落とすだけなので「指を離すと落ちる」（決定 69）。
  * 落下中も同じ字を見えなくして置き、行の高さをそろえる（[visible] が false）
  */
 @Composable
@@ -423,7 +423,7 @@ private fun AimHint(visible: Boolean = true) {
 
 /**
  * 遊んでいる間の「やり直す」（確かめてから。その回は記録に残さない）。
- * 「中断」はやめた（上の「‹ 戻る」で同じことになる。画面を離れたら、その回は捨てる。決定 68）
+ * 「中断」はやめた（上の「‹ 戻る」で同じことになる。画面を離れたら、その回は捨てる。決定 69）
  */
 @Composable
 private fun RunControls(onRestart: () -> Unit) {
@@ -478,7 +478,7 @@ private fun SaveState(vm: ChallengeViewModel) {
 
 /**
  * この端末の記録（3分チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
- * 遊べるのは自分で落とすだけなので、その決まりの記録だけを出す（決定 68。ほかの決まりの記録は消さずに残っている）
+ * 遊べるのは自分で落とすだけなので、その決まりの記録だけを出す（決定 69。ほかの決まりの記録は消さずに残っている）
  */
 @Composable
 private fun Records(ranking: List<ChallengeScore>, highlight: String?) {
