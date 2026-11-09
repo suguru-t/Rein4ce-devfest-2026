@@ -55,13 +55,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -83,8 +86,8 @@ import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.partSizeText
+import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
-import com.rein4ce.roadcollector.ui.gallery.SkyText
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow
@@ -197,6 +200,8 @@ fun StackScreen(
         // 操作の段は画面の高さの [CONTROLS_MAX_FRACTION] まで。それより高くなる中身（小さい画面で文字を大きくしたときの
         // 完成カードなど）はスクロールさせ、キャンバスが潰れて塔が見えなくならないようにする
         val controlsMaxHeight = maxHeight * CONTROLS_MAX_FRACTION
+        // 小さい画面（積む画面の高さが [COMPACT_HEIGHT] に満たない）では、高さの数字を一回り小さくする
+        val compact = maxHeight < COMPACT_HEIGHT
         Column(modifier = Modifier.fillMaxSize()) {
             // 1 段目：情報（高さ・残り・落下）。その下に、いま置くパーツの大きさと、すべりやすいならその一言（置く前に知らせる）
             Column(
@@ -209,26 +214,31 @@ fun StackScreen(
                     }
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                // 画面名「つむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
-                // 押すと動く。積み木は文字の大きさの設定では大きくしない（dp で決める）
-                BlockWord("つむ", modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
-                // 字は「みんな」・コレクションと同じ太い丸ゴシック。方眼の紙と天気の上に直接書くので、紙の色の縁取りを付ける（SkyText。決定 59）
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    HeightMeter(vm.height.toFloat())
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 6.dp)) {
-                        SkyText("残り ${vm.remaining} 個", color = Fieldbook.Ink, fontSize = 15.sp)
-                        // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
-                        val fallenModifier = if (vm.fallenCount > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
-                        SkyText(
-                            "落下 ${vm.fallenCount} 個",
-                            color = FALLEN_RED,
-                            fontSize = 15.sp,
-                            modifier = fallenModifier,
-                        )
+                // 画面名「つむ」は、コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
+                // 押すと動く。積み木は文字の大きさの設定では大きくしない（dp で決める）。
+                // 字は「みんな」・コレクションと同じ太い丸ゴシック。方眼の紙と天気の上に直接書くので、紙の色の縁取りを付ける（SkyText。決定 59）。
+                // 小さい画面では、画面名・高さ・残りと落下を 1 行に並べて、情報の段を低くする（塔を描く所が狭くなって、台が見えなくならないように。
+                // #116 のレビュー）。ふつうの画面では、1 行目に画面名と残り・落下、2 行目に大きな高さ
+                if (compact) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BlockWord("つむ", modifier = Modifier.padding(end = 12.dp))
+                        HeightMeter(vm.height.toFloat(), compact = true)
+                        Spacer(Modifier.weight(1f))
+                        RemainingAndFallen(vm.remaining, vm.fallenCount, compact = true)
                     }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BlockWord("つむ")
+                        RemainingAndFallen(vm.remaining, vm.fallenCount, compact = false)
+                    }
+                    HeightMeter(vm.height.toFloat(), compact = false)
                 }
                 val current = vm.current
                 if (vm.phase == StackViewModel.Phase.Placing && current != null) {
@@ -242,12 +252,13 @@ fun StackScreen(
                             withStyle(SpanStyle(color = Fieldbook.Ink)) { append(size) }
                         },
                         color = Fieldbook.Muted,
-                        fontSize = 14.sp,
+                        // 小さい画面では、文字の大きさの設定で大きくしない（情報の段が伸びて、塔を描く所が狭くならないように）
+                        fontSize = if (compact) with(density) { 13.dp.toSp() } else 14.sp,
                     )
                     val slippery = grip.label
                     if (sky != null && slippery != null) {
-                        Spacer(Modifier.height(8.dp))
-                        SlipperyNote(sky, slippery)
+                        Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
+                        SlipperyNote(sky, slippery, compact)
                     }
                 }
             }
@@ -276,19 +287,24 @@ fun StackScreen(
                 ) {
                     when (vm.phase) {
                         StackViewModel.Phase.Placing -> {
-                            // パーツの名前は人や AI が付けた字なので、丸ゴシック（使う字だけの切り出し）ではなく端末の字体の太字にする
-                            // （切り出しに無い字だけ端末の字体になって、1 つの名前の中で字体が混ざらないように）
-                            SkyText(
-                                buildAnnotatedString {
-                                    withStyle(SpanStyle(fontFamily = FontFamily.Default, color = Fieldbook.Ink)) {
-                                        append(vm.current?.displayName ?: "")
-                                    }
-                                    append(" ・ 横にドラッグして位置を決める")
-                                },
-                                color = Fieldbook.Muted,
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
-                            )
+                            // 置き方の一言は 1 行に収める（2 行になると操作の段が高くなり、小さい画面で塔を描く所が狭くなるため。#116 のレビュー）。
+                            // パーツの名前が長ければ、名前のほうを「…」で切る。名前は人や AI が付けた字なので、丸ゴシック（使う字だけの切り出し）
+                            // ではなく端末の字体の太字にする（切り出しに無い字だけ端末の字体になって、1 つの名前の中で字体が混ざらないように）
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.semantics(mergeDescendants = true) {},
+                            ) {
+                                SkyText(
+                                    vm.current?.displayName ?: "",
+                                    color = Fieldbook.Ink,
+                                    fontSize = 13.sp,
+                                    fontFamily = FontFamily.Default,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                SkyText(" ・ 横にドラッグして位置を決める", color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, softWrap = false)
+                            }
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
@@ -341,7 +357,7 @@ fun StackScreen(
  * 字は道の色の縁取りの濃い色で、地の色（ライト・ダーク）の上でも読めるように、うすく色を敷いた札にする
  */
 @Composable
-private fun SlipperyNote(sky: Sky, label: String) {
+private fun SlipperyNote(sky: Sky, label: String, compact: Boolean) {
     val (road, casing) = Fieldbook.roadColors(sky)
     Row(
         modifier = Modifier
@@ -358,6 +374,8 @@ private fun SlipperyNote(sky: Sky, label: String) {
             // ほかの字と同じ太い丸ゴシック（天気の名前とすべりやすさは、どちらもアプリの言葉）
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
+            // 小さい画面では、文字の大きさの設定で大きくしない（情報の段が伸びて、塔を描く所が狭くならないように）
+            fontSize = if (compact) with(LocalDensity.current) { 12.dp.toSp() } else TextUnit.Unspecified,
             color = MaterialTheme.colorScheme.onBackground,
         )
     }
@@ -527,10 +545,20 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
 
 /**
  * いまの塔の高さ：「高さ」と、大きな数字と「m」。「みんな」の「あなたの最高」と同じ形（太い丸ゴシック・オレンジの数字・紙の色の縁取り）。
- * 数字は、置いて高さが変わるたびに、前の値からメーターのように回って変わる（動きを減らす設定なら、すぐ変わる）
+ * 数字は、置いて高さが変わるたびに、前の値からメーターのように回って変わる（動きを減らす設定なら、すぐ変わる）。
+ * 大きさは画面名の積み木と同じく dp で決め、文字の大きさの設定では大きくしない（もともと大きい字で、設定で大きくすると
+ * 情報の段が伸びて、塔を描く所が狭くなるため。#116 のレビュー）
+ *
+ * @param compact 小さい画面。数字を一回り小さくする
  */
 @Composable
-private fun HeightMeter(height: Float) {
+private fun HeightMeter(height: Float, compact: Boolean) {
+    val density = LocalDensity.current
+    // dp で決めた大きさを、文字の大きさの設定に左右されない sp に直す
+    fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
+    val numberSize = fixed(if (compact) 26f else 40f)
+    val labelSize = fixed(if (compact) 14f else 15f)
+    val unitSize = fixed(if (compact) 14f else 18f)
     val reduceMotion = rememberReduceMotion()
     val shown by animateFloatAsState(
         targetValue = height,
@@ -544,9 +572,29 @@ private fun HeightMeter(height: Float) {
         // 読み上げは、回っている途中の数字ではなく、今の高さを 1 回で
         modifier = Modifier.clearAndSetSemantics { contentDescription = "高さ %.2f メートル".format(height) },
     ) {
-        SkyText("高さ", color = Fieldbook.Ink, fontSize = 15.sp, modifier = Modifier.padding(end = 10.dp, bottom = 8.dp))
-        SkyText("%.2f".format(shown), color = number, fontSize = 40.sp, maxLines = 1, softWrap = false)
-        SkyText("m", color = number, fontSize = 18.sp, modifier = Modifier.padding(start = 4.dp, bottom = 7.dp))
+        SkyText("高さ", color = Fieldbook.Ink, fontSize = labelSize, modifier = Modifier.padding(end = 10.dp, bottom = if (compact) 6.dp else 8.dp))
+        SkyText("%.2f".format(shown), color = number, fontSize = numberSize, maxLines = 1, softWrap = false)
+        SkyText("m", color = number, fontSize = unitSize, modifier = Modifier.padding(start = 4.dp, bottom = if (compact) 5.dp else 7.dp))
+    }
+}
+
+/** これより低い積む画面（端末のバーとタブバーを除いた高さ）では、高さの数字を一回り小さくする */
+private val COMPACT_HEIGHT = 600.dp
+
+/**
+ * 「残り ○ 個」と、その下に「落下 ○ 個」（右寄せ）
+ *
+ * @param compact 小さい画面。字を画面名の積み木と同じく dp で決め、文字の大きさの設定では大きくしない
+ *   （2 行あるので、大きくすると情報の段が伸びて、塔を描く所が狭くなるため。#116 のレビュー）
+ */
+@Composable
+private fun RemainingAndFallen(remaining: Int, fallen: Int, compact: Boolean) {
+    val size = if (compact) with(LocalDensity.current) { 13.dp.toSp() } else 15.sp
+    Column(horizontalAlignment = Alignment.End) {
+        SkyText("残り $remaining 個", color = Fieldbook.Ink, fontSize = size)
+        // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
+        val fallenModifier = if (fallen > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
+        SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size, modifier = fallenModifier)
     }
 }
 
