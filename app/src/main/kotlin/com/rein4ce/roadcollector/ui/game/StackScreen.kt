@@ -356,21 +356,26 @@ fun StackScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 MoveButton(MoveDirection.LEFT, sessionKey = vm.runId, onMove = vm::dragBy)
-                                PressOutlinedButton(
-                                    onClick = { vm.rotate(+15f) },
+                                // 回転は押し続けると回り続ける（#114。ui/game/RotateButtons.kt）
+                                RotateButton(
+                                    RotateDirection.LEFT,
+                                    sessionKey = vm.runId,
+                                    onRotate = vm::rotate,
                                     modifier = Modifier.weight(ROTATE_WEIGHT),
                                     contentPadding = CompactButtonPadding,
-                                ) { Text("⟲ 15°") }
+                                )
                                 PressButton(
                                     onClick = { vm.place(grip) },
                                     modifier = Modifier.weight(1f),
                                     contentPadding = CompactButtonPadding,
                                 ) { Text("置く") }
-                                PressOutlinedButton(
-                                    onClick = { vm.rotate(-15f) },
+                                RotateButton(
+                                    RotateDirection.RIGHT,
+                                    sessionKey = vm.runId,
+                                    onRotate = vm::rotate,
                                     modifier = Modifier.weight(ROTATE_WEIGHT),
                                     contentPadding = CompactButtonPadding,
-                                ) { Text("⟳ 15°") }
+                                )
                                 MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
                             }
                             // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
