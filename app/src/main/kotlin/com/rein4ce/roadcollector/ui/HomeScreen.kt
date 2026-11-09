@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
@@ -51,7 +50,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,6 +61,7 @@ import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.collect.TitleBlocks
+import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
@@ -106,6 +105,8 @@ internal fun HomeScreen(onGo: (Dest) -> Unit) {
                 // 画面の高さいっぱいまで使う。4 つの行はふつうの大きさのまま、余った高さは上の部分を大きくして埋める
                 HeaderFillLayout(
                     minHeight = viewport - PAGE_TOP - PAGE_BOTTOM,
+                    maxScale = HEADER_SCALE_MAX,
+                    gap = HEADER_ROWS_GAP,
                     header = { scale ->
                         HomeHeader(
                             scale = scale,
@@ -171,47 +172,6 @@ private fun HomeHeader(scale: Float, meter: Animatable<Float, AnimationVector1D>
         }
     }
 }
-
-/**
- * 上の部分（[header]）と 4 つの行（[rows]）を、[minHeight] の高さに収まるように並べる：
- * - 行はふつうの大きさのまま、いちばん下に置く（親指の届く所）
- * - 上の部分は、いったんふつうの大きさで並べて測り、残りの高さと画面の幅に入る倍率で並べ直す（[HEADER_SCALE_MAX] 倍まで）。
- *   倍率の上限で余った高さは、上の部分と行の間にあける
- * - 足りないとき（小さい画面・文字が大きいとき）は、どちらもふつうの大きさで上から並べ、画面ごと動かして見る
- * ふつうの大きさで測るほうは置かないので、画面には出ず、押せず、読み上げにも出ない
- */
-@Composable
-private fun HeaderFillLayout(minHeight: Dp, header: @Composable (scale: Float) -> Unit, rows: @Composable () -> Unit) {
-    SubcomposeLayout { constraints ->
-        val width = constraints.maxWidth
-        val full = Constraints(minWidth = width, maxWidth = width)
-        val loose = Constraints(maxWidth = width)
-        val rowsPlaced = subcompose(HomeSlot.ROWS, rows).map { it.measure(full) }
-        val rowsHeight = rowsPlaced.sumOf { it.height }
-        val gap = HEADER_ROWS_GAP.roundToPx()
-        val probe = subcompose(HomeSlot.MEASURE) { header(1f) }.map { it.measure(loose) }
-        val probeHeight = probe.maxOfOrNull { it.height } ?: 0
-        val probeWidth = probe.maxOfOrNull { it.width } ?: 0
-        val room = minHeight.roundToPx() - rowsHeight - gap
-        var scale = if (probeHeight > 0 && room > probeHeight) room.toFloat() / probeHeight else 1f
-        if (probeWidth > 0) scale = minOf(scale, width.toFloat() / probeWidth)
-        scale = scale.coerceIn(1f, HEADER_SCALE_MAX)
-        val headerPlaced = subcompose(HomeSlot.HEADER) { header(scale) }.map { it.measure(loose) }
-        val headerHeight = headerPlaced.maxOfOrNull { it.height } ?: 0
-        val height = maxOf(headerHeight + gap + rowsHeight, minHeight.roundToPx())
-        layout(width, height) {
-            headerPlaced.forEach { it.placeRelative((width - it.width) / 2, 0) }
-            var y = height - rowsHeight
-            rowsPlaced.forEach {
-                it.placeRelative(0, y)
-                y += it.height
-            }
-        }
-    }
-}
-
-/** [HeaderFillLayout] の並び：行・上の部分（測るだけ）・上の部分（出す） */
-private enum class HomeSlot { ROWS, MEASURE, HEADER }
 
 /**
  * 4 つの画面へ行く行を並べ、行の積み木を 1 本の道でつなぐ（行の後ろに描く）。行はふつうの大きさ

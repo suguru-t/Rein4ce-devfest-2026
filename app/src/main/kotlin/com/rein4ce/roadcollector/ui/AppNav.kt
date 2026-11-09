@@ -44,7 +44,7 @@ import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
-import com.rein4ce.roadcollector.ui.game.StackScreen
+import com.rein4ce.roadcollector.ui.game.StackTab
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
 import com.rein4ce.roadcollector.ui.inventory.fieldbookGrid
 import com.rein4ce.roadcollector.ui.settings.HowToDialog
@@ -179,7 +179,8 @@ fun AppNav(collectRequests: Int = 0) {
                 }
                 composable(Dest.Stack.route) {
                     TabPage(tabPadding, onBack = ::backHome) {
-                        StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) })
+                        // まずモードを選ぶ画面。選んだら、そのモードの画面（通常なら積む画面）になる（ui/game/ModeSelect.kt）
+                        StackTab(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) })
                     }
                 }
                 composable(Dest.Gallery.route) {
