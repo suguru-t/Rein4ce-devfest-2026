@@ -77,6 +77,19 @@ object Fieldbook {
     }
     /** 測量の青。字やボタンの色。ボタンの地にも使い、その上の字は白（ダークでも白い字が読める明るさにしてある） */
     val Survey: Color get() = c(0xFF1F5FA8, 0xFF4A8BD6)
+
+    /**
+     * 白い字を載せる、小さな札や丸の測量の青（コレクションの「キャンセル」の札・選んだ順の番号の丸）。
+     * ダークの [Survey] は明るく、白い字とは 3.2:1 しかないので、ダークだけ濃くして 5.0:1 にする（紙の上でも面が見える 3.2:1）。
+     * ライトは [Survey] と同じ（5.9:1）。決定 45
+     */
+    val SurveyFace: Color get() = c(0xFF1F5FA8, 0xFF2A6AB8)
+
+    /**
+     * カードの面に書く測量の青の字と縁（コレクションの「選択」の札）。
+     * ダークの [Survey] はカードの面の上で 4.3:1 なので、ダークだけ少し明るくして 5.0:1 にする。ライトは [Survey] と同じ（6.3:1）。決定 45
+     */
+    val SurveyInk: Color get() = c(0xFF1F5FA8, 0xFF5A97DD)
     val SelectedPaper: Color get() = c(0xBFFFFFFF, 0x33FFFFFF)
     /** 削除など、取り消せない操作の赤（野帳の赤鉛筆） */
     val Danger: Color get() = c(0xFFB3412F, 0xFFE8806E)
