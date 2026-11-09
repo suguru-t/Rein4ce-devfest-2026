@@ -252,4 +252,22 @@ class StackWorldTest {
         assertTrue("跳ね上がりの平均（${sum / n} m）", sum / n < 0.03)
         assertTrue("いちばん大きい跳ね上がり（$most m）", most < 0.12)
     }
+
+    @Test
+    fun `共有ページの絵の台は、タワーが持つ台の幅で描く（前のタワーは今までの台の幅。決定 66）`() {
+        val part = SampleParts.all.first()
+        val narrow = Tower(parts = listOf(part), placements = listOf(com.rein4ce.roadcollector.core.model.Placement(part.id, 0f, 0.1f, 0f)), height = 0.2f, createdAt = 0L)
+        assertEquals(StackWorld.PLATFORM_WIDTH.toFloat(), narrow.platformWidth)
+        val wide = narrow.copy(platformWidth = 2.8f)
+        // 台の四角（#4A4E69）の幅を、同じ縮尺で描いたときに比べる（縮尺を合わせるため、パーツを左右の端に置いて範囲をそろえる）
+        fun platformRectWidth(t: Tower): Double {
+            val spread = t.copy(placements = t.placements + listOf(
+                com.rein4ce.roadcollector.core.model.Placement(part.id, -3f, 0.1f, 0f),
+                com.rein4ce.roadcollector.core.model.Placement(part.id, 3f, 0.1f, 0f),
+            ))
+            val rect = Regex("""<rect [^>]*width="([0-9.]+)"[^>]*fill="#4A4E69"""").find(TowerSvg.render(spread))!!
+            return rect.groupValues[1].toDouble()
+        }
+        assertEquals(2.0, platformRectWidth(wide) / platformRectWidth(narrow), 0.01)
+    }
 }

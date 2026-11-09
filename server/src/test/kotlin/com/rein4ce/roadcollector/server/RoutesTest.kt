@@ -210,4 +210,38 @@ class RoutesTest {
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.svg").status)
         assertEquals(HttpStatusCode.NotFound, client.get("/towers/nothere1/image.png").status)
     }
+
+    @Test
+    fun `終わりなく積んだ塔：一覧のパーツ数は置いた数、台の幅は JSON と絵に残る（決定 66）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+
+        // 同じパーツを 12 回置いた、広い台の塔（10 個より多いので、上限を上げる前は 400 だった）
+        val part = SampleParts.all.first()
+        val endless = Tower(
+            parts = listOf(part),
+            placements = List(12) { i -> Placement(part.id, x = -1.2f + 0.2f * i, y = 0.1f, angleRad = 0f) },
+            height = 0.4f,
+            createdAt = 0L,
+            platformWidth = 2.8f,
+        )
+        val res = client.postTower(endless)
+        assertEquals(HttpStatusCode.Created, res.status)
+        val id = AppJson.decodeFromString(TowerCreated.serializer(), res.bodyAsText()).id
+
+        val list = AppJson.decodeFromString(ListSerializer(TowerSummary.serializer()), client.get("/towers").bodyAsText())
+        assertEquals(12, list.single().partCount, "parts は 1 つでも、置いた数で数える")
+
+        val json = client.get("/towers/$id") { header(HttpHeaders.Accept, "application/json") }
+        assertEquals(2.8f, AppJson.decodeFromString(Tower.serializer(), json.bodyAsText()).platformWidth)
+        assertContains(client.get("/towers/$id").bodyAsText(), "12 個の散歩パーツで積みました")
+        // 共有ページの絵の台は、塔の台の幅（2.8 m）で描く
+        assertEquals(HttpStatusCode.OK, client.get("/towers/$id/image.png").status)
+    }
+
+    @Test
+    fun `台の幅を持たない前のタワーは、今までの台の幅で読む`() {
+        val old = AppJson.encodeToString(Tower.serializer(), sampleTower()).replace(Regex(""",?"platformWidth":[0-9.]+"""), "")
+        assertTrue(!old.contains("platformWidth"))
+        assertEquals(1.4f, AppJson.decodeFromString(Tower.serializer(), old).platformWidth)
+    }
 }

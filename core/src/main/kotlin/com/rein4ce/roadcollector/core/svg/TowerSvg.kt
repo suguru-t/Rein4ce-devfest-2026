@@ -23,7 +23,8 @@ object TowerSvg {
         Kind.OTHER -> "#8D99AE"
     }
 
-    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = StackWorld.PLATFORM_WIDTH): String {
+    /** @param platformWidth 台の幅 [m]。ふつうはタワーが持つ幅（広い台で積んだタワーは広い台で描く。決定 66） */
+    fun render(tower: Tower, widthPx: Int = 600, heightPx: Int = 800, platformWidth: Double = tower.platformWidth.toDouble()): String {
         val partsById = tower.parts.associateBy { it.id }
 
         // 表示範囲：台を含み、タワー全体が入るように
