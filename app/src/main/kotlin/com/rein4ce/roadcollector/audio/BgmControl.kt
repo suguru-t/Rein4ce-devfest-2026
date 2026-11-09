@@ -68,6 +68,13 @@ internal class BgmControl(private val out: Output) {
     /** ほかのアプリが音楽を流し始めたので止めたか（次にアプリを開くか、設定でオンにし直すまで流さない） */
     private var yieldedToOthers = false
 
+    /**
+     * ほかの音に出番を譲っている間か（電話・地図アプリの道案内の声などで一時的に止めている、電話の最中で出番を待っている）。
+     * この間は効果音も鳴らさない（audio/SoundEffects.kt。#93 の A のレビュー）。
+     * ほかのアプリが音楽を流し始めて譲った（[yieldedToOthers]）ときは含めない（一時的ではなく、効果音は短いので）
+     */
+    val givingWay: Boolean get() = pausedForOthers || waitingForFocus
+
     /** アプリが前に出たか（MainActivity の onStart・onStop） */
     fun setForeground(on: Boolean) {
         if (foreground == on) return

@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +93,7 @@ import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rein4ce.roadcollector.BuildConfig
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.audio.Sfx
 import com.rein4ce.roadcollector.collect.LocationRecordingService
 import com.rein4ce.roadcollector.core.geo.Projection
 import com.rein4ce.roadcollector.core.model.Part
@@ -114,6 +116,7 @@ import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
+import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.niceLength
 import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlin.math.max
@@ -336,6 +339,15 @@ fun CollectScreen(
         // 設定・拡大表示と同じ形：灰色の帯の見出し、枠の中のいちばん下に「コレクションを見る」、枠の下の丸い「×」で閉じる。
         // 見出しは「パーツができました」だと機械っぽいので、コレクションの「これまでに集めた道 ○ 本」とつながる言い方にする
         is CollectViewModel.Outcome.Created -> FramedDialog(title = "道を 1 本集めました", onDismiss = { vm.dismissOutcome() }) {
+            // 窓が出たときに 1 回だけ、ごほうびの音（ド・ミ・ソ・ド）。名前が届いて中身が変わっても、画面を回しても鳴らし直さない
+            val sfx = rememberSfx()
+            var cheered by rememberSaveable(o.part.id) { mutableStateOf(false) }
+            LaunchedEffect(o.part.id) {
+                if (!cheered) {
+                    cheered = true
+                    sfx.play(Sfx.DONE)
+                }
+            }
             // 天気は記録のあとに取ってくるので、届いたら図（道の色・左上のアイコン）と注記に出す（届くまではいつもの色）
             val sky = app.partRepository.weatherOf(o.part.id, weathers)?.sky
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
