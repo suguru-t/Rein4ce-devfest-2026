@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.server
 import com.google.api.core.SettableApiFuture
 import com.google.cloud.NoCredentials
 import com.google.cloud.firestore.FirestoreOptions
+import com.rein4ce.roadcollector.core.model.TowerMode
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -34,12 +35,22 @@ class FirestoreTowerStoreTest {
     // --- F1：一覧は 5 項目だけ取る ---
 
     @Test
-    fun `一覧のクエリは一覧用の 5 項目だけを要求し、json は要求しない`() {
+    fun `一覧のクエリは一覧用の項目だけを要求し、json は要求しない`() {
         val q = store().summariesQuery().toProto().structuredQuery
 
         val fields = q.select.fieldsList.map { it.fieldPath }
-        assertEquals(listOf("height", "partCount", "createdAt", "author", "ownerId"), fields)
+        assertEquals(listOf("height", "partCount", "createdAt", "author", "ownerId", "rule", "streakDays", "lastDay"), fields)
         assertFalse("json" in fields)
+    }
+
+    @Test
+    fun `遊び方ごとに別のコレクションを新しい順に読む（決定 73）`() {
+        val s = store("towers")
+        for ((mode, name) in listOf(TowerMode.NORMAL to "towers", TowerMode.CHALLENGE to "towers_challenge", TowerMode.DAILY to "towers_daily")) {
+            val q = s.summariesQuery(mode).toProto().structuredQuery
+            assertEquals(name, q.fromList.single().collectionId)
+            assertEquals("createdAt", q.orderByList.single().field.fieldPath)
+        }
     }
 
     @Test
@@ -53,7 +64,10 @@ class FirestoreTowerStoreTest {
 
     @Test
     fun `接続先の説明にプロジェクト・データベース・コレクションが入る`() {
-        assertEquals("project=test-project, database=(default), collection=towers_test", store().description)
+        assertEquals(
+            "project=test-project, database=(default), collections=towers_test, towers_test_challenge, towers_test_daily",
+            store().description,
+        )
     }
 
     // --- F3：ApiFuture の待ち方 ---

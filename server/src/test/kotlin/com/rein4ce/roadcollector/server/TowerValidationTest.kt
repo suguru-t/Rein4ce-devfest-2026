@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -69,7 +70,34 @@ class TowerValidationTest {
         bad(ok.copy(placements = emptyList()), "placements is empty")
         val tooMany = (1..MAX_TOWER_PARTS + 1).map { Part(id = "p$it", points = listOf(Pt(0f, 0f))) }
         bad(ok.copy(parts = tooMany), "too many parts")
-        bad(ok.copy(placements = List(MAX_TOWER_PARTS + 1) { ok.placements[0] }), "too many placements")
+        bad(ok.copy(placements = List(MAX_TOWER_PLACEMENTS + 1) { ok.placements[0] }), "too many placements")
+    }
+
+    @Test
+    fun `配置はパーツの種類より多くてよい（500 個まで。決定 73）`() {
+        // 通常で 100 個を超えて積むと、前は「保存」が断られていた
+        assertNull(ok.copy(placements = List(MAX_TOWER_PLACEMENTS) { ok.placements[0] }).validationError())
+        assertEquals(500, MAX_TOWER_PLACEMENTS)
+    }
+
+    @Test
+    fun `3 分チャレンジは決まりの ID が要る（決定 73）`() {
+        val challenge = ok.copy(mode = TowerMode.CHALLENGE, rule = "manual-180-v6")
+        assertNull(challenge.validationError())
+        bad(challenge.copy(rule = null), "needs rule")
+        bad(challenge.copy(rule = " "), "needs rule")
+        bad(challenge.copy(rule = "x".repeat(MAX_RULE_LENGTH + 1)), "needs rule")
+    }
+
+    @Test
+    fun `毎日 1 つずつ積むは持ち主の印・最後に積んだ日・連続日数が要る（決定 73）`() {
+        val daily = ok.copy(mode = TowerMode.DAILY, ownerId = "a".repeat(64), lastDay = "2026-11-10", streakDays = 3)
+        assertNull(daily.validationError())
+        bad(daily.copy(ownerId = null), "needs ownerId")
+        bad(daily.copy(lastDay = null), "needs lastDay")
+        bad(daily.copy(lastDay = "11/10"), "needs lastDay")
+        bad(daily.copy(streakDays = 0), "streakDays")
+        bad(daily.copy(streakDays = MAX_STREAK_DAYS + 1), "streakDays")
     }
 
     @Test

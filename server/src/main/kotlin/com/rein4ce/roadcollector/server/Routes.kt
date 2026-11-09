@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.svg.TowerSvg
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -19,6 +20,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,10 +30,15 @@ import kotlinx.coroutines.withContext
  *
  *   GET  /                     動作確認
  *   GET  /health               ヘルスチェック（/healthz は Cloud Run の予約パスで届かないため使わない）
- *   GET  /towers               一覧（新しい順）。X-Owner-Id ヘッダ（アプリの持ち主の印）を送ると、自分が送ったタワーに mine: true が付く
- *   POST /towers               保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）。
- *                              ownerId（持ち主の印）は保存するが、どの応答にも入れない
- *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON（ownerId は null にして返す）
+ *   GET  /towers               一覧（新しい順）。X-Owner-Id ヘッダ（アプリの持ち主の印）を送ると、自分が送ったタワーに mine: true が付く。
+ *                              ?mode=normal|challenge|daily で遊び方を選ぶ（無ければ通常。決定 73）。知らない値は 400
+ *   POST /towers               通常のタワーを保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）。
+ *                              ownerId（持ち主の印）は保存するが、どの応答にも入れない。通常でないタワー（mode が challenge・daily）は 400
+ *   POST /towers/challenge     3 分チャレンジのタワーを保存 → 201 { id, url }（決定 73）。決まりの ID（rule）が要る
+ *   PUT  /towers/daily         毎日 1 つずつ積むの塔を、持ち主ごとに 1 基だけ持つ → 200 { id, url }（決定 73）。同じ持ち主の塔があれば、その id のまま
+ *                              新しい形にする。持ち主の印（ownerId）・最後に積んだ日（lastDay）・連続日数（streakDays）が要る。
+ *                              通常と URL を分けたのは、遊び方を知らない前のサーバに送っても 404 になり、通常のランキングに混ざらないようにするため
+ *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON（ownerId は null にして返す）。どの遊び方のタワーでも
  *   GET  /towers/{id}/image.svg  タワーの絵（SVG）。共有ページの中に描く
  *   GET  /towers/{id}/image.png  タワーの絵（PNG、1200×630）。共有ページの og:image（LINE / X のプレビュー）
  *
@@ -53,32 +60,45 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
 
     get("/towers") {
         if (call.overLimit(limits.towersGet)) return@get
+        // 遊び方（決定 73）。無ければ通常（前のアプリは付けずに取りに来る）
+        val modeParam = call.request.queryParameters["mode"]
+        val mode = if (modeParam == null) TowerMode.NORMAL else TowerMode.of(modeParam)
+        if (mode == null) {
+            call.respond(HttpStatusCode.BadRequest, "mode must be normal, challenge or daily")
+            return@get
+        }
         // アプリは自分の持ち主の印を X-Owner-Id で送る。形が違うもの（他人の印を探る試しなど）は無いものとして扱う
         val owner = call.request.header(OWNER_HEADER)?.takeIf { OWNER_ID_PATTERN.matches(it) }
         // 答えが人（印）によって違うので、途中のキャッシュ（CDN など）に共有させない
         call.response.header(HttpHeaders.CacheControl, "private, no-store")
-        call.respond(store.summaries(owner))
+        call.respond(store.summaries(owner, mode))
     }
 
     post("/towers") {
         // 回数を数えてから読む（壊れたものを送り続けられても、1 分の上限で止まる。RateLimit.kt）
         if (call.overLimit(limits.towersPost)) return@post
-        // 誰でも叩ける URL なので、壊れたタワーは保存前に 400 で断る（TowerValidation.kt）。
-        // 読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする
-        val tower = try {
-            call.receive<Tower>()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            call.respond(HttpStatusCode.BadRequest, "body must be a Tower")
-            return@post
-        }
-        tower.validationError()?.let { reason ->
-            call.respond(HttpStatusCode.BadRequest, reason)
+        val tower = call.receiveValidTower() ?: return@post
+        // 3 分チャレンジと毎日 1 つずつ積むは、それぞれの URL へ（ここで受けると通常のランキングに混ざる）
+        if (tower.mode != TowerMode.NORMAL) {
+            call.respond(HttpStatusCode.BadRequest, "challenge and daily towers go to POST /towers/challenge and PUT /towers/daily")
             return@post
         }
         val saved = store.add(tower)
         call.respond(HttpStatusCode.Created, TowerCreated(saved.id, "${publicBaseUrl(call)}/towers/${saved.id}"))
+    }
+
+    post("/towers/challenge") {
+        if (call.overLimit(limits.towersPost)) return@post
+        val tower = call.receiveValidTower(TowerMode.CHALLENGE) ?: return@post
+        val saved = store.add(tower)
+        call.respond(HttpStatusCode.Created, TowerCreated(saved.id, "${publicBaseUrl(call)}/towers/${saved.id}"))
+    }
+
+    put("/towers/daily") {
+        if (call.overLimit(limits.towersPost)) return@put
+        val tower = call.receiveValidTower(TowerMode.DAILY) ?: return@put
+        val saved = store.putDaily(tower)
+        call.respond(HttpStatusCode.OK, TowerCreated(saved.id, "${publicBaseUrl(call)}/towers/${saved.id}"))
     }
 
     get("/towers/{id}") {
@@ -120,6 +140,29 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
         call.response.header(HttpHeaders.CacheControl, "public, max-age=86400")
         call.respondBytes(png, ContentType.Image.PNG)
     }
+}
+
+/**
+ * 本文のタワーを読んで検査する。誰でも叩ける URL なので、壊れたタワーは保存前に 400 で断る（TowerValidation.kt）。
+ * 読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする。断ったら null（応答は済んでいる）
+ *
+ * @param mode 遊び方をこれにしてから検査する（3 分チャレンジ・毎日 1 つずつ積むの URL。本文の mode は見ない）。null なら本文のまま
+ */
+private suspend fun ApplicationCall.receiveValidTower(mode: TowerMode? = null): Tower? {
+    val received = try {
+        receive<Tower>()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        respond(HttpStatusCode.BadRequest, "body must be a Tower")
+        return null
+    }
+    val tower = if (mode == null) received else received.copy(mode = mode)
+    tower.validationError()?.let { reason ->
+        respond(HttpStatusCode.BadRequest, reason)
+        return null
+    }
+    return tower
 }
 
 /**

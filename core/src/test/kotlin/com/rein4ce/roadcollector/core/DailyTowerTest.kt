@@ -102,6 +102,32 @@ class DailyTowerTest {
     }
 
     @Test
+    fun `連続日数は、最後に積んだ日からさかのぼって途切れずに積んだ日数（決定 73）`() {
+        assertEquals(0, DailyTower().streakDays)
+        val tower = DailyTower(listOf(block("a", "2026-11-05"), block("b", "2026-11-07"), block("c", "2026-11-08"), block("d", "2026-11-09")))
+        assertEquals(3, tower.streakDays)
+        assertEquals("2026-11-09", tower.lastDay)
+        // 月をまたいでも続く
+        assertEquals(2, DailyTower(listOf(block("a", "2026-10-31"), block("b", "2026-11-01"))).streakDays)
+    }
+
+    @Test
+    fun `「みんな」に送る形：パーツは 1 つにまとめ、配置は積んだ数だけ、まだ送っていない形があるか（決定 73）`() {
+        val tower = DailyTower(listOf(block("a", "2026-11-09", y = 0.1f), block("b", "2026-11-10", y = 0.3f)), height = 0.6)
+        assertTrue(tower.needsSend)
+        val sent = tower.toTower(platformWidth = 2.8, createdAt = 7L)
+        assertEquals(com.rein4ce.roadcollector.core.model.TowerMode.DAILY, sent.mode)
+        assertEquals(listOf("a", "b"), sent.parts.map { it.id })
+        assertEquals(2, sent.placements.size)
+        assertEquals(0.6f, sent.height)
+        assertEquals(2.8f, sent.platformWidth)
+        assertEquals(2, sent.streakDays)
+        assertEquals("2026-11-10", sent.lastDay)
+        assertFalse(tower.copy(sentDay = "2026-11-10").needsSend)
+        assertFalse(DailyTower().needsSend)
+    }
+
+    @Test
     fun `落ちた回数も保存し、前の形式（落ちた回数が無い）のファイルも読める`() {
         val tower = DailyTower(listOf(block("a", "2026-11-09")), height = 0.3, fellDay = "2026-11-10", fellCount = 2)
         val text = AppJson.encodeToString(DailyTower.serializer(), tower)

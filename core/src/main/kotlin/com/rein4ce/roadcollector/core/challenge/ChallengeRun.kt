@@ -3,6 +3,8 @@ package com.rein4ce.roadcollector.core.challenge
 import com.rein4ce.roadcollector.core.model.Kind
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Pt
+import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import kotlinx.serialization.Serializable
@@ -131,6 +133,12 @@ class ChallengeRun(
     var score: ChallengeScore? = null; private set
     var shapes = world.renderShapes(); private set
 
+    /**
+     * 記録になった回の、止まった塔（[score] と同時に決まる）。「みんな」の 3 分チャレンジのランキングに送る形（決定 73）。
+     * 記録にならなかった回（揺れが止まらなかった）は null
+     */
+    var tower: Tower? = null; private set
+
     /** 次の形が出てくる高さ [m]（塔の上 [SPAWN_ABOVE_M]） */
     var spawnY = SPAWN_ABOVE_M; private set
 
@@ -189,6 +197,7 @@ class ChallengeRun(
                 if (phase == Phase.FINALIZING) {
                     towerHeight = world.height()
                     score = ChallengeScore(runId, seed, towerHeight, wallClock(), style.ruleId)
+                    tower = settledTower(score!!)
                     phase = Phase.FINISHED
                 } else {
                     nextPiece()
@@ -276,6 +285,29 @@ class ChallengeRun(
         phase = Phase.FALLING
         settling = 0.0
         settleWait = 0.0
+    }
+
+    /**
+     * 止まった塔を、「みんな」に送る形にする（決定 73）。パーツは使った形だけ（5 種類まで）、配置は台に残った数だけ。高さは記録の高さ。
+     * 出てくる形は 1 つずつ別の id（`bar-3` など。[ChallengePieces]）なので、配置はもとの形の id（`bar`）に直してから送る
+     * （そうしないと、置いた数だけパーツが並んで、サーバのパーツの数の上限に近づく）
+     */
+    private fun settledTower(score: ChallengeScore): Tower {
+        val shapes = ChallengeRules.parts.map { it.id }.toSet()
+        val placements = world.placements().map { p ->
+            val base = p.partId.substringBeforeLast('-')
+            if (base in shapes) p.copy(partId = base) else p
+        }
+        val used = placements.map { it.partId }.toSet()
+        return Tower(
+            parts = ChallengeRules.parts.filter { it.id in used },
+            placements = placements,
+            height = score.height.toFloat(),
+            createdAt = score.createdAt,
+            platformWidth = ChallengeRules.PLATFORM_WIDTH_M.toFloat(),
+            mode = TowerMode.CHALLENGE,
+            rule = score.rule,
+        )
     }
 
     /** 「置く」：今の位置から落とす（自動で落ちるときは、下がるのを待たずにすぐ落とす） */

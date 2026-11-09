@@ -11,6 +11,7 @@ import com.google.cloud.firestore.Query
 import com.google.common.util.concurrent.MoreExecutors
 import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -18,10 +19,13 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Firestore 版。コレクション `towers`（TOWER_COLLECTION で変更可）に 1 タワー 1 ドキュメント。
+ * 遊び方ごとにコレクションを分ける（決定 73）：通常は `towers`、3 分チャレンジは `towers_challenge`、毎日 1 つずつ積むは `towers_daily`。
+ * 1 つのコレクションに遊び方の項目を入れて絞ると、「遊び方 ＋ 新しい順」の複合インデックスを Firestore に作る手間が要るのと、
+ * 今までのタワーには遊び方の項目が無いため。分けておけば、どのコレクションも今までと同じ「新しい順」だけで並べられる
  *
  * ドキュメントの中身：
  *   json       タワー全体（:core の Tower を AppJson で文字列化）。形式の正はこれ
- *   height, partCount, createdAt, author   一覧用。一覧は [SUMMARY_FIELDS] だけを取り、json は読まない
+ *   height, partCount, createdAt, author, rule, streakDays, lastDay   一覧用。一覧は [SUMMARY_FIELDS] だけを取り、json は読まない
  *
  * 認証は Application Default Credentials。Cloud Run ではサービスアカウント、
  * 手元では `gcloud auth application-default login` の結果を使う。鍵ファイルは使わない。
@@ -34,13 +38,18 @@ class FirestoreTowerStore(
     collectionName: String = "towers",
 ) : TowerStore {
 
-    private val towers: CollectionReference = db.collection(collectionName)
+    /** 遊び方ごとのコレクション。通常は今までどおりの名前 */
+    private val collections: Map<TowerMode, CollectionReference> =
+        TowerMode.entries.associateWith { mode -> db.collection(collectionFor(collectionName, mode)) }
+
+    private fun towersOf(mode: TowerMode): CollectionReference = collections.getValue(mode)
 
     /** 起動ログ用。接続先を人が確かめられるように（認証情報は含めない） */
     val description: String
-        get() = "project=${db.options.projectId}, database=${db.options.databaseId}, collection=${towers.id}"
+        get() = "project=${db.options.projectId}, database=${db.options.databaseId}, collections=${collections.values.joinToString { it.id }}"
 
     override suspend fun add(tower: Tower): Tower {
+        val towers = towersOf(tower.mode)
         // id の衝突はほぼ起きないが、create() は既存なら失敗するので数回だけ振り直す
         repeat(5) {
             val saved = tower.stamped(TowerIds.next())
@@ -62,18 +71,36 @@ class FirestoreTowerStore(
         error("tower id の採番に失敗しました")
     }
 
+    /**
+     * 毎日 1 つずつ積む：同じ持ち主の 1 基を新しい形にする（決定 73）。持ち主の印で 1 件だけ探し（等しいかだけの問い合わせなので、
+     * Firestore が自動で作る 1 項目のインデックスで足りる）、あれば同じ id のまま上書き、無ければ作る
+     */
+    override suspend fun putDaily(tower: Tower): Tower {
+        val daily = towersOf(TowerMode.DAILY)
+        val owner = requireNotNull(tower.ownerId) { "daily tower needs ownerId" }
+        val found = daily.whereEqualTo("ownerId", owner).limit(1).get().await().documents.firstOrNull()
+            ?: return add(tower.copy(mode = TowerMode.DAILY))
+        val saved = tower.copy(mode = TowerMode.DAILY).stamped(found.id)
+        daily.document(found.id).set(saved.toFields()).await()
+        return saved
+    }
+
     override suspend fun get(id: String): Tower? {
         if (!ID_PATTERN.matches(id)) return null // 変な id で Firestore に問い合わせない
-        val snap = towers.document(id).get().await()
-        val json = snap.getString("json") ?: return null
-        return AppJson.decodeFromString(Tower.serializer(), json).copy(id = snap.id)
+        // 通常から順に探す（共有ページの多くは通常のタワー。無ければ 3 分チャレンジ、毎日 1 つずつ積むの順）
+        for (mode in TowerMode.entries) {
+            val snap = towersOf(mode).document(id).get().await()
+            val json = snap.getString("json") ?: continue
+            return AppJson.decodeFromString(Tower.serializer(), json).copy(id = snap.id)
+        }
+        return null
     }
 
     override suspend fun count(): Int =
-        towers.count().get().await().count.toInt()
+        TowerMode.entries.sumOf { towersOf(it).count().get().await().count.toInt() }
 
-    override suspend fun summaries(owner: String?): List<TowerSummary> =
-        summariesQuery().get().await()
+    override suspend fun summaries(owner: String?, mode: TowerMode): List<TowerSummary> =
+        summariesQuery(mode).get().await()
             .documents
             .map { doc ->
                 TowerSummary(
@@ -84,15 +111,20 @@ class FirestoreTowerStore(
                     author = doc.getString("author"),
                     // 持ち主の印は Firestore から読むだけで、返事には「同じか」だけを入れる
                     mine = isOwnedBy(doc.getString("ownerId"), owner),
+                    // 遊び方は、どのコレクションから読んだかで決まる（今までのタワーには項目が無い）
+                    mode = mode,
+                    rule = doc.getString("rule"),
+                    streakDays = doc.getLong("streakDays")?.toInt() ?: 0,
+                    lastDay = doc.getString("lastDay"),
                 )
             }
 
     /**
-     * 一覧のクエリ。新しい順に [TowerStore.SUMMARY_LIMIT] 件、取る項目は一覧用の 5 つだけ。
+     * 一覧のクエリ。[mode] のコレクションを新しい順に [TowerStore.SUMMARY_LIMIT] 件、取る項目は一覧用のもの（[SUMMARY_FIELDS]）だけ。
      * select を付けないと json（タワー全体）まで Firestore から届き、500 件で数 MB の無駄になる。
      */
-    internal fun summariesQuery(): Query =
-        towers.orderBy("createdAt", Query.Direction.DESCENDING)
+    internal fun summariesQuery(mode: TowerMode = TowerMode.NORMAL): Query =
+        towersOf(mode).orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(TowerStore.SUMMARY_LIMIT)
             .select(*SUMMARY_FIELDS)
 
@@ -105,13 +137,21 @@ class FirestoreTowerStore(
         "author" to author,
         // 持ち主の印（アプリが端末ごとに作るハッシュ。古いアプリからは null）。一覧の「あなた」の判定に使う
         "ownerId" to ownerId,
+        // 3 分チャレンジの決まりの ID と、毎日 1 つずつ積むの連続日数・最後に積んだ日（決定 73。ほかの遊び方は null と 0）
+        "rule" to rule,
+        "streakDays" to streakDays,
+        "lastDay" to lastDay,
     )
 
     companion object {
         private val ID_PATTERN = Regex("^[a-z0-9]{1,32}$")
 
         /** 一覧で Firestore から取る項目。json は含めない */
-        val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author", "ownerId")
+        val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author", "ownerId", "rule", "streakDays", "lastDay")
+
+        /** 遊び方 [mode] のコレクションの名前。通常は [base] のまま、ほかは `_challenge`・`_daily` を付ける（決定 73） */
+        fun collectionFor(base: String, mode: TowerMode): String =
+            if (mode == TowerMode.NORMAL) base else "${base}_${mode.wire}"
 
         /**
          * @param projectId 保存先のプロジェクト。null なら Java クライアントの既定の決め方
