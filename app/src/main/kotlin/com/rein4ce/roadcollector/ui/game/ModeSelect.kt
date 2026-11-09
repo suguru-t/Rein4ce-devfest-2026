@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +103,14 @@ internal fun shownMode(chosen: PlayMode?, request: GameSession.StartRequest?, ju
     if (request != null && !request.started && request.id != jumpedFor) PlayMode.NORMAL else chosen
 
 /**
+ * 積むタブで、モードを選ぶ画面を出しているか。背景の天気を決める AppNav が見て、選ぶ画面のときだけ今の天気を出す
+ * （遊んでいる間は出さない。今の積む画面は地を塗っていて、天気が隠れるため）
+ */
+internal object StackTabState {
+    var selecting by mutableStateOf(false)
+}
+
+/**
  * 積むタブの中身。開くと、まずモードを選ぶ画面（ホームのような、色の積み木と紙のカード）。
  * 選ぶとそのモードで遊ぶ画面になり、上の「‹ 戻る」か端末の「戻る」で選ぶ画面に戻る（選ぶ画面での「戻る」はホームへ）。
  *
@@ -122,6 +131,12 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         }
     }
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
+    // 選ぶ画面を出しているかを、背景の天気に知らせる（この画面を離れたら、選んでいないことにする）
+    val selecting = mode != PlayMode.NORMAL
+    DisposableEffect(selecting) {
+        StackTabState.selecting = selecting
+        onDispose { StackTabState.selecting = false }
+    }
 
     when (mode) {
         PlayMode.NORMAL -> {
