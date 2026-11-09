@@ -283,4 +283,24 @@ class StackWorldTest {
         }
         assertEquals(2.0, platformRectWidth(wide) / platformRectWidth(narrow), 0.01)
     }
+
+    @Test
+    fun `固めたパーツは、上から落ちてきたパーツが当たっても動かない（決定 70）`() {
+        val bar = SampleParts.byId("sample-bar")!!
+        val world = StackWorld()
+        // 台の端に半分はみ出した棒（固めないと、上から落ちてきた棒に押されて傾き、落ちる置き方）
+        val base = world.place(bar, x = 0.7, y = 0.06, angle = 0.0)
+        world.freeze(base)
+        val before = world.placements().single()
+        assertTrue("固めたパーツは、止まったかを見ない", world.isSettled())
+        val dropped = SampleParts.byId("sample-l")!!
+        world.place(dropped, x = 1.0, y = 1.5, angle = 0.3)
+        settle(world)
+        world.removeFallen()
+        val after = world.placements().first { it.partId == bar.id }
+        assertEquals(before.x, after.x, 1e-6f)
+        assertEquals(before.y, after.y, 1e-6f)
+        assertEquals(before.angleRad, after.angleRad, 1e-6f)
+        assertEquals(0, world.movingCount())
+    }
 }

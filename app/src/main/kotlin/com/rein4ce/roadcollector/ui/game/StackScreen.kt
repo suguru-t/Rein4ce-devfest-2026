@@ -364,7 +364,7 @@ fun StackScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             // 操作のボタンは「回す」の 1 つだけ（決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる（aimByDrag）。
-                            // 回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114 の RotateButton）
+                            // 回すのは時計回りだけで、押している間なめらかに回る（きざみは無い。決定 71 の RotateButton）
                             RotateButton(
                                 RotateDirection.RIGHT,
                                 sessionKey = vm.runId,

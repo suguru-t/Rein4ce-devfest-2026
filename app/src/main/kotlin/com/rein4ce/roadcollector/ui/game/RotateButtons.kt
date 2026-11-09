@@ -1,96 +1,129 @@
 package com.rein4ce.roadcollector.ui.game
 
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.rein4ce.roadcollector.ui.common.pressFeel
-import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-
-/** 回転のボタンを 1 回押したときに回す角度 [度] */
-internal const val ROTATE_STEP_DEG = 15f
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
- * 回転のボタンを押し続けたときに、次の [ROTATE_STEP_DEG] を回すまでの間隔 [ms]（#114）。
- * 1 秒に約 125°（半回転に約 1.4 秒）。15° ずつ回すので、離したときも 15° きざみのまま（そろえ直さない）
+ * 「回す」を押している間に回る速さ [度/秒]（決定 71）。半回転に 1.5 秒。
+ * 前は 15° ずつ回し、押し続けると 120 ms ごとに 15° 回していた（1 秒に約 125°。#114）。速さはそのくらいのまま、きざみをなくした
  */
-internal const val ROTATE_REPEAT_MS = 120L
+internal const val ROTATE_SPEED_DEG_PER_S = 120f
+
+/** 読み上げ（TalkBack）で 1 回押したときに回す角度 [度]。読み上げでは押し続けられないので、決まった量ずつ回す */
+internal const val ROTATE_A11Y_STEP_DEG = 10f
+
+/** 回している間に軽く振動する間隔 [度]（設定の「振動」に従う。どれだけ回ったかを指で分かるように） */
+internal const val ROTATE_TICK_DEG = 45f
+
+/** 1 コマで回す時間の上限 [秒]（コマが飛んだときに、一度に大きく回らないように） */
+private const val MAX_FRAME_S = 0.05f
 
 /**
- * ⟲ と ⟳。[sign] は、押したときに回す向き（⟲ が +、⟳ が −。積む画面の回し方と同じ）
+ * ⟲ と ⟳。[sign] は、回す向き（⟲ が +、⟳ が −。積む画面の回し方と同じ）
  */
 enum class RotateDirection(val symbol: String, private val side: String, val sign: Float) {
     LEFT("⟲", "左", 1f),
     RIGHT("⟳", "右", -1f),
     ;
 
-    /** ボタンの字（「⟲ 15°」） */
-    val text: String get() = "$symbol ${ROTATE_STEP_DEG.toInt()}°"
+    /** ボタンの字（「⟲」） */
+    val text: String get() = symbol
 
-    /** 読み上げの説明（「左に 15° 回す」） */
-    val label: String get() = "${side}に ${ROTATE_STEP_DEG.toInt()}° 回す"
+    /** 読み上げの説明（「左に回す」） */
+    val label: String get() = "${side}に回す"
 }
 
 /**
- * 回転のボタン 1 つ（#114）。押すと [ROTATE_STEP_DEG] 回し、押し続けると [ROTATE_REPEAT_MS] ごとに回し続ける（離したら止まる）。
- * 回り始めるまでの間は、端末の長押しの時間（前の ◀▶ と同じ）。回し続けている間は、15° ごとに軽く振動する
- * （設定の「振動」に従う）。押した瞬間の振動は、ほかのボタンと同じ押し心地（pressFeel）から鳴る。
- *
- * 続けて回すのを止める場面（離す・外へずらす・裏に回る・画面を離れる・次のゲーム）と、読み上げの長押しの扱い（1 回だけ回す）は、
- * 前の ◀▶ と同じ。
+ * 押している間、コマの時刻から回す角度を決める（決定 71）。押し始めのコマ（[start]）では回さず、
+ * そこから [degPerSecond] の速さで回す。角度にきざみは無い（離したところの向きのまま）
+ */
+internal class TurnClock(private val degPerSecond: Float = ROTATE_SPEED_DEG_PER_S) {
+    private var last = 0L
+    private var sinceTick = 0f
+
+    /** 押し始めたコマ [ns] */
+    fun start(frameNanos: Long) {
+        last = frameNanos
+        sinceTick = 0f
+    }
+
+    /** [frameNanos] のコマで回す角度 [度]（向きは付けない。前のコマからの時間ぶん。上限は [MAX_FRAME_S] ぶん） */
+    fun advance(frameNanos: Long): Float {
+        val dt = ((frameNanos - last) / 1e9f).coerceIn(0f, MAX_FRAME_S)
+        last = frameNanos
+        val degrees = degPerSecond * dt
+        sinceTick += degrees
+        return degrees
+    }
+
+    /** 前の振動から [ROTATE_TICK_DEG] 回ったか（回ったら数え直す） */
+    fun tick(): Boolean {
+        if (sinceTick < ROTATE_TICK_DEG) return false
+        sinceTick -= ROTATE_TICK_DEG
+        return true
+    }
+}
+
+/**
+ * 回転のボタン 1 つ。**押している間、なめらかに回り続け、離したら止まる**（決定 71。[ROTATE_SPEED_DEG_PER_S]）。
+ * 角度にきざみは無く、離したところの向きのまま（前は 15° ずつ回り、押し続けると 15° ずつ回り続けた。#114）。
+ * 軽く触って離せば、少しだけ回る。指をボタンの外へずらしたら止まる。裏に回ったときや画面を離れたときも止まる。
+ * 回している間は [ROTATE_TICK_DEG] ごとに軽く振動する（設定の「振動」に従う）。押した瞬間の振動と音は、ほかのボタンと同じ押し心地（pressFeel）から鳴る。
+ * 読み上げ（TalkBack）では押し続けられないので、1 回押すごとに [ROTATE_A11Y_STEP_DEG] 回す。
  * 見た目は、ほかの画面のボタン（`PopButton`）と同じ積み木（オレンジの面・下にのぞく側面・太い丸ゴシックの白い字）に、
- * 回る矢印のアイコン（決定 67。前は Material の枠だけのボタンだった）。押せないときは灰色
+ * 回る矢印のアイコン（決定 67）。押せないときは灰色
  *
- * @param onRotate 回す角度 [度]（+ が ⟲）。狙っている間だけ回る（落下中などは、呼ぶ側の VM が何もしない）
- * @param sessionKey 次のゲームで、長押しの状態ごと作り直す
- * @param text ボタンの字（既定は「⟲ 15°」など）。積む画面は時計回りの 1 つだけにしたので「回す」（[TURN_BUTTON_TEXT]。決定 67）
- * @param label 読み上げの説明（既定は「左に 15° 回す」など）
+ * @param onRotate 回す角度 [度]（+ が ⟲）。押している間、毎コマ呼ぶ。狙っている間だけ回る（落下中などは、呼ぶ側の VM が何もしない）
+ * @param sessionKey 次のゲームで、押している状態ごと作り直す
+ * @param text ボタンの字（既定は「⟲」など）。積む画面は時計回りの 1 つだけにしたので「回す」（[TURN_BUTTON_TEXT]。決定 67）
+ * @param label 読み上げの説明（既定は「左に回す」など）
  */
 @Composable
 fun RotateButton(
@@ -108,61 +141,56 @@ fun RotateButton(
         val currentRotate by rememberUpdatedState(onRotate)
         val haptics = rememberHaptics()
         val source = remember { MutableInteractionSource() }
-        val pressed by source.collectIsPressedAsState()
-        val scope = rememberCoroutineScope()
-        val repeater = remember(scope) { MoveRepeater(scope, intervalMs = ROTATE_REPEAT_MS) }
-        DisposableEffect(repeater, active) {
-            if (!active) repeater.stop()
-            onDispose { repeater.stop() }
-        }
-        LaunchedEffect(source, repeater) {
-            source.interactions.collect {
-                if (it is PressInteraction.Release || it is PressInteraction.Cancel) repeater.stop()
-            }
-        }
-        val step = direction.sign * ROTATE_STEP_DEG
         Box(
             contentAlignment = Alignment.Center,
             modifier = modifier
                 .pressFeel(source)
-                // 回し続けている間に、指をボタンの外へずらしたら止める（◀▶ と同じ。#88 の A のレビュー）
-                .pointerInput(repeater) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull() ?: continue
-                            val p = change.position
-                            val outside = p.x < 0f || p.y < 0f || p.x > size.width || p.y > size.height
-                            if (change.pressed && outside) repeater.stop()
+                // 押している間だけ、毎コマ回す。裏に回ったら（active が変わる）、押している途中でも止める
+                .pointerInput(active) {
+                    if (!active) return@pointerInput
+                    coroutineScope {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            down.consume()
+                            val press = PressInteraction.Press(down.position)
+                            source.tryEmit(press)
+                            val turning = launch {
+                                val clock = TurnClock()
+                                clock.start(withFrameNanos { it })
+                                while (isActive) {
+                                    withFrameNanos { now ->
+                                        currentRotate(direction.sign * clock.advance(now))
+                                        if (clock.tick()) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    }
+                                }
+                            }
+                            // 離した・外へずらした・ほかに取られたら止める
+                            val up = waitForUpOrCancellation()
+                            turning.cancel()
+                            if (up != null) {
+                                up.consume()
+                                source.tryEmit(PressInteraction.Release(press))
+                            } else {
+                                source.tryEmit(PressInteraction.Cancel(press))
+                            }
                         }
                     }
                 }
-                .combinedClickable(
-                    enabled = active,
-                    role = Role.Button,
-                    interactionSource = source,
-                    indication = null,
-                    onClickLabel = label,
-                    onLongClickLabel = label,
-                    onClick = { currentRotate(step) },
-                    onLongClick = {
-                        if (pressed) {
-                            var first = true
-                            repeater.start {
-                                currentRotate(step)
-                                // 回り始めの 1 回は、押したときの振動と重なるので鳴らさない
-                                if (!first) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                first = false
-                            }
-                        } else {
-                            // 読み上げの長押しは指を離す知らせが来ないので、1 回だけ回す
-                            currentRotate(step)
-                        }
-                    },
-                )
                 .popBlock(face = if (active) Pop.OrangeDeep else Fieldbook.GridMajor, corner = 14.dp)
                 .heightIn(min = 48.dp)
                 .padding(contentPadding)
-                .semantics { contentDescription = label },
+                .semantics {
+                    role = Role.Button
+                    contentDescription = label
+                    if (active) {
+                        onClick(label) {
+                            currentRotate(direction.sign * ROTATE_A11Y_STEP_DEG)
+                            true
+                        }
+                    } else {
+                        disabled()
+                    }
+                },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clearAndSetSemantics {}) {
                 // 回る向きの矢印（Material の「再読み込み」は時計回り。⟲ は左右を返す）
@@ -188,4 +216,4 @@ fun RotateButton(
 
 /** 積む画面の「回す」のボタン（時計回りの 1 つだけ。決定 67）の字と読み上げ */
 internal const val TURN_BUTTON_TEXT = "回す"
-internal const val TURN_BUTTON_LABEL = "時計回りに 15° 回す。押し続けると回り続ける"
+internal const val TURN_BUTTON_LABEL = "時計回りに回す。押している間、回り続ける"

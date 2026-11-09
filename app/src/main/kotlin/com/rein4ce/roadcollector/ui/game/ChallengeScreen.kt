@@ -387,7 +387,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
 
 /**
  * 狙う操作：「回す」のボタン 1 つだけ（決定 67。通常のモードと同じ）。位置はキャンバスのドラッグで決め（10 cm きざみ）、
- * 指を離すと落ちる（[ChallengeCanvas]）。回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114）。
+ * 指を離すと落ちる（[ChallengeCanvas]）。回すのは時計回りだけで、押している間なめらかに回る（きざみは無い。決定 71）。
  * 行の高さは [AIM_ROW_HEIGHT]（落下中の「落下中…」と同じ。下の「やり直す」が動かないように）
  */
 @Composable

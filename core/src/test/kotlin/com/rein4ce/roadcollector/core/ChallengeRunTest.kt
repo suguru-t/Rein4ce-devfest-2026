@@ -120,7 +120,7 @@ class ChallengeRunTest {
         run.resume(); now = ChallengeRules.DURATION_NS; run.tick()
         repeat(20) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRules.ID, run.score!!.rule)
-        assertEquals("manual-180-v5", ChallengeRules.ID)
+        assertEquals("manual-180-v6", ChallengeRules.ID)
     }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L

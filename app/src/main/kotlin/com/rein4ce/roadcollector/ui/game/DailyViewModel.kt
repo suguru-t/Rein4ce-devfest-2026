@@ -23,11 +23,14 @@ import kotlinx.coroutines.launch
 /**
  * 「毎日 1 つずつ積む」の進行（決定 61・#106）。
  *
- * - 開くと、保存した塔（[DailyTowerStore]）を、止まったときの位置・向きのまま組み直す（動かさずに置く）
+ * - 開くと、保存した塔（[DailyTowerStore]）を、止まったときの位置・向きのまま組み直し、**固める**（決定 70。
+ *   今日のパーツが当たっても、昨日までの塔は動かず、落ちもしない。StackWorld.freeze）
  * - その日にまだ積んでいなければ、今日歩いた道から 1 つ選び（[choose]）、ふつうの積む画面と同じく横に動かし・回して「置く」
- * - 止まったら（または 6 秒たったら）、全部のパーツの位置を保存する。台から落ちたパーツは塔から外れる。
- *   今日のパーツが落ちたときは、今日はまだ積んでいないことになり、もう一度選べる
+ * - 止まったら（または 6 秒たったら）、全部のパーツの位置を保存する。
+ *   今日のパーツが台から落ちたときは、同じパーツで、そのまま狙い直す（置き直し。位置と向きもそのまま）。
+ *   置き直しは 1 日 [DailyTower.MAX_RETRIES] 回まで（落ちた回数は塔と一緒に保存する）。使い切ったら、その日はもう積めない
  * - 日の変わり目は端末の時刻の 0 時（[today]）。積まなかった日は何もしない（塔はそのまま）
+ * - 台は通常と同じ 2.8 m（決定 70。3 つのモードでそろえる。前は 1.4 m）
  *
  * @param today 今日の日付（"2026-11-10"）。テストで差し替える
  */
@@ -69,7 +72,7 @@ class DailyViewModel(
     var camera by mutableStateOf<CameraTarget>(CameraTarget.Follow(0f))
         private set
 
-    /** さっき積んだ今日のパーツが、台から落ちて塔から外れた（画面に一言出す。今日の道をもう一度選べる） */
+    /** さっき積んだ今日のパーツが、台から落ちた（画面に一言出す。置き直しが残っていれば、同じパーツで狙い直している） */
     var lastFell by mutableStateOf(false)
         private set
 
@@ -77,11 +80,17 @@ class DailyViewModel(
     var saveFailed by mutableStateOf(false)
         private set
 
-    private var world = StackWorld()
+    private var world = newWorld()
     private var settleTimer = 0.0
 
     /** 今日もう積んだか（今日のパーツが塔に残っているか） */
     val placedToday: Boolean get() = tower.placedOn(day)
+
+    /** 今日まだ積めるか（まだ積んでいなくて、置き直しを使い切っていない。決定 70） */
+    val canPlaceToday: Boolean get() = tower.canPlaceOn(day)
+
+    /** 今日のパーツが台から落ちた回数（置き直している間は、今が何回目の置き直しか） */
+    val fallsToday: Int get() = tower.fallsOn(day)
 
     init {
         viewModelScope.launch {
@@ -95,12 +104,15 @@ class DailyViewModel(
         day = today()
     }
 
-    /** 保存した塔を、止まったときの位置・向きで組み直す。置いたまま止めておく（動き出して崩れないように） */
+    /**
+     * 保存した塔を、止まったときの位置・向きで組み直し、固める（決定 70）。今日のパーツが当たっても動かず、落ちもしない
+     * （前は止めておくだけで、当たると動き出して、昨日までのパーツが落ちることがあった）
+     */
     private fun rebuild() {
-        world = StackWorld()
+        world = newWorld()
         for (block in tower.blocks) {
             val p = block.placement
-            world.place(block.part, p.x.toDouble(), p.y.toDouble(), p.angleRad.toDouble(), p.scale.toDouble(), block.grip).setAtRest(true)
+            world.freeze(world.place(block.part, p.x.toDouble(), p.y.toDouble(), p.angleRad.toDouble(), p.scale.toDouble(), block.grip))
         }
         shapes = world.renderShapes()
         height = world.height().toFloat()
@@ -109,7 +121,7 @@ class DailyViewModel(
 
     /** 今日の道から 1 つ選んで、狙い始める */
     fun choose(part: Part, grip: Grip) {
-        if (phase != Phase.Viewing || placedToday) return
+        if (phase != Phase.Viewing || !canPlaceToday) return
         current = part
         lastFell = false
         currentGrip = grip
@@ -167,7 +179,10 @@ class DailyViewModel(
         if ((settleTimer >= SETTLE_MIN_SECONDS && world.isSettled()) || settleTimer >= SETTLE_MAX_SECONDS) finish()
     }
 
-    /** 止まった（か待ちの上限）。全部のパーツの位置を保存して、塔を見る画面に戻る */
+    /**
+     * 止まった（か待ちの上限）。全部のパーツの位置を保存して、塔を見る画面に戻る。
+     * 今日のパーツが落ちて、置き直しが残っていれば、同じパーツで狙い直す（位置と向きはそのまま。決定 70）
+     */
     private fun finish() {
         val part = current ?: return
         val placements = world.placements()
@@ -184,8 +199,14 @@ class DailyViewModel(
         tower = next
         current = null
         phase = Phase.Viewing
-        // 次に開いたときと同じ形で見せる（止まったまま置き直す）
+        // 次に開いたときと同じ形で見せる（止まった形のまま固める）
         rebuild()
+        if (lastFell && next.canPlaceOn(day)) {
+            // 置き直し：同じパーツ・同じすべりやすさで、もう一度狙う（ghostX と ghostAngleDeg はそのまま）
+            current = part
+            phase = Phase.Aiming
+            camera = CameraTarget.Follow(top = spawnY() + reachOf(part))
+        }
         viewModelScope.launch {
             saveFailed = runCatching { store.save(next) }.isFailure
         }
@@ -216,6 +237,9 @@ class DailyViewModel(
     }
 
     companion object {
+        /** 台は通常（[StackViewModel.PLATFORM_WIDTH_M]）と同じ 2.8 m（決定 70。前は StackWorld の既定の 1.4 m） */
+        private fun newWorld() = StackWorld(platformWidth = StackViewModel.PLATFORM_WIDTH_M)
+
         const val SPAWN_ABOVE_M = 1.5f
         const val DRAG_MARGIN_M = 0.8
         const val MAX_FRAME_SECONDS = 0.05
