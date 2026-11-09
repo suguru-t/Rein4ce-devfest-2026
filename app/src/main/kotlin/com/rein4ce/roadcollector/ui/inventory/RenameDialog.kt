@@ -48,7 +48,7 @@ internal fun nameLength(name: String): Int = name.trim().let { it.codePointCount
  * - 「AI に考えてもらう」で、サーバの命名 API（Gemini）に名前を考えてもらい、入力欄に入れる。保存するかは自分で決める。
  *   考えられなかったときは、入力欄はそのままにして知らせる（decisions.md の 7）。送るのは形・距離・日時だけ（8）
  *
- * @param aiOn    「AI に考えてもらう」を出すか。設定（採集画面の歯車）で AI の名前付けをオフにしていたら false
+ * @param aiOn    「AI に考えてもらう」を出すか。設定（ホームの歯車）で AI の名前付けをオフにしていたら false
  * @param suggest 名前を考えてもらう。考えられなければ null（テストやプレビューでは差し替える）
  */
 @Composable

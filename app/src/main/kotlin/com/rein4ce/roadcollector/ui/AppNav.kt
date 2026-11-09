@@ -1,26 +1,45 @@
 package com.rein4ce.roadcollector.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.rein4ce.roadcollector.RoadCollectorApp
+import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
@@ -34,6 +53,7 @@ import com.rein4ce.roadcollector.ui.weather.WeatherLayer
 
 /**
  * 4 画面のタブ。担当分けに合わせて 1 画面 = 1 パッケージ。
+ * 開くと、まずホーム（ui/HomeScreen.kt）。そこからボタンで 4 画面に入り、4 画面の間は下のタブで行き来する。タブバーの左の家のボタンか端末の「戻る」で、ホームへ戻る（決定 52）。
  *
  *   collect   … A：GPS 採集（ui/collect）
  *   inventory … B：手持ちパーツ（ui/inventory）
@@ -58,11 +78,20 @@ sealed class Dest(val route: String, val label: String, val iconOutline: ImageVe
     }
 }
 
+/** ホームの route。ホームはタブではないので [Dest] には入れない（ui/HomeScreen.kt） */
+internal const val HOME_ROUTE = "home"
+
+/**
+ * @param collectRequests アプリが生きているまま、記録中の通知を押して戻ってきた回数（MainActivity.onNewIntent）。
+ *   増えたら、記録中なら記録画面へ移す
+ */
 @Composable
-fun AppNav() {
+fun AppNav(collectRequests: Int = 0) {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val currentDestination = backStack?.destination
+    // ホームにいるか（開いた直後の、まだ画面が決まっていない一瞬もホームとみなす）
+    val atHome = currentDestination == null || currentDestination.route == HOME_ROUTE
 
     // 「みんなのタワー」の一覧を、画面が出た時点で裏で取り始める（C）。本番のサーバはしばらく使われないと止まっていて
     // 起きるまで 5 秒ほどかかるので、「みんな」を押してから取りに行くとそこで待つ。先に取り始めておけば、
@@ -70,6 +99,8 @@ fun AppNav() {
     val context = LocalContext.current
     LaunchedEffect(Unit) { RoadCollectorApp.from(context).gallery.prefetch() }
 
+    // 4 つの画面へ移る（ホームのボタンと、下のタブバーから）。いつもホームの上に 1 つだけ積む。
+    // さっきまで見ていた画面は、状態を残して下ろす（戻ってきたら続きから）
     fun go(dest: Dest) {
         navController.navigate(dest.route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -78,32 +109,92 @@ fun AppNav() {
         }
     }
 
+    // 4 つの画面で端末の「戻る」を押したら、ホームへ戻る。タブを切り替えたときと同じく、画面の状態は残す
+    // （記録画面のデモ散歩の再生や、コレクションのスクロールの位置が、ホームへ戻っただけで消えないように）
+    fun backHome() {
+        navController.popBackStack(HOME_ROUTE, inclusive = false, saveState = true)
+    }
+
+    // 記録中に開いたとき（記録中の通知から開き直したときなど）は、ホームを飛ばして記録画面から始める（戻るとホーム）。
+    // 開くたびに 1 回だけ見る（画面の作り直しでは見ない）。飛ぶときは、画面の切り替えとタブバーの出る動きを付けない
+    var launched by rememberSaveable { mutableStateOf(false) }
+    var instant by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (launched) return@LaunchedEffect
+        launched = true
+        if (TrackRecorder.isRecording.value) {
+            instant = true
+            go(Dest.Collect)
+            // 切り替えの動きが決まる（次のコマ）まで待ってから、ふだんの動きに戻す
+            withFrameNanos {}
+            withFrameNanos {}
+            instant = false
+        }
+    }
+    // アプリが生きているまま記録中の通知を押したとき（ホームへ戻ってから裏に回していたときなど）も、記録画面へ移す。
+    // こちらは見ていた画面から移るので、ふだんの切り替えの動きを付ける（#101 の A のレビュー）
+    LaunchedEffect(collectRequests) {
+        if (collectRequests > 0 && TrackRecorder.isRecording.value) go(Dest.Collect)
+    }
+
+    // タブバーがホームへ戻るとき（下へ隠れる間）も、さっきまでの画面を選んだままにしておく
+    val lastTab = remember { arrayOfNulls<NavDestination>(1) }
+    if (!atHome) lastTab[0] = currentDestination
+
     // 地はアプリ全体で方眼紙。その上に、見ている画面に合わせた天気（雨・雪など）を降らせる（B：ui/weather）。
     // 画面の部品はさらにその上。タブバーは透明なので、浮いたピルの下に方眼と雨が透けて見える
     // 中の LocalHapticFeedback を設定の「振動」に従うものにする（Compose の部品が自分で鳴らす振動にも効くように）
     ProvideAppHaptics {
         Box(modifier = Modifier.fillMaxSize().fieldbookGrid()) {
             val backdrop = when (currentDestination?.route) {
+                null, HOME_ROUTE -> BackdropScreen.HOME
                 Dest.Collect.route -> BackdropScreen.COLLECT
                 Dest.Inventory.route -> BackdropScreen.COLLECTION
                 Dest.Gallery.route -> BackdropScreen.GALLERY
                 else -> BackdropScreen.OTHER
             }
             WeatherLayer(backdrop, modifier = Modifier.fillMaxSize())
-            Scaffold(
-                containerColor = Color.Transparent,
-                bottomBar = { TabBar(currentDestination, onGo = ::go) },
-            ) { innerPadding ->
-                NavHost(
-                    navController = navController,
-                    startDestination = Dest.Collect.route,
-                    modifier = Modifier.padding(innerPadding),
-                ) {
-                    composable(Dest.Collect.route) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
-                    composable(Dest.Inventory.route) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
-                    composable(Dest.Stack.route) { StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) }) }
-                    composable(Dest.Gallery.route) { GalleryScreen() }
+            // 4 つの画面は、上は端末の時計などのバー、下はタブバー（と端末の下のバー）の分をあけて置く。ホームは自分であける
+            val bars = WindowInsets.systemBars.asPaddingValues()
+            val direction = LocalLayoutDirection.current
+            val tabPadding = PaddingValues(
+                start = bars.calculateStartPadding(direction),
+                top = bars.calculateTopPadding(),
+                end = bars.calculateEndPadding(direction),
+                bottom = bars.calculateBottomPadding() + TabBarSpace,
+            )
+            NavHost(
+                navController = navController,
+                startDestination = HOME_ROUTE,
+                modifier = Modifier.fillMaxSize(),
+                enterTransition = { if (instant) EnterTransition.None else fadeIn(tween(NAV_FADE_MS)) },
+                exitTransition = { if (instant) ExitTransition.None else fadeOut(tween(NAV_FADE_MS)) },
+            ) {
+                composable(HOME_ROUTE) { HomeScreen(onGo = ::go) }
+                composable(Dest.Collect.route) {
+                    TabPage(tabPadding, onBack = ::backHome) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
                 }
+                composable(Dest.Inventory.route) {
+                    TabPage(tabPadding, onBack = ::backHome) { InventoryScreen(onGoStack = { go(Dest.Stack) }) }
+                }
+                composable(Dest.Stack.route) {
+                    TabPage(tabPadding, onBack = ::backHome) {
+                        StackScreen(onGoInventory = { go(Dest.Inventory) }, onGoGallery = { go(Dest.Gallery) })
+                    }
+                }
+                composable(Dest.Gallery.route) {
+                    TabPage(tabPadding, onBack = ::backHome) { GalleryScreen() }
+                }
+            }
+            // 下のタブバー。ホームでは隠し、4 つの画面に入ると下から出てくる（ホームへ戻ると下へ隠れる）。
+            // 左の丸い家のボタンは、端末の「戻る」と同じくホームへ戻る（見ていた画面は続きから）
+            AnimatedVisibility(
+                visible = !atHome,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = if (instant) EnterTransition.None else slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+            ) {
+                TabBar(lastTab[0], onGo = ::go, onHome = ::backHome)
             }
 
             // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
@@ -122,3 +213,17 @@ fun AppNav() {
         }
     }
 }
+
+/**
+ * 4 つの画面の入れ物：まわり（端末のバーとタブバー）をあけて置き、端末の「戻る」でホームへ戻る。
+ * 画面の中にも「戻る」の使い道（「みんな」の一覧から戻る・コレクションの選ぶのをやめる など）があれば、そちらが先に効く
+ * （「戻る」は後から置いたものが先に効くので、ここは画面より先に置く）
+ */
+@Composable
+private fun TabPage(padding: PaddingValues, onBack: () -> Unit, content: @Composable () -> Unit) {
+    BackHandler(onBack = onBack)
+    Box(modifier = Modifier.fillMaxSize().padding(padding)) { content() }
+}
+
+/** 画面を切り替えるときに、うすく入れ替わる時間 [ms]（Navigation の決まりの値と同じ） */
+private const val NAV_FADE_MS = 700

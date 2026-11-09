@@ -93,7 +93,7 @@ enum class DemoSky(val label: String, val weather: WalkWeather?, val fullMoon: B
 }
 
 /**
- * アプリの設定。スマホの中だけに保存する。採集画面の右上の歯車から変える。
+ * アプリの設定。スマホの中だけに保存する。ホームの右上の歯車から変える。
  *
  * @param store 保存先。アプリでは SharedPreferences、テストではただの Map
  * @param demoEnabled 設定の「デモ」の欄を使うか（[DEMO_SETTINGS]）。false なら、デモの天気はいつも本当の天気

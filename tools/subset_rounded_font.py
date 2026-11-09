@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ポップな見た目の画面（「みんな」・コレクション）で使う太い丸ゴシックを、使う字だけに切り出す
+ポップな見た目の画面（「みんな」・コレクション・ホーム）で使う太い丸ゴシックを、使う字だけに切り出す
 （app/src/main/res/font/mplus_rounded_ui.ttf を作り直す）。
 
 画面の字は、下の SOURCES の .kt にある文字列（"…" の中身。コメントは除く）から集める。
@@ -32,6 +32,8 @@ SOURCES = [
     APP / "ui/inventory",
     # ポップな見た目の共通の部品（「再読み込み」など）
     APP / "ui/common/Pop.kt",
+    # ホームのボタン（画面の名前と一言）
+    APP / "ui/HomeScreen.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）
