@@ -89,31 +89,40 @@ class BgmPlayer(context: Context) {
     /** 設定の BGM のオン・オフと音量（1〜10） */
     fun setSettings(on: Boolean, volume: Int) = control.setSettings(on, volume)
 
+    /** ほかの音に出番を譲っている間か（[BgmControl.givingWay]）。この間は効果音も鳴らさない */
+    val givingWay: Boolean get() = control.givingWay
+
     /**
-     * 設定の「BGM の曲」。変わったら、今の曲を片付ける。流している途中なら、すぐに新しい曲を頭から同じ大きさで流す
-     * （音の出番はそのまま持っているので、頼み直さない）。止めている・一時的に譲っているときは、次に流すときに新しい曲を読む。
+     * 設定の「BGM の曲」。止めている・一時的に譲っているときは、今の曲を片付けるだけで、次に流すときに新しい曲を読む。
+     * 流している途中なら、新しい曲を先に作ってから、頭から同じ大きさで流し、前の曲を片付ける（音の出番はそのまま持つので、頼み直さない）。
+     * 新しい曲を作れなかったときは、前の曲をそのまま流し続ける（BGM が鳴らないまま、出番だけ持ち続けないように。#93 の A のレビュー）。
      * 流す・止めるの決まり（[BgmControl]）は、曲によらないので変えない
      */
     fun setTrack(next: BgmTrack) {
         if (next == track) return
-        track = next
-        val p = player ?: return
-        val wasPlaying = p.isPlaying
-        p.release()
-        player = null
-        if (wasPlaying) {
-            create()?.apply {
-                setVolume(gain, gain)
-                start()
-            }
+        val old = player
+        if (old == null || !old.isPlaying) {
+            track = next
+            old?.release()
+            player = null
+            return
         }
+        val fresh = load(next) ?: return
+        track = next
+        fresh.setVolume(gain, gain)
+        fresh.start()
+        old.release()
+        player = fresh
     }
 
-    private fun create(): MediaPlayer? = runCatching {
-        MediaPlayer.create(context, track.res, attributes, audio.generateAudioSessionId())?.apply {
+    private fun create(): MediaPlayer? = load(track).also { player = it }
+
+    /** [t] の曲を読み込む（つなぎ目なく繰り返す）。読めなければ null */
+    private fun load(t: BgmTrack): MediaPlayer? = runCatching {
+        MediaPlayer.create(context, t.res, attributes, audio.generateAudioSessionId())?.apply {
             isLooping = true
         }
-    }.onFailure { Log.w(TAG, "BGM could not be loaded", it) }.getOrNull().also { player = it }
+    }.onFailure { Log.w(TAG, "BGM could not be loaded", it) }.getOrNull()
 
     /** 曲のファイル（tools/make_bgm.py の SONGS と同じ名前） */
     private val BgmTrack.res: Int

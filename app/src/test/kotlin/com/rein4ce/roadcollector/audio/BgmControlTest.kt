@@ -215,4 +215,38 @@ class BgmControlTest {
         bgm.setSettings(true, 99)
         assertEquals(1f, out.gain, 1e-6f)
     }
+
+    @Test
+    fun `while a call or a navigation voice takes the turn, the bgm is giving way so sound effects stay quiet`() {
+        open()
+        assertFalse(bgm.givingWay)
+        // 電話・道案内の声などで、一時的に出番を取られた
+        bgm.onFocusLostForAWhile()
+        assertTrue(bgm.givingWay)
+        // 戻ってきたら、もう譲っていない
+        bgm.onFocusGained()
+        assertFalse(bgm.givingWay)
+    }
+
+    @Test
+    fun `waiting for the turn during a call also counts as giving way`() {
+        out.focusResult = BgmControl.FocusResult.DELAYED
+        open()
+        assertTrue(bgm.givingWay)
+        bgm.onFocusGained()
+        assertFalse(bgm.givingWay)
+    }
+
+    @Test
+    fun `when the bgm is stopped or another app plays music, it is not giving way`() {
+        open()
+        bgm.onFocusLostForAWhile()
+        // 裏に回ると出番を返すので、もう待っていない
+        bgm.setForeground(false)
+        assertFalse(bgm.givingWay)
+        // ほかのアプリが音楽を流し始めて譲ったときは、効果音は止めない（一時的ではないため）
+        bgm.setForeground(true)
+        bgm.onFocusLost()
+        assertFalse(bgm.givingWay)
+    }
 }

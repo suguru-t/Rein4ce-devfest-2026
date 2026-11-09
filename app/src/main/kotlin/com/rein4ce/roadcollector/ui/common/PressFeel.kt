@@ -96,12 +96,15 @@ private fun rememberPressMotion(interactionSource: InteractionSource): PressMoti
         interactionSource.interactions.collect { interaction ->
             when (interaction) {
                 is PressInteraction.Press -> {
-                    // 押した瞬間に、軽い振動と「ぽこっ」（どちらも設定で切れる）
+                    // 押した瞬間に、軽い振動（設定で切れる）
                     haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                    sfx.play(Sfx.PRESS)
                     pressing = launch { motion.press.animateTo(1f, PressIn) }
                 }
                 is PressInteraction.Release, is PressInteraction.Cancel -> {
+                    // 「ぽこっ」は、指を離して押したことになったとき（Release）だけ鳴らす（設定で切れる）。
+                    // 一覧のカードに指を置いてからスクロールしたときなど、取り消された（Cancel）ときは鳴らさない
+                    // （押していないのに「何か押した」ように聞こえるため。#93 の A のレビュー）
+                    if (interaction is PressInteraction.Release) sfx.play(Sfx.PRESS)
                     val pressed = pressing
                     launch {
                         pressed?.join()

@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.SoundPool
 import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.data.AppSettings
@@ -48,9 +49,15 @@ object BlockNotes {
  * 設定の「効果音」がオフなら鳴らさない（鳴らす瞬間に読むので、ボタン 1 つずつが設定を見張らなくてよい。振動と同じ考え方）。
  *
  * 音の出口はメディアの音量（BGM と同じ）。BGM と違って、ほかのアプリの音楽を止めたり（音の順番の取り合い）はしない
- * （0.1〜1 秒の短い音なので、ゲームの効果音と同じく、重ねて鳴らす）
+ * （0.1〜1 秒の短い音なので、ゲームの効果音と同じく、重ねて鳴らす）。
+ * ただし、電話の最中（着信中も）と、BGM がほかの音（地図アプリの道案内の声など）に出番を譲っている間は鳴らさない
+ * （歩きながら道案内と一緒に使う人の邪魔にならないように。#93 の A のレビュー）
+ *
+ * @param bgmGivingWay BGM がほかの音に出番を譲っている間か（audio/BgmPlayer.kt の givingWay）
  */
-class SoundEffects(context: Context, private val settings: AppSettings) {
+class SoundEffects(context: Context, private val settings: AppSettings, private val bgmGivingWay: () -> Boolean = { false }) {
+
+    private val audio: AudioManager? = context.getSystemService(AudioManager::class.java)
 
     private val pool: SoundPool = SoundPool.Builder()
         .setMaxStreams(MAX_STREAMS)
@@ -70,9 +77,13 @@ class SoundEffects(context: Context, private val settings: AppSettings) {
      */
     fun play(sfx: Sfx, rate: Float = 1f) {
         if (!settings.sfxOn.value) return
+        if (bgmGivingWay() || inCall()) return
         val id = ids[sfx] ?: return
         pool.play(id, 1f, 1f, 1, 0, rate.coerceIn(0.5f, 2f))
     }
+
+    /** 電話の最中か（着信中・通話中・ネットの通話中）。BGM がオフでも、電話の最中は分かるように、端末の音の状態を見る */
+    private fun inCall(): Boolean = (audio?.mode ?: AudioManager.MODE_NORMAL) != AudioManager.MODE_NORMAL
 
     private companion object {
         /** 同時に鳴らせる数（積み木を続けて押したときに、前の音を切らない程度） */

@@ -44,7 +44,7 @@ class RoadCollectorApp : Application() {
      * 効果音（ボタン・積み木・道を 1 本集めたとき）。画面を開いたとき（MainActivity）に読み込みを始める
      * （記録サービスだけが裏で立ち上がったときには読み込まない）
      */
-    val sfx: SoundEffects by lazy { SoundEffects(this, settings) }
+    val sfx: SoundEffects by lazy { SoundEffects(this, settings, bgmGivingWay = { bgm.givingWay }) }
 
     /** このスマホから送信したタワーの id（「みんな」で「あなた」の札を出す） */
     lateinit var myTowers: MyTowers
