@@ -185,7 +185,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
             }
             Page.DEMO_SKY -> Column(modifier = Modifier.padding(top = 8.dp)) {
                 Text(
-                    "発表のときに、その日の天気に関係なく見せたい天気を選べます。記録とみんなの背景と、デモ散歩でできるパーツの天気が、選んだ天気になります。" +
+                    "発表のときに、その日の天気に関係なく見せたい天気を選べます。記録・みんな・コレクションの一覧の背景と、デモ散歩でできるパーツの天気が、選んだ天気になります。" +
                         "ふだんは「本当の天気」にしておいてください。",
                     style = noteStyle,
                     fontSize = 14.sp,
