@@ -691,7 +691,8 @@ private fun StackCanvas(
                 colors = colorsOf(current),
                 outlinePx = outlinePx,
                 angleRad = Math.toRadians(vm.ghostAngleDeg.toDouble()).toFloat(),
-                alpha = 0.45f,
+                // うすい影。雪の道はほぼ白いので濃くする（PieceColors.ghostAlpha）
+                alpha = colorsOf(current).ghostAlpha,
             )
         }
     }

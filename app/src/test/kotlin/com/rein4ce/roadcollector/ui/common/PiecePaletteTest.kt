@@ -81,6 +81,16 @@ class PiecePaletteTest {
     }
 
     @Test
+    fun `the aiming shadow of a snowy road is darker than the others`() {
+        // 雪はほぼ白で、ふつうの濃さ（0.45）では方眼紙の上で見えないので、影を濃くする
+        assertEquals(GHOST_ALPHA_SNOW, PiecePalette.colors(Sky.SNOW, Daypart.DAY).ghostAlpha, 0f)
+        for (sky in listOf(Sky.CLEAR, Sky.CLOUDY, Sky.RAIN, null)) {
+            assertEquals(GHOST_ALPHA, PiecePalette.colors(sky, Daypart.DAY).ghostAlpha, 0f)
+        }
+        assert(GHOST_ALPHA_SNOW > GHOST_ALPHA)
+    }
+
+    @Test
     fun `dayparts follow the tentative boundaries`() {
         val expected = mapOf(
             0 to Daypart.NIGHT, 4 to Daypart.NIGHT, 5 to Daypart.MORNING, 9 to Daypart.MORNING,

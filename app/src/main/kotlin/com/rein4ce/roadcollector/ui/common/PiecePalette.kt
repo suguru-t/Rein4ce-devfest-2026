@@ -46,8 +46,17 @@ data class Hsl(val h: Float, val s: Float, val l: Float) {
     fun toColor(): Color = Color.hsl(h, s.coerceIn(0f, 1f), l.coerceIn(0f, 1f))
 }
 
-/** 積み木 1 つの色：面（[fill]）と、それを囲む線（[outline]） */
-data class PieceColors(val fill: Color, val outline: Color)
+/**
+ * 積み木 1 つの色：面（[fill]）と、それを囲む線（[outline]）。
+ * [ghostAlpha] は、狙っている間のうすい影の濃さ。ふつうは 0.45。雪はほぼ白で、うすくすると方眼紙の上で見えないので濃くする（[GHOST_ALPHA_SNOW]）
+ */
+data class PieceColors(val fill: Color, val outline: Color, val ghostAlpha: Float = GHOST_ALPHA)
+
+/** 狙っている間のうすい影の濃さ（ふつう） */
+const val GHOST_ALPHA = 0.45f
+
+/** 雪の道の、狙っている間の影の濃さ。ほぼ白い面と明るい線なので、ふつうの濃さでは見えなかった（B の希望で濃くした） */
+const val GHOST_ALPHA_SNOW = 0.85f
 
 /**
  * 積み木（パーツ）の配色（決定 74）。**色相は天気、明るさは歩いた時間帯**で決める。コレクションの図・積む画面（通常・毎日 1 つずつ積む）の
@@ -80,7 +89,11 @@ object PiecePalette {
         return if (sky?.shown == Sky.SNOW) fill.copy(s = 0.35f, l = fill.l - 0.20f) else fill.copy(s = fill.s * 0.8f, l = fill.l - 0.16f)
     }
 
-    fun colors(sky: Sky?, daypart: Daypart): PieceColors = PieceColors(fillHsl(sky, daypart).toColor(), outlineHsl(sky, daypart).toColor())
+    fun colors(sky: Sky?, daypart: Daypart): PieceColors = PieceColors(
+        fillHsl(sky, daypart).toColor(),
+        outlineHsl(sky, daypart).toColor(),
+        ghostAlpha = if (sky?.shown == Sky.SNOW) GHOST_ALPHA_SNOW else GHOST_ALPHA,
+    )
 
     /** 時間帯で動かす明るさ（晴れ・くもり・雨） */
     private fun shift(daypart: Daypart): Float = when (daypart) {
