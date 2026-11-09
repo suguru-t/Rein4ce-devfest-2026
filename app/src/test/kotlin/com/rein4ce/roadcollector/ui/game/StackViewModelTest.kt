@@ -5,7 +5,6 @@ import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.data.GameSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,7 +13,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -22,458 +20,196 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
+/**
+ * 積む画面の通常モード（決定 62・#108）：コレクションの全部のパーツからランダムに 1 つずつ出し、台から落ちたら終わり。
+ * 落下待ち・結果の固定・送信・カメラは、5 本まで選んで積んでいたころ（#40〜#42・#71）からの決まりを引き継ぐ
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class StackViewModelTest {
     private val a = SampleParts.all.first().copy(id = "a", name = "before")
     private val b = a.copy(id = "b")
     private val c = a.copy(id = "c")
 
-    private fun request(id: Long, vararg parts: Part, started: Boolean = false) =
-        GameSession.StartRequest(id, parts.map { it.id }, started)
-
-    @After
-    fun resetSession() {
-        GameSession.resetForTest()
-    }
+    // ---- 始め方 ----
 
     @Test
-    fun `initial start waits for load and takes at most five current parts`() {
+    fun `読み込みが済んだら、コレクションの全部のパーツで始め、そこから 1 つ出す`() {
         val vm = StackViewModel()
         val inventory = (0..6).map { a.copy(id = "part-$it") }
-        vm.updateInventory(inventory, false, null)
+        vm.updateInventory(inventory, false)
         assertEquals(StackViewModel.Phase.Idle, vm.phase)
         assertEquals(0L, vm.runId)
 
-        vm.updateInventory(inventory, true, null)
-        assertEquals(inventory.take(5), vm.sessionParts)
+        vm.updateInventory(inventory, true)
         assertEquals(1L, vm.runId)
-        vm.updateInventory(inventory.reversed(), true, null)
-        assertEquals(inventory.take(5), vm.sessionParts)
-        assertEquals(1L, vm.runId)
-    }
-
-    @Test
-    fun `loaded empty collection starts only when first usable inventory arrives`() {
-        val vm = StackViewModel()
-        vm.updateInventory(emptyList(), true, null)
-        assertEquals(StackViewModel.Phase.Idle, vm.phase)
-        vm.updateInventory(listOf(a), true, null)
-        assertEquals(listOf(a), vm.sessionParts)
-        vm.updateInventory(emptyList(), true, null)
+        assertEquals(inventory, vm.pool) // 5 本で切らない
         assertEquals(StackViewModel.Phase.Placing, vm.phase)
-        assertEquals(1L, vm.runId)
+        assertTrue(vm.current in inventory)
+        assertEquals(0, vm.placedCount)
     }
 
     @Test
-    fun `deleting all inventory keeps placed world and the active snapshot`() {
+    fun `空のコレクションでは始めず、パーツが来たときに始める`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a, b), true, null)
-        vm.dragBy(0.2f)
-        vm.rotate(15f)
-        vm.place()
-        vm.tick(1.0 / 60)
-        val shapes = vm.shapes
-        val current = vm.current
-        vm.updateInventory(emptyList(), true, null)
+        vm.updateInventory(emptyList(), true)
+        assertEquals(StackViewModel.Phase.Idle, vm.phase)
+        vm.updateInventory(listOf(a), true)
         assertEquals(1L, vm.runId)
-        assertEquals(StackViewModel.Phase.Settling, vm.phase)
-        assertEquals(listOf(a, b), vm.sessionParts)
-        assertEquals(current, vm.current)
-        assertEquals(shapes, vm.shapes)
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
     }
 
     @Test
-    fun `rename add reorder and delete do not restart an explicit run`() {
+    fun `一覧が変わっても始めたゲームはそのままで、やり直すと今のコレクションで取り直す`() {
         val vm = StackViewModel()
-        val selected = request(1, a, b)
-        vm.updateInventory(listOf(a, b), true, selected)
-        vm.dragBy(0.3f)
-        vm.rotate(15f)
-        vm.updateInventory(listOf(c, b, a.copy(name = "after")), true, selected)
-        vm.updateInventory(listOf(c, a.copy(name = "after")), true, selected)
+        vm.updateInventory(listOf(a, b), true)
+        placeFlat(vm)
+        vm.updateInventory(listOf(a.copy(name = "renamed"), b, c), true)
         assertEquals(1L, vm.runId)
-        assertEquals(listOf(a, b), vm.sessionParts)
-        assertEquals(0.3f, vm.ghostX, 0.00001f)
-        assertEquals(15f, vm.ghostAngleDeg)
-    }
+        assertEquals(listOf(a, b), vm.pool)
+        assertEquals(1, vm.placedCount) // 置いたパーツも残る
 
-    @Test
-    fun `retry removes deleted parts and resolves latest values in original order`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a, b, c), true, request(1, b, a, c))
-        val renamed = a.copy(name = "after", distanceM = 999)
-        vm.restart(listOf(c, renamed))
-        assertEquals(listOf(renamed, c), vm.sessionParts)
-        assertEquals(renamed, vm.current)
+        vm.restart(listOf(b, c))
         assertEquals(2L, vm.runId)
+        assertEquals(listOf(b, c), vm.pool)
+        assertEquals(0, vm.placedCount)
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
     }
 
     @Test
-    fun `retry with no surviving selection preserves current game and asks to reselect`() {
+    fun `やり直すときコレクションが空なら、今のゲームのままで案内を出す`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a, b), true, request(1, a))
-        vm.dragBy(0.4f)
-        vm.restart(listOf(b))
-        assertEquals(1L, vm.runId)
-        assertEquals(listOf(a), vm.sessionParts)
-        assertEquals(0.4f, vm.ghostX, 0.00001f)
-        assertEquals(StackViewModel.MESSAGE_RETRY_MISSING, vm.startMessage)
-    }
-
-    @Test
-    fun `implicit retry takes the current first parts after the original ones were deleted`() {
-        val vm = StackViewModel()
-        val first = (1..5).map { a.copy(id = "first-$it") }
-        vm.updateInventory(first, true, null)
-        val added = a.copy(id = "added")
-        vm.restart(listOf(added))
-        assertEquals(2L, vm.runId)
-        assertEquals(listOf(added), vm.sessionParts)
-        assertNull(vm.startMessage)
-    }
-
-    @Test
-    fun `implicit retry with an empty collection keeps the current game`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        vm.dragBy(0.4f)
+        vm.updateInventory(listOf(a), true)
+        placeFlat(vm)
         vm.restart(emptyList())
         assertEquals(1L, vm.runId)
-        assertEquals(listOf(a), vm.sessionParts)
-        assertEquals(0.4f, vm.ghostX, 0.00001f)
+        assertEquals(1, vm.placedCount)
         assertEquals(StackViewModel.MESSAGE_COLLECTION_EMPTY, vm.startMessage)
-    }
-
-    @Test
-    fun `missing explicit selection never falls back to unrelated inventory`() {
-        val vm = StackViewModel()
-        val selected = request(1, a)
-        vm.updateInventory(listOf(b), true, selected)
-        vm.updateInventory(listOf(b, c), true, selected)
-        assertEquals(StackViewModel.Phase.Idle, vm.phase)
-        assertEquals(0L, vm.runId)
-        assertTrue(vm.sessionParts.isEmpty())
-        assertEquals(StackViewModel.MESSAGE_SELECTION_MISSING, vm.startMessage)
-        vm.updateInventory(listOf(b, c), true, request(2, c))
-        assertEquals(listOf(c), vm.sessionParts)
+        vm.dismissStartMessage()
         assertNull(vm.startMessage)
     }
 
     @Test
-    fun `replayed request whose parts are all gone falls back to automatic start`() {
+    fun `同じ id のパーツが 2 つあっても、出す候補には 1 つだけ入れる`() {
         val vm = StackViewModel()
-        val replayed = request(1, a, started = true)
-        vm.updateInventory(emptyList(), true, replayed)
-        assertEquals(StackViewModel.Phase.Idle, vm.phase)
-        assertNull(vm.startMessage)
-        vm.updateInventory(listOf(b, c), true, replayed)
-        assertEquals(1L, vm.runId)
-        assertEquals(listOf(b, c), vm.sessionParts)
-        assertNull(vm.startMessage)
+        vm.updateInventory(listOf(a, a.copy(name = "dup"), b), true)
+        assertEquals(listOf("a", "b"), vm.pool.map { it.id })
     }
 
     @Test
-    fun `starting from a request marks it started for a recreated view model`() {
-        GameSession.requestStart(listOf(a.id))
-        val original = StackViewModel()
-        original.updateInventory(listOf(a), true, GameSession.startRequest)
-        assertTrue(GameSession.startRequest!!.started)
-
-        val recreated = StackViewModel()
-        recreated.updateInventory(listOf(b), true, GameSession.startRequest)
-        assertEquals(listOf(b), recreated.sessionParts)
-        assertNull(recreated.startMessage)
-    }
-
-    @Test
-    fun `pending request is resolved once after load using current names`() {
+    fun `台は 1 本ずつ選んで積んでいたころの 2 倍の幅で、狙える範囲もそのぶん広い`() {
         val vm = StackViewModel()
-        val selected = request(1, b, a)
-        vm.updateInventory(emptyList(), false, selected)
-        val renamed = a.copy(name = "after")
-        vm.updateInventory(listOf(renamed), true, selected)
-        vm.updateInventory(listOf(renamed, b), true, selected)
-        assertEquals(listOf(renamed), vm.sessionParts)
-        assertEquals(1L, vm.runId)
+        vm.updateInventory(listOf(a), true)
+        assertEquals(2.8, vm.platformWidth, 1e-9)
+        vm.dragBy(10f)
+        assertEquals(1.4f + StackViewModel.DRAG_MARGIN_M.toFloat(), vm.ghostX, 1e-6f)
+    }
+
+    // ---- 終わりなく出てくる ----
+
+    @Test
+    fun `置くたびに次のパーツが出て、落ちるまで終わらない`() {
+        val picks = SequenceRandom(listOf(0, 1, 2, 1))
+        val vm = StackViewModel(random = picks)
+        vm.updateInventory(listOf(a, b, c), true)
+        assertEquals("a", vm.current!!.id)
+        for (expected in listOf("b", "c", "b")) {
+            placeFlat(vm)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+            assertEquals(expected, vm.current!!.id)
+        }
+        assertEquals(3, vm.placedCount)
+        assertEquals(0, vm.fallenCount)
+        assertNull(vm.result)
     }
 
     @Test
-    fun `new view model resolves an old request against current inventory`() {
-        val selected = request(1, a, b)
-        val original = StackViewModel()
-        original.updateInventory(listOf(a, b), true, selected)
-        val recreated = StackViewModel()
-        val renamed = b.copy(name = "after")
-        recreated.updateInventory(listOf(renamed), true, selected)
-        assertEquals(listOf(renamed), recreated.sessionParts)
-    }
-
-    @Test
-    fun `new explicit request restarts even with exactly the same parts`() {
+    fun `同じパーツが何度出てもよい`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, request(1, a))
-        vm.dragBy(0.4f)
-        vm.updateInventory(listOf(a), true, request(2, a))
-        assertEquals(2L, vm.runId)
-        assertEquals(0f, vm.ghostX)
-        assertEquals(StackViewModel.Phase.Placing, vm.phase)
-    }
-
-    @Test
-    fun `same selection issues different requests and the start keeps five unique parts in order`() {
-        GameSession.requestStart(listOf("a", "b"))
-        val first = GameSession.startRequest!!
-        GameSession.requestStart(first.partIds)
-        assertTrue(GameSession.startRequest!!.id > first.id)
-
-        val inventory = (0..6).map { a.copy(id = "p$it") }
-        val vm = StackViewModel()
-        val ids = listOf("p3", "p3", "p1", "p0", "p6", "p5", "p4")
-        vm.updateInventory(inventory, true, GameSession.StartRequest(99, ids))
-        assertEquals(listOf("p3", "p1", "p0", "p6", "p5"), vm.sessionParts.map { it.id })
-    }
-
-    @Test
-    fun `new run cannot upload the previous completed tower`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val posted = mutableListOf<Tower>()
-            val vm = StackViewModel { tower ->
-                posted += tower
-                TowerCreated("result", "https://example.test/result")
-            }
-            vm.updateInventory(listOf(a), true, null)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            assertEquals(1, posted.size)
-            vm.restart(listOf(a))
-            vm.upload()
-            runCurrent()
-            assertEquals(1, posted.size)
-            assertNull(vm.uploadMessage)
-            assertFalse(vm.uploading)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `starting a new run does not cancel the previous upload`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val response = CompletableDeferred<TowerCreated>()
-            var completed = false
-            val vm = StackViewModel {
-                val result = response.await()
-                completed = true
-                result
-            }
-            vm.updateInventory(listOf(a), true, null)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            vm.restart(listOf(a))
-            response.complete(TowerCreated("old", "https://example.test/old"))
-            runCurrent()
-            assertTrue(completed)
-            assertFalse(vm.uploading)
-            assertNull(vm.uploadMessage)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `late old upload cannot overwrite the next runs upload state`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            val oldResponse = CompletableDeferred<TowerCreated>()
-            val newResponse = CompletableDeferred<TowerCreated>()
-            var calls = 0
-            val vm = StackViewModel {
-                if (++calls == 1) oldResponse.await() else newResponse.await()
-            }
-            vm.updateInventory(listOf(a), true, null)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            vm.restart(listOf(a))
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            oldResponse.complete(TowerCreated("old", "https://example.test/old"))
-            runCurrent()
-            assertTrue(vm.uploading)
-            assertNull(vm.uploadMessage)
-            newResponse.complete(TowerCreated("new", "https://example.test/new"))
-            runCurrent()
-            assertFalse(vm.uploading)
-            assertEquals("送信しました：https://example.test/new", vm.uploadMessage)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `upload once survives failed retry and resets only for a new run`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            var calls = 0
-            val vm = StackViewModel { TowerCreated("${++calls}", "https://example.test/$calls") }
-            vm.updateInventory(listOf(a), true, null)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            assertTrue(vm.uploaded)
-            vm.upload()
-            vm.upload()
-            runCurrent()
-            assertEquals(1, calls)
-
-            vm.restart(emptyList())
-            assertEquals(1L, vm.runId)
-            assertTrue(vm.uploaded)
-            vm.upload()
-            runCurrent()
-            assertEquals(1, calls)
-
-            vm.restart(listOf(a))
-            assertFalse(vm.uploaded)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            assertEquals(2, calls)
-            assertTrue(vm.uploaded)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `failed upload shows the server url and permits retry on the same run`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            var calls = 0
-            val vm = StackViewModel(serverUrl = { "https://server.test" }) {
-                if (++calls == 1) error("offline")
-                TowerCreated("ok", "https://example.test/ok")
-            }
-            vm.updateInventory(listOf(a), true, null)
-            finish(vm)
-            vm.upload()
-            runCurrent()
-            assertFalse(vm.uploaded)
-            assertFalse(vm.uploading)
-            assertEquals("送信できませんでした（https://server.test）：offline", vm.uploadMessage)
-            vm.upload()
-            runCurrent()
-            assertEquals(2, calls)
-            assertTrue(vm.uploaded)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `a longer walk is placed bigger and the size is sent with the tower`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            for (distance in listOf(120, 1500)) {
-                var sent: Tower? = null
-                val vm = StackViewModel {
-                    sent = it
-                    TowerCreated("ok", "https://example.test/ok")
-                }
-                vm.updateInventory(listOf(a.copy(distanceM = distance)), true, null)
-                finish(vm) // 寝かせて置く（台から落ちないように。finish の中で 90° 回す）
-                vm.upload()
-                runCurrent()
-                assertEquals(PartSize.of(distance).toFloat(), sent!!.placements.single().scale, 1e-6f)
-            }
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    // ---- #41：落下待ちと完成の判定、完成した結果の固定 ----
-
-    @Test
-    fun `a part that falls off is removed as it falls and the turn does not wait for the time limit`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        placeOffPlatform(vm)
-        val seconds = tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        // 前は、落ち続けるパーツが止まらないので「全部止まった」にならず、上限の 6 秒まで待っていた
-        assertTrue("took $seconds s", seconds < 2.0)
-        assertEquals(StackViewModel.Phase.Finished, vm.phase)
-        assertEquals(1, vm.fallenCount)
-        assertEquals(0, vm.result!!.remainingCount)
-    }
-
-    @Test
-    fun `a tower with no parts left is not uploaded`() = runTest {
-        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        try {
-            var calls = 0
-            val vm = StackViewModel { calls++; TowerCreated("x", "https://example.test/x") }
-            vm.updateInventory(listOf(a), true, null)
-            placeOffPlatform(vm)
-            tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
-            assertFalse(vm.canUpload)
-            vm.upload()
-            runCurrent()
-            assertEquals(0, calls) // 空のタワーはサーバが 400 で断る（#58）。送らない
-            assertNull(vm.uploadMessage)
-        } finally {
-            Dispatchers.resetMain()
-        }
-    }
-
-    @Test
-    fun `a long frame after resuming does not skip the settle judgement`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        placeFlat(vm)
-        vm.tick(10.0) // 10 秒、裏に回していたあとの 1 フレーム
-        assertEquals(StackViewModel.Phase.Settling, vm.phase)
-        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        assertEquals(StackViewModel.Phase.Finished, vm.phase)
-        assertTrue(vm.result!!.settled)
-        assertTrue(vm.canUpload)
-    }
-
-    @Test
-    fun `the result is fixed at completion and later ticks change nothing`() {
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(a, b), true, null)
+        vm.updateInventory(listOf(a), true)
         placeFlat(vm)
         tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        assertEquals("a", vm.current!!.id)
+        assertEquals(1, vm.placedCount)
+    }
+
+    // ---- 終わり：台から落ちたら ----
+
+    @Test
+    fun `パーツが台から落ちたら、塔が落ち着くのを待って終わる`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
         placeFlat(vm)
-        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        val seconds = tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        // 落ち続けるパーツは落ちた時点で取り除くので、上限の 6 秒までは待たない
+        assertTrue("took $seconds s", seconds < 3.0)
+        assertEquals(StackViewModel.Phase.Finished, vm.phase)
+        assertNull(vm.current)
         val result = vm.result!!
-        val height = vm.height
-        val shapes = vm.shapes
-        repeat(100) { vm.tick(1.0 / 60) }
-        assertSame(result, vm.result)
-        assertSame(shapes, vm.shapes)
-        assertEquals(height, vm.height)
-        assertEquals(result.tower.height, vm.height)
         assertEquals(2, result.usedCount)
-        assertEquals(result.remainingCount, result.tower.placements.size)
+        assertEquals(1, result.fallenCount)
+        assertEquals(1, result.remainingCount)
+        assertTrue(result.settled)
+        assertTrue(vm.canUpload)
+        assertEquals(vm.height, result.tower.height)
     }
 
     @Test
-    fun `timing out on the last part gives an unresolved result that cannot be uploaded`() = runTest {
+    fun `同じパーツを何度置いても、送るタワーのパーツは 1 つにまとめ、配置は置いた数だけ`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        repeat(2) {
+            placeFlat(vm)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        val tower = vm.result!!.tower
+        assertEquals(listOf("a"), tower.parts.map { it.id }) // サーバは同じ id のパーツが 2 つあると断る
+        assertEquals(2, tower.placements.size)
+        assertTrue(tower.placements.all { it.partId == "a" })
+        assertEquals(2, vm.result!!.remainingCount)
+    }
+
+    @Test
+    fun `狙っている間に塔が崩れて落ちたら、狙っていたパーツは置かずに終わる`() {
+        // 1 個目を台の外に置き、落ちきる前に時間切れにして次へ進む。2 個目を狙っている間に、1 個目が落ちる
+        val vm = StackViewModel(settleTiming = shortTiming)
+        vm.updateInventory(listOf(a, b), true)
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals(0, vm.fallenCount)
+        tickUntil(vm) { vm.fallenCount > 0 }
+        assertNull(vm.current) // 狙っていたパーツは置かない
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        val result = vm.result!!
+        assertEquals(1, result.usedCount)
+        assertEquals(1, result.fallenCount) // 2 回数えない
+        assertEquals(0, result.remainingCount)
+        assertFalse(vm.canUpload) // 台に何も残っていない
+    }
+
+    @Test
+    fun `終わったあと揺れが止まらなければ、判定できない結果になり送れない`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             var calls = 0
-            // 落ちきる前に時間切れになる短さ
-            val vm = StackViewModel(settleTiming = shortTiming) { calls++; TowerCreated("x", "https://example.test/x") }
-            vm.updateInventory(listOf(a), true, null)
-            placeFlat(vm)
-            tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+            // 待ち時間を 1 コマにして、動いているうちに時間切れにする
+            val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 0.0, maxSeconds = 1.0 / 60)) {
+                calls++
+                TowerCreated("x", "https://example.test/x")
+            }
+            vm.updateInventory(listOf(a), true)
+            placeOffPlatform(vm)
+            // 落ちるまで、真ん中に次々と置いて塔を揺らし続ける
+            tickUntil(vm) {
+                if (vm.phase == StackViewModel.Phase.Placing) placeFlat(vm)
+                vm.phase == StackViewModel.Phase.Unresolved || vm.phase == StackViewModel.Phase.Finished
+            }
             assertEquals(StackViewModel.Phase.Unresolved, vm.phase)
             assertFalse(vm.result!!.settled)
             assertFalse(vm.canUpload)
@@ -490,62 +226,252 @@ class StackViewModelTest {
     }
 
     @Test
-    fun `timing out on a middle part moves on to the next part`() {
+    fun `途中のパーツは止まらなくても時間切れで次へ進む`() {
         val vm = StackViewModel(settleTiming = shortTiming)
-        vm.updateInventory(listOf(a, b), true, null)
+        vm.updateInventory(listOf(a, b), true)
         placeFlat(vm)
         tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        // 途中のパーツは止まらなくても次へ進む（最後のパーツの判定で、塔全体が止まったかをもう一度確かめる）
         assertEquals(StackViewModel.Phase.Placing, vm.phase)
-        assertEquals("b", vm.current!!.id)
+        assertNotNull(vm.current)
         assertNull(vm.result)
     }
 
     @Test
-    fun `a placed part that falls later is counted once when it falls`() {
-        // 1 個目を台の外に置き、落ちきる前に時間切れにして次へ進む。2 個目を狙っている間に、1 個目が落ちていく
-        val vm = StackViewModel(settleTiming = shortTiming)
-        vm.updateInventory(listOf(a, b), true, null)
-        placeOffPlatform(vm)
-        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        assertEquals(StackViewModel.Phase.Placing, vm.phase)
-        assertEquals(0, vm.fallenCount)
-        tickUntil(vm) { vm.fallenCount > 0 }
-        assertEquals(StackViewModel.Phase.Placing, vm.phase) // 狙っている間にも回収して数える
-        repeat(120) { vm.tick(1.0 / 60) }
-        assertEquals(1, vm.fallenCount) // 2 回数えない
+    fun `終わったときの結果は固定し、そのあとの tick では変わらない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        finishWithTower(vm)
+        val result = vm.result!!
+        val height = vm.height
+        val shapes = vm.shapes
+        repeat(100) { vm.tick(1.0 / 60) }
+        assertSame(result, vm.result)
+        assertSame(shapes, vm.shapes)
+        assertEquals(height, vm.height)
+        assertEquals(result.tower.height, vm.height)
     }
 
-    // ---- #42：カメラの狙い（狙っている間は大きさを変えずに上げ、置き切ったら全体が入るように引く） ----
+    @Test
+    fun `裏から戻ったあとの長い 1 コマでも、落下待ちの判定を飛ばさない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        placeFlat(vm)
+        vm.tick(10.0) // 10 秒、裏に回していたあとの 1 フレーム
+        assertEquals(StackViewModel.Phase.Settling, vm.phase)
+        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        assertEquals(1, vm.placedCount)
+    }
+
+    // ---- 送信 ----
 
     @Test
-    fun `while aiming the camera keeps the size and covers where the next part appears`() {
+    fun `新しいゲームでは、前のゲームの塔は送れない`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val posted = mutableListOf<Tower>()
+            val vm = StackViewModel { tower ->
+                posted += tower
+                TowerCreated("result", "https://example.test/result")
+            }
+            vm.updateInventory(listOf(a), true)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            assertEquals(1, posted.size)
+            vm.restart(listOf(a))
+            vm.upload()
+            runCurrent()
+            assertEquals(1, posted.size)
+            assertNull(vm.uploadMessage)
+            assertFalse(vm.uploading)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `新しいゲームを始めても、前の送信は打ち切らない`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val response = CompletableDeferred<TowerCreated>()
+            var completed = false
+            val vm = StackViewModel {
+                val result = response.await()
+                completed = true
+                result
+            }
+            vm.updateInventory(listOf(a), true)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            vm.restart(listOf(a))
+            response.complete(TowerCreated("old", "https://example.test/old"))
+            runCurrent()
+            assertTrue(completed)
+            assertFalse(vm.uploading)
+            assertNull(vm.uploadMessage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `遅れて届いた前の送信の結果は、次のゲームの送信の表示を上書きしない`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val oldResponse = CompletableDeferred<TowerCreated>()
+            val newResponse = CompletableDeferred<TowerCreated>()
+            var calls = 0
+            val vm = StackViewModel {
+                if (++calls == 1) oldResponse.await() else newResponse.await()
+            }
+            vm.updateInventory(listOf(a), true)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            vm.restart(listOf(a))
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            oldResponse.complete(TowerCreated("old", "https://example.test/old"))
+            runCurrent()
+            assertTrue(vm.uploading)
+            assertNull(vm.uploadMessage)
+            newResponse.complete(TowerCreated("new", "https://example.test/new"))
+            runCurrent()
+            assertFalse(vm.uploading)
+            assertEquals("送信しました：https://example.test/new", vm.uploadMessage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `送れるのは 1 回だけで、新しいゲームになったらまた送れる`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var calls = 0
+            val vm = StackViewModel { TowerCreated("${++calls}", "https://example.test/$calls") }
+            vm.updateInventory(listOf(a), true)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            assertTrue(vm.uploaded)
+            vm.upload()
+            vm.upload()
+            runCurrent()
+            assertEquals(1, calls)
+
+            vm.restart(emptyList()) // 空なら始め直さない
+            assertEquals(1L, vm.runId)
+            assertTrue(vm.uploaded)
+
+            vm.restart(listOf(a))
+            assertFalse(vm.uploaded)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            assertEquals(2, calls)
+            assertTrue(vm.uploaded)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `送れなかったときは接続先を出し、同じゲームでもう一度送れる`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var calls = 0
+            val vm = StackViewModel(serverUrl = { "https://server.test" }) {
+                if (++calls == 1) error("offline")
+                TowerCreated("ok", "https://example.test/ok")
+            }
+            vm.updateInventory(listOf(a), true)
+            finishWithTower(vm)
+            vm.upload()
+            runCurrent()
+            assertFalse(vm.uploaded)
+            assertFalse(vm.uploading)
+            assertEquals("送信できませんでした（https://server.test）：offline", vm.uploadMessage)
+            vm.upload()
+            runCurrent()
+            assertEquals(2, calls)
+            assertTrue(vm.uploaded)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `長く歩いた道ほど大きく置き、その大きさをタワーと一緒に送る`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            for (distance in listOf(120, 1500)) {
+                var sent: Tower? = null
+                val vm = StackViewModel {
+                    sent = it
+                    TowerCreated("ok", "https://example.test/ok")
+                }
+                vm.updateInventory(listOf(a.copy(distanceM = distance)), true)
+                finishWithTower(vm)
+                vm.upload()
+                runCurrent()
+                assertEquals(PartSize.of(distance).toFloat(), sent!!.placements.single().scale, 1e-6f)
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `台に何も残らなかった塔は送らない`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            var calls = 0
+            val vm = StackViewModel { calls++; TowerCreated("x", "https://example.test/x") }
+            vm.updateInventory(listOf(a), true)
+            placeOffPlatform(vm)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+            assertEquals(0, vm.result!!.remainingCount)
+            assertFalse(vm.canUpload)
+            vm.upload()
+            runCurrent()
+            assertEquals(0, calls) // 空のタワーはサーバが 400 で断る（#58）。送らない
+            assertNull(vm.uploadMessage)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    // ---- カメラ（狙っている間は大きさを変えずに上げ、終わったら全体が入るように引く。#42） ----
+
+    @Test
+    fun `狙っている間は大きさを変えず、次のパーツが出てくる所まで入れる`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        // 狙っている間は引かない（Follow：大きさは変えず、上へ動かすだけ）
+        vm.updateInventory(listOf(a), true)
         val camera = vm.camera as CameraTarget.Follow
         assertTrue(camera.top > vm.spawnY()) // 出てくる高さに、どう回しても入る半径を足したところまで
     }
 
     @Test
-    fun `the camera covers a bigger part from a longer walk`() {
-        // 長く歩いた道ほどパーツが大きい（#71）。どう回しても入る半径も、置くときの大きさで測る
-        val short = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 150)), true, null) }
-        val long = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 2000)), true, null) }
+    fun `長く歩いた道の大きなパーツは、そのぶん上まで入れる`() {
+        val short = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 150)), true) }
+        val long = StackViewModel().apply { updateInventory(listOf(a.copy(distanceM = 2000)), true) }
         val shortReach = (short.camera as CameraTarget.Follow).top - short.spawnY()
         val longReach = (long.camera as CameraTarget.Follow).top - long.spawnY()
         assertEquals(PartSize.of(2000) / PartSize.of(150), (longReach / shortReach).toDouble(), 0.05)
     }
 
     @Test
-    fun `the camera does not change while aiming or while the part falls`() {
+    fun `狙っている間と落下中はカメラを動かさない`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a, b), true, null)
+        vm.updateInventory(listOf(a, b), true)
         val before = vm.camera as CameraTarget.Follow
         vm.dragBy(1f)
         vm.rotate(45f)
         assertSame(before, vm.camera) // 狙っている間は変えない（指で動かしている最中にカメラが動かない）
-        // 真ん中に戻してから寝かせて置く（台に乗せて、塔を高くするため）
         vm.dragBy(-1f)
         vm.rotate(-45f)
         placeFlat(vm)
@@ -558,30 +484,16 @@ class StackViewModelTest {
     }
 
     @Test
-    fun `after finishing the camera pulls back to show the whole tower and the platform`() {
+    fun `終わったら、塔全体と台が入るように引く`() {
         val vm = StackViewModel()
-        vm.updateInventory(listOf(a), true, null)
-        placeFlat(vm)
-        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        vm.updateInventory(listOf(a), true)
+        finishWithTower(vm)
         val focus = (vm.camera as CameraTarget.Overview).focus
         val half = (vm.platformWidth / 2).toFloat()
         assertTrue(focus.minX <= -half && focus.maxX >= half) // 台の端から端まで
         assertTrue(focus.minY <= -0.3f + 1e-6f) // 台の下面
         assertTrue("maxY=${focus.maxY} height=${vm.height}", focus.maxY >= vm.height - 0.05f) // 塔のてっぺん
         assertTrue(focus.maxY < vm.spawnY() - 1f) // 次のパーツが出てくる場所は入れない（もう置かない）
-    }
-
-    @Test
-    fun `a part falling below the platform is left out when the camera pulls back`() {
-        // 台の外に置き、台より下を落ちている途中で時間切れにする（最後のパーツなので、判定できない結果で終わる）
-        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.7))
-        vm.updateInventory(listOf(a), true, null)
-        placeOffPlatform(vm)
-        tickUntil(vm) { vm.phase != StackViewModel.Phase.Settling }
-        assertEquals(StackViewModel.Phase.Unresolved, vm.phase)
-        assertEquals(0, vm.fallenCount) // まだ落ちきってはいない
-        val focus = (vm.camera as CameraTarget.Overview).focus
-        assertTrue("minY=${focus.minY}", focus.minY >= -0.3f - 1e-6f) // 落ちていくパーツを入れようとして小さくならない
     }
 
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
@@ -611,15 +523,20 @@ class StackViewModelTest {
     }
 
     /**
-     * 1 個だけのゲームを完成させる。棒は縦長なので寝かせて置く
-     * （立てて落とすと倒れて台から落ちることがあり、パーツが残らない結果は送れないため）
+     * 1 個を台の真ん中に寝かせて置き、次の 1 個を台の外に落として終わらせる（台に 1 個残った、送れる結果になる）。
+     * 棒は縦長なので寝かせて置く（立てて落とすと倒れて台から落ちることがあるため）
      */
-    private fun finish(vm: StackViewModel) {
+    private fun finishWithTower(vm: StackViewModel) {
         placeFlat(vm)
-        repeat(1000) {
-            if (vm.phase == StackViewModel.Phase.Finished) return
-            vm.tick(1.0 / 60)
-        }
-        error("Single part did not finish (phase=${vm.phase})")
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
     }
+}
+
+/** 決まった順に番号を返す乱数（[StackViewModel] が次に出すパーツを決めるのに使う） */
+internal class SequenceRandom(private val indices: List<Int>) : Random() {
+    private var next = 0
+    override fun nextBits(bitCount: Int): Int = 0
+    override fun nextInt(until: Int): Int = indices[next++ % indices.size] % until
 }

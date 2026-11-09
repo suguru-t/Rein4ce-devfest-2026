@@ -34,7 +34,7 @@ internal fun inventoryOrder(parts: List<Part>, order: List<String>): List<Part> 
 }
 
 /**
- * コレクションに見えている並び（[inventoryOrder]）。コレクション・積む画面・「パーツを選ぶ」の窓で同じ並びを使うので、
+ * コレクションに見えている並び（[inventoryOrder]）。コレクションと積む画面で同じ並びを使うので、
  * 求め方をここ 1 か所にまとめる。手持ちか並び順が変わると、新しい並びになる
  */
 @Composable
@@ -49,7 +49,7 @@ fun PartRepository.arrangedNow(): List<Part> = inventoryOrder(parts.value, order
 
 /**
  * 並びと絞り込み（設定に保存。[PartFilter]）・お気に入り・選べる天気をまとめたもの。
- * コレクションと「パーツを選ぶ」の窓で同じものを使う（片方だけ直して、ずれないように。#75 のレビュー）
+ * 並びと絞り込みを 1 か所で決める（片方だけ直して、ずれないように。#75 のレビュー）
  *
  * @property skies 持っているパーツの天気（天気の絞り込みで選べるもの）
  */

@@ -1,7 +1,6 @@
 package com.rein4ce.roadcollector.ui.game
 
 import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.PartOrigin
 import com.rein4ce.roadcollector.data.WalkDistance
 import org.junit.Assert.assertEquals
@@ -41,22 +40,38 @@ class WalkedLinesTest {
     }
 
     @Test
-    fun `使った道は、落ちたパーツも含めて、始めたときの値で固定する`() {
+    fun `使った道は、置いたパーツ（落ちたものも含む。同じパーツは 1 回）で数え、終わったときに固定する`() {
         val walk = SampleParts.all.first().copy(id = "walk", distanceM = 500)
         val demo = walk.copy(id = "demo")
-        val origins = mapOf("walk" to PartOrigin.WALK, "demo" to PartOrigin.DEMO)
-        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(0.0, 0.01))
-        vm.updateInventory(listOf(walk, demo), true, GameSession.StartRequest(1, listOf("walk", "demo")), origins)
+        val unused = walk.copy(id = "unused")
+        val origins = mapOf("walk" to PartOrigin.WALK, "demo" to PartOrigin.DEMO, "unused" to PartOrigin.WALK)
+        // 歩いた道を 2 回、デモを 1 回出す（出さなかった「unused」は数えない）
+        val vm = StackViewModel(random = SequenceRandom(listOf(0, 0, 1)))
+        vm.updateInventory(listOf(walk, demo, unused), true, origins)
         repeat(2) {
+            vm.rotate(90f)
             vm.place()
-            vm.tick(0.05)
+            tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
         }
+        // デモのパーツを台の外に落として終わらせる
+        vm.dragBy(10f)
+        vm.rotate(90f)
+        vm.place()
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
         val result = requireNotNull(vm.result)
         assertEquals(WalkDistance(meters = 500, walks = 1, others = 1, unknown = 0), result.walked)
 
         // 終わったあとにコレクションが空になっても、結果は変わらない
-        vm.updateInventory(emptyList(), true, null)
+        vm.updateInventory(emptyList(), true)
         repeat(10) { vm.tick(0.05) }
         assertSame(result, vm.result)
+    }
+
+    private fun tickUntil(vm: StackViewModel, done: () -> Boolean) {
+        repeat(20 * 60) {
+            if (done()) return
+            vm.tick(1.0 / 60)
+        }
+        error("did not finish (phase=${vm.phase})")
     }
 }

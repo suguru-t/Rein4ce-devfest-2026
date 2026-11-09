@@ -84,7 +84,6 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
-import com.rein4ce.roadcollector.data.GameSession
 import com.rein4ce.roadcollector.data.WalkDistance
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
@@ -97,7 +96,6 @@ import com.rein4ce.roadcollector.ui.common.partSizeText
 import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
-import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -105,7 +103,8 @@ import java.util.Locale
 import kotlin.math.min
 
 /**
- * D 担当：積み上げゲーム画面。上から「情報（高さ・残り・落下）」「キャンバス」「操作（ボタン・完成カード）」の 3 段。
+ * D 担当：積み上げゲーム画面（通常モード。決定 62・#108）。上から「情報（高さ・置いた数・落下）」「キャンバス」「操作（ボタン・終わりのカード）」の 3 段。
+ * コレクションの全部のパーツからランダムに 1 つずつ出て、台から落ちたら終わり（[StackViewModel]）。
  *
  * キャンバスでは、ワールド座標（m、y 上向き、台の上面が y=0）をキャンバスに写す（[StackViewport]）：
  *   横 5 m がキャンバスの幅になる倍率で、台はキャンバスの下から 22% の位置。
@@ -127,20 +126,13 @@ fun StackScreen(
     val repository = RoadCollectorApp.from(LocalContext.current).partRepository
     val inventory by repository.parts.collectAsStateWithLifecycle()
     val isLoaded by repository.isLoaded.collectAsStateWithLifecycle()
-    // 並び順も見ておき、変わったら開始の判断をし直す（「先頭の 5 本」はコレクションの並びで決めるため。#74 の A のレビュー）
-    val order by repository.order.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
-    val startRequest = GameSession.startRequest
-    // 選ばずに始めたときの「先頭の 5 本」は、コレクションに見えている並び（並べ替えた順・新しく歩いた順）の上から 5 本
-    // （保存の順だと、コレクションや「パーツを選ぶ」の窓の上のほうに無いパーツで始まっていた）。並びの求め方はコレクションと同じ（arrangedNow）
 
-    // 「パーツを選ぶ」の窓を開いているか。選んで始めると、コレクションから選んだときと同じ開始要求が出て、上の LaunchedEffect が始める
-    var picking by remember { mutableStateOf(false) }
-
-    LaunchedEffect(inventory, order, isLoaded, startRequest) {
+    // 出すパーツは、コレクションに見えている全部（arrangedNow。見本は設定の「見本のパーツを出す」に合わせて入る）
+    LaunchedEffect(inventory, isLoaded) {
         // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
-        // 出どころは「使った道」を数えるため。始めたときの値で数えて固定する
-        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest, repository.origins.value)
+        // 出どころは「使った道」を数えるため（終わったときに、置いたパーツだけで数える）
+        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, repository.origins.value)
     }
 
     // ゲームループ。画面が見えている間（STARTED 以上）だけ回す。アプリを裏に回すと止まり、戻ったときは
@@ -243,7 +235,7 @@ fun StackScreen(
                         Box(Modifier.padding(end = 12.dp)) { leading(true) }
                         HeightMeter(vm.height.toFloat(), compact = true)
                         Spacer(Modifier.weight(1f))
-                        RemainingAndFallen(vm.remaining, vm.fallenCount, compact = true)
+                        PlacedAndFallen(vm.placedCount, vm.fallenCount, compact = true)
                     }
                 } else {
                     Row(
@@ -252,7 +244,7 @@ fun StackScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         leading(false)
-                        RemainingAndFallen(vm.remaining, vm.fallenCount, compact = false)
+                        PlacedAndFallen(vm.placedCount, vm.fallenCount, compact = false)
                     }
                     HeightMeter(vm.height.toFloat(), compact = false)
                 }
@@ -357,11 +349,8 @@ fun StackScreen(
                                 ) { Text("⟳ 15°") }
                                 MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
                             }
-                            // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
-                                PressTextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
-                            }
+                            // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
+                            PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
@@ -374,7 +363,6 @@ fun StackScreen(
                                     result = result,
                                     unresolved = vm.phase == StackViewModel.Phase.Unresolved,
                                     onRetry = { vm.restart(repository.arrangedNow(), repository.origins.value) },
-                                    onPick = { picking = true },
                                     onGoGallery = onGoGallery,
                                 )
                             }
@@ -384,17 +372,6 @@ fun StackScreen(
                 }
             }
         }
-    }
-
-    if (picking) {
-        PartPickerSheet(
-            initial = vm.sessionParts.map { it.id },
-            onDismiss = { picking = false },
-            onStart = { ids ->
-                GameSession.requestStart(ids)
-                picking = false
-            },
-        )
     }
 }
 
@@ -438,7 +415,6 @@ private fun ResultCard(
     result: StackViewModel.StackResult,
     unresolved: Boolean,
     onRetry: () -> Unit,
-    onPick: () -> Unit,
     onGoGallery: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -447,10 +423,10 @@ private fun ResultCard(
             val title = when {
                 unresolved -> "揺れが止まりませんでした"
                 result.remainingCount == 0 -> "全部落ちました"
-                else -> "完成！ 模型の高さ %.2f m".format(result.tower.height)
+                else -> "おわり！ 模型の高さ %.2f m".format(result.tower.height)
             }
             Text(title, style = MaterialTheme.typography.titleLarge)
-            Text("残ったパーツ ${result.remainingCount} / ${result.usedCount}", style = MaterialTheme.typography.bodyMedium)
+            Text("置いたパーツ ${result.usedCount} 個 ・ 台に残ったのは ${result.remainingCount} 個", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             // 使った道（本当に歩いた道の距離）。1 行目はふつうの字、2 行目（数えなかったパーツの断り）は小さい字
             walkedLines(result.walked).forEachIndexed { i, line ->
                 Text(
@@ -487,8 +463,6 @@ private fun ResultCard(
                 }
                 PressTextButton(onClick = onGoGallery) { Text("みんな") }
             }
-            // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
-            PressTextButton(onClick = onPick) { Text("パーツを選び直す") }
             vm.uploadMessage?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.bodySmall)
@@ -724,16 +698,17 @@ private fun HeightMeter(height: Float, compact: Boolean) {
 private val COMPACT_HEIGHT = 600.dp
 
 /**
- * 「残り ○ 個」と、その下に「落下 ○ 個」（右寄せ）
+ * 「置いた ○ 個」と、その下に「落下 ○ 個」（右寄せ）。通常モードは終わりが無いので、残りの代わりに置いた数を出す。
+ * 落下は 1 個目で終わり（決定 62）なので、出るのは終わる直前から
  *
  * @param compact 小さい画面。字を画面名の積み木と同じく dp で決め、文字の大きさの設定では大きくしない
  *   （2 行あるので、大きくすると情報の段が伸びて、塔を描く所が狭くなるため。#116 のレビュー）
  */
 @Composable
-private fun RemainingAndFallen(remaining: Int, fallen: Int, compact: Boolean) {
+private fun PlacedAndFallen(placed: Int, fallen: Int, compact: Boolean) {
     val size = if (compact) with(LocalDensity.current) { 13.dp.toSp() } else 15.sp
     Column(horizontalAlignment = Alignment.End) {
-        SkyText("残り $remaining 個", color = Fieldbook.Ink, fontSize = size)
+        SkyText("置いた $placed 個", color = Fieldbook.Ink, fontSize = size)
         // 0 個のときも場所だけは取っておく（初めて落ちたときに情報の段が伸びて、台がずれないように）
         val fallenModifier = if (fallen > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
         SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size, modifier = fallenModifier)
