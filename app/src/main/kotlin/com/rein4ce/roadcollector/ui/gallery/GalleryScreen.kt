@@ -227,7 +227,7 @@ private fun Overview(
             is TowerGallery.State.Loaded -> if (towers.isEmpty()) {
                 Note {
                     Text("まだタワーがありません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                    Text("積んで「サーバに送信」すると、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                    Text("積んで「保存」すると、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
                 }
             } else {
                 SortTabs(sort = sort, options = TowerSort.COMPARABLE, onSelect = onSort)
@@ -349,7 +349,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
     val sub = when {
         isError -> "サーバに接続できません"
         !isLoaded -> "読み込み中…"
-        myValue == null -> "積んで「サーバに送信」すると、ここに立ちます"
+        myValue == null -> "積んで「保存」すると、ここに立ちます"
         cmp.mineIsTop -> "あなたが${sort.topLabel}です"
         else -> "${sort.topLabel}まで あと ${sort.format(topValue - myValue)} ${sort.unit}"
     }

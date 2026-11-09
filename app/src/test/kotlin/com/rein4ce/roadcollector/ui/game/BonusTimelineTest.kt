@@ -48,10 +48,27 @@ class BonusTimelineTest {
     @Test
     fun `many tags come faster but the whole show stays short`() {
         val few = BonusTimeline(listOf(10, 10))
-        val many = BonusTimeline(List(20) { 20 })
+        // くもりの道 60 個（1 個 +0.01）。前は札の間を 0.15 秒より短くしなかったので、約 12 秒かかっていた（#125 の C のレビュー）
+        val many = BonusTimeline(List(60) { 1 })
         assertEquals(BonusTimeline.MAX_TAG_MS, few.tagIntervalMs)
-        assertEquals(BonusTimeline.MIN_TAG_MS, many.tagIntervalMs)
-        assertTrue("total=${many.totalMs}", many.totalMs <= 7000)
+        assertEquals(60, many.marks)
+        assertTrue("tags=${many.marks * many.tagIntervalMs}", many.marks * many.tagIntervalMs <= BonusTimeline.TAGS_TOTAL_MS)
+        assertTrue("total=${many.totalMs}", many.totalMs <= 5000)
+        // 置ける数の上限（100 個）でも、札は 1 コマ（16 ms）より速くは出さず、札は全部で 2 秒ほど
+        val most = BonusTimeline(List(100) { 1 })
+        assertTrue(most.tagIntervalMs >= BonusTimeline.MIN_TAG_MS)
+        assertTrue("tags=${most.marks * most.tagIntervalMs}", most.marks * most.tagIntervalMs <= BonusTimeline.TAGS_TOTAL_MS)
+        assertTrue("total=${most.totalMs}", most.totalMs <= 5000)
+    }
+
+    @Test
+    fun `no more tags after the multiplier reaches the cap`() {
+        // 雪 +0.20 を 15 個：10 個目で 3 倍に届くので、11 個目からは出さない
+        val timeline = BonusTimeline(List(15) { 20 })
+        assertEquals(10, timeline.marks)
+        assertEquals(10, timeline.tagsShown(timeline.totalMs))
+        assertEquals(0f, timeline.tagPop(10, timeline.totalMs), 0f)
+        assertEquals(1f, timeline.tagPop(9, timeline.growStartMs), 1e-6f)
     }
 
     @Test
