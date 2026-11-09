@@ -238,6 +238,8 @@ class StackViewModel(
                     parts = world.placedParts.distinctBy { it.id },
                     placements = world.placements(),
                     height = height,
+                    // みんなの絵と共有画像が、この台の幅で描く（決定 66）
+                    platformWidth = PLATFORM_WIDTH_M.toFloat(),
                     createdAt = System.currentTimeMillis(),
                 ),
                 usedCount = placedCount,

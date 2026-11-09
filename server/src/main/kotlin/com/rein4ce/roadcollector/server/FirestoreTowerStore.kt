@@ -99,7 +99,8 @@ class FirestoreTowerStore(
     private fun Tower.toFields(): Map<String, Any?> = mapOf(
         "json" to AppJson.encodeToString(Tower.serializer(), this),
         "height" to height.toDouble(),
-        "partCount" to parts.size,
+        // 台に残った数（配置の数）。同じパーツを何度も置いたタワーも、置いた数で並べる（toSummary と同じ。決定 66）
+        "partCount" to placements.size,
         "createdAt" to createdAt,
         "author" to author,
         // 持ち主の印（アプリが端末ごとに作るハッシュ。古いアプリからは null）。一覧の「あなた」の判定に使う

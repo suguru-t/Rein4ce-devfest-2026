@@ -115,4 +115,21 @@ class TowerValidationTest {
         assertNull(ok.copy(author = "🌙".repeat(MAX_AUTHOR_LENGTH)).validationError())
         assertEquals("author too long (> $MAX_AUTHOR_LENGTH)", ok.copy(author = "🌙".repeat(MAX_AUTHOR_LENGTH + 1)).validationError())
     }
+
+    @Test
+    fun `終わりなく積んだ塔：同じパーツを何度も置いた 100 個までは通し、台の幅は決まった範囲だけ通す（決定 66）`() {
+        val part = parts[0]
+        val endless = ok.copy(
+            parts = listOf(part),
+            placements = List(MAX_TOWER_PARTS) { i -> Placement(part.id, x = 0f, y = 0.1f * i, angleRad = 0f) },
+            platformWidth = 2.8f,
+        )
+        assertNull(endless.validationError())
+        assertEquals(100, MAX_TOWER_PARTS)
+        assertNull(ok.copy(platformWidth = MIN_PLATFORM_WIDTH).validationError())
+        assertNull(ok.copy(platformWidth = MAX_PLATFORM_WIDTH).validationError())
+        bad(ok.copy(platformWidth = 0f), "platformWidth")
+        bad(ok.copy(platformWidth = 11f), "platformWidth")
+        bad(ok.copy(platformWidth = Float.NaN), "platformWidth")
+    }
 }

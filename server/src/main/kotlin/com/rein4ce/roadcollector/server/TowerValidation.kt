@@ -11,8 +11,11 @@ import kotlin.math.abs
  * 上限はゲームのルールより余裕を見て、アプリが正しく作ったタワーを弾かないようにする。
  */
 
-/** タワー 1 基のパーツ数・配置数の上限。ゲームは 5 本（GameSession.MAX_PARTS）だが、ルールが変わっても弾かないよう余裕を見る */
-const val MAX_TOWER_PARTS = 10
+/**
+ * タワー 1 基のパーツ数・配置数の上限。積む画面の通常は、台から落ちるまで終わりなく積む（#108・決定 62）ので、
+ * 10 から 100 に上げた（決定 66）。100 個（点は 1 つ 50 まで）でも JSON は 200 KB ほどで、Firestore の 1 件の上限（1 MiB）に収まる
+ */
+const val MAX_TOWER_PARTS = 100
 
 /** 作者名の上限（文字）。みんなの一覧のカードに収まる長さ */
 const val MAX_AUTHOR_LENGTH = 20
@@ -25,6 +28,10 @@ val OWNER_ID_PATTERN = Regex("^[0-9a-f]{64}$")
 
 /** 一覧を取るときに持ち主の印を送るヘッダ */
 const val OWNER_HEADER = "X-Owner-Id"
+
+/** 台の幅の範囲 [m]。今までの台は 1.4 m、通常の広い台は 2.8 m（決定 66）。0 や巨大な値は、絵が消えたり画面を埋めたりする */
+const val MIN_PLATFORM_WIDTH = 0.5f
+const val MAX_PLATFORM_WIDTH = 10f
 
 /** 座標・高さ・太さの上限。台の幅は 1.4 m、5 本積んでも数 m。これを超える値は壊れたデータ */
 const val MAX_COORDINATE = 100f
@@ -63,6 +70,7 @@ internal fun Tower.validationError(): String? {
         if (!pl.scale.isFinite() || pl.scale < MIN_PLACEMENT_SCALE || pl.scale > MAX_PLACEMENT_SCALE) return "placement $i: scale out of range"
     }
     if (!inRange(height) || height < 0f) return "height out of range"
+    if (!platformWidth.isFinite() || platformWidth < MIN_PLATFORM_WIDTH || platformWidth > MAX_PLATFORM_WIDTH) return "platformWidth out of range"
     val a = author
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
     val o = ownerId

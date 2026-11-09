@@ -21,7 +21,7 @@ object SharePage {
             author.endsWith("さん") -> "$author が "
             else -> "$author さんが "
         }
-        val desc = "$who${tower.parts.size} 個の散歩パーツで積みました — ミチツミ"
+        val desc = "$who${tower.placements.size} 個の散歩パーツで積みました — ミチツミ"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)
