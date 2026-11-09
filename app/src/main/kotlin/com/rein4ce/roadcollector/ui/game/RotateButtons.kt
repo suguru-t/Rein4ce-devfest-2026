@@ -38,6 +38,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /** 回転のボタンを 1 回押したときに回す角度 [度] */
 internal const val ROTATE_STEP_DEG = 15f
@@ -65,14 +79,18 @@ enum class RotateDirection(val symbol: String, private val side: String, val sig
 
 /**
  * 回転のボタン 1 つ（#114）。押すと [ROTATE_STEP_DEG] 回し、押し続けると [ROTATE_REPEAT_MS] ごとに回し続ける（離したら止まる）。
- * 回り始めるまでの間は、端末の長押しの時間（◀▶ の [MoveButton] と同じ）。回し続けている間は、15° ごとに軽く振動する
+ * 回り始めるまでの間は、端末の長押しの時間（前の ◀▶ と同じ）。回し続けている間は、15° ごとに軽く振動する
  * （設定の「振動」に従う）。押した瞬間の振動は、ほかのボタンと同じ押し心地（pressFeel）から鳴る。
  *
- * 続けて回すのを止める場面と、読み上げの長押しの扱い（1 回だけ回す）は、[MoveButton] と同じ。
- * 見た目は今までの回転のボタン（PressOutlinedButton）と同じ枠・字・押し心地
+ * 続けて回すのを止める場面（離す・外へずらす・裏に回る・画面を離れる・次のゲーム）と、読み上げの長押しの扱い（1 回だけ回す）は、
+ * 前の ◀▶ と同じ。
+ * 見た目は、ほかの画面のボタン（`PopButton`）と同じ積み木（オレンジの面・下にのぞく側面・太い丸ゴシックの白い字）に、
+ * 回る矢印のアイコン（決定 67。前は Material の枠だけのボタンだった）。押せないときは灰色
  *
  * @param onRotate 回す角度 [度]（+ が ⟲）。狙っている間だけ回る（落下中などは、呼ぶ側の VM が何もしない）
  * @param sessionKey 次のゲームで、長押しの状態ごと作り直す
+ * @param text ボタンの字（既定は「⟲ 15°」など）。積む画面は時計回りの 1 つだけにしたので「回す」（[TURN_BUTTON_TEXT]。決定 67）
+ * @param label 読み上げの説明（既定は「左に 15° 回す」など）
  */
 @Composable
 fun RotateButton(
@@ -80,7 +98,9 @@ fun RotateButton(
     sessionKey: Any,
     onRotate: (Float) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+    text: String = direction.text,
+    label: String = direction.label,
 ) {
     key(sessionKey) {
         val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
@@ -101,14 +121,9 @@ fun RotateButton(
             }
         }
         val step = direction.sign * ROTATE_STEP_DEG
-        val ink = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        Surface(
-            shape = ButtonDefaults.outlinedShape,
-            border = ButtonDefaults.outlinedButtonBorder(active),
-            color = Color.Transparent,
-            contentColor = ink,
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = modifier
-                .minimumInteractiveComponentSize()
                 .pressFeel(source)
                 // 回し続けている間に、指をボタンの外へずらしたら止める（◀▶ と同じ。#88 の A のレビュー）
                 .pointerInput(repeater) {
@@ -125,9 +140,9 @@ fun RotateButton(
                     enabled = active,
                     role = Role.Button,
                     interactionSource = source,
-                    indication = LocalIndication.current,
-                    onClickLabel = direction.label,
-                    onLongClickLabel = direction.label,
+                    indication = null,
+                    onClickLabel = label,
+                    onLongClickLabel = label,
                     onClick = { currentRotate(step) },
                     onLongClick = {
                         if (pressed) {
@@ -143,18 +158,34 @@ fun RotateButton(
                             currentRotate(step)
                         }
                     },
-                ),
+                )
+                .popBlock(face = if (active) Pop.OrangeDeep else Fieldbook.GridMajor, corner = 14.dp)
+                .heightIn(min = 48.dp)
+                .padding(contentPadding)
+                .semantics { contentDescription = label },
         ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = ButtonDefaults.MinHeight)
-                    .padding(contentPadding)
-                    .semantics { contentDescription = direction.label },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(direction.text, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clearAndSetSemantics {})
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clearAndSetSemantics {}) {
+                // 回る向きの矢印（Material の「再読み込み」は時計回り。⟲ は左右を返す）
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = if (active) Pop.Letter else Fieldbook.Muted,
+                    modifier = Modifier.size(20.dp).graphicsLayer { scaleX = if (direction.sign > 0f) -1f else 1f },
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text,
+                    fontFamily = Pop.Rounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp,
+                    color = if (active) Pop.Letter else Fieldbook.Muted,
+                    maxLines = 1,
+                )
             }
         }
     }
 }
+
+/** 積む画面の「回す」のボタン（時計回りの 1 つだけ。決定 67）の字と読み上げ */
+internal const val TURN_BUTTON_TEXT = "回す"
+internal const val TURN_BUTTON_LABEL = "時計回りに 15° 回す。押し続けると回り続ける"

@@ -137,7 +137,7 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 | 台の幅（`platformWidth`）がおかしい | 0.5〜10 m（`MIN_PLATFORM_WIDTH`〜`MAX_PLATFORM_WIDTH`。無ければ 1.4 m） |
 | パーツの id が空・重複 | |
 | パーツの頂点が 0 個・多すぎ | 1〜50 個（`MAX_PART_POINTS`。命名 API と同じ） |
-| 座標・高さ・太さが NaN・無限・巨大 | 絶対値 100 以下（`MAX_COORDINATE`）。太さは 0 より大きい。高さは 0 以上 |
+| 座標・高さ・太さが NaN・無限・巨大 | 絶対値 300 以下（`MAX_COORDINATE`。天気のボーナスで塔ごと最大 3 倍にするので、100 から上げた。決定 68）。太さは 0 より大きい。高さは 0 以上 |
 | 配置の partId がパーツに無い | |
 | 作者名・パーツの名前が長すぎ | 作者 20 文字、名前 30 文字（絵文字も 1 文字） |
 | JSON として読めない（型違い、`NaN` の字など） | `400 body must be a Tower` |

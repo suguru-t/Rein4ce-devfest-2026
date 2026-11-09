@@ -5,7 +5,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -36,7 +35,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -65,10 +63,9 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.PressButton
-import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
+import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -83,7 +80,8 @@ import kotlinx.coroutines.launch
  *
  * - 情報：上の行の左に「‹ 戻る」とモードの札（[leading]）、右に積んだ日数。その下に塔の高さ（ふつうの積む画面と同じ形）
  * - キャンバス：保存した塔を、止まったときの形のまま出す。狙っている間は、出てくる高さが入るところまで視点を上げる
- * - 操作：今日まだ積んでいなければ、今日歩いた道（見本は除く）のカードから 1 つ選んで、横に動かし・回して「置く」。
+ * - 操作：今日まだ積んでいなければ、今日歩いた道（見本は除く）のカードから 1 つ選んで、塔を描く所をドラッグして位置を決め、
+ *   指を離すと落ちる。「回す」で時計回りに回す（ふつうの積む画面と同じ。決定 67）。
  *   今日もう積んだら「また明日」。今日歩いた道が無ければ、歩くと積めることを伝える
  *
  * @param leading 上の行の左に置くもの（遊び方を選ぶ画面の ModePlayPage から「‹ 戻る」と札が来る）
@@ -172,20 +170,20 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
-                            SkyText(" ・ 横にドラッグして位置を決める", color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, softWrap = false)
+                            SkyText(" ・ ドラッグして、指を離すと落ちる", color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
-                        // 回転は、ほかのモードと同じく押し続けると 15° ずつ回り続ける（#114・決定 64。ui/game/RotateButtons.kt）
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            val session = part?.id ?: ""
-                            RotateButton(RotateDirection.LEFT, sessionKey = session, onRotate = vm::rotate, modifier = Modifier.weight(1.2f))
-                            PressButton(onClick = vm::place, modifier = Modifier.weight(1f)) { Text("置く") }
-                            RotateButton(RotateDirection.RIGHT, sessionKey = session, onRotate = vm::rotate, modifier = Modifier.weight(1.2f))
-                        }
-                        PressTextButton(onClick = vm::cancelChoice) { Text("選び直す") }
+                        // 操作のボタンは「回す」の 1 つだけ（ふつうの積む画面と同じ。決定 67）。位置はキャンバスのドラッグで決め、指を離すと落ちる。
+                        // 回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114・決定 64。ui/game/RotateButtons.kt）
+                        RotateButton(
+                            RotateDirection.RIGHT,
+                            sessionKey = part?.id ?: "",
+                            onRotate = vm::rotate,
+                            modifier = Modifier.width(TURN_BUTTON_WIDTH),
+                            text = TURN_BUTTON_TEXT,
+                            label = TURN_BUTTON_LABEL,
+                        )
+                        // ふつうの積む画面の「やり直す」と同じ、紙の面に青緑の縁の小さな札
+                        PopChip("選び直す", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::cancelChoice)
                     }
                     DailyViewModel.Phase.Settling -> SkyText("落下中…", color = Fieldbook.Muted, fontSize = 14.sp)
                 }
@@ -194,6 +192,9 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
         }
     }
 }
+
+/** 「回す」のボタンの幅（ふつうの積む画面と同じ。画面いっぱいには広げない） */
+private val TURN_BUTTON_WIDTH = 220.dp
 
 /** 操作の段の一言（太い丸ゴシック・紙の色の縁取り。天気の上に直接書くので） */
 @Composable
@@ -243,7 +244,7 @@ private fun TodayPartCard(part: Part, onClick: () -> Unit) {
 
 /**
  * キャンバス：ふつうの積む画面と同じ変換（[StackViewport]）。カメラは [DailyViewModel.camera] に合わせて、0.4 秒かけて動かす。
- * 狙っている間は、これから置くパーツ（ゴースト）をうすく出し、横のドラッグで動かす
+ * 狙っている間は、これから置くパーツ（ゴースト）をうすく出し、横のドラッグで動かして、指を離すと落とす（決定 67。ui/game/AimGestures.kt）
  */
 @Composable
 private fun DailyCanvas(vm: DailyViewModel, modifier: Modifier = Modifier) {
@@ -272,13 +273,16 @@ private fun DailyCanvas(vm: DailyViewModel, modifier: Modifier = Modifier) {
         modifier = modifier
             .onSizeChanged { canvasSize = it }
             .semantics { contentDescription = "毎日 1 つずつ積む塔。高さ %.2f メートル".format(vm.height) }
-            .pointerInput(vm) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    val viewport = StackViewport(size.width.toFloat(), size.height.toFloat(), zoom.value, cameraY.value)
-                    vm.dragBy(viewport.dragToMeters(drag.x))
-                }
-            },
+            .aimByDrag(
+                key = vm,
+                canAim = { vm.phase == DailyViewModel.Phase.Aiming },
+                onDrag = { dx ->
+                    val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom.value, cameraY.value)
+                    vm.dragBy(viewport.dragToMeters(dx))
+                },
+                // 狙っている間だけ落とす（VM の place が見る。カードを選ぶ前に触っても何もしない）
+                onRelease = { vm.place() },
+            ),
     ) {
         val viewport = StackViewport(size.width, size.height, zoom.value, cameraY.value)
         fun sx(x: Double) = viewport.toScreenX(x.toFloat())
