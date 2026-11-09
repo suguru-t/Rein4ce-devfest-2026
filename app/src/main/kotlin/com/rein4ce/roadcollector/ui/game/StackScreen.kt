@@ -214,7 +214,7 @@ fun StackScreen(
                     }
                     .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                // 画面名「つむ」は、コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
+                // 画面名「みちをつむ」は、コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、
                 // 押すと動く。積み木は文字の大きさの設定では大きくしない（dp で決める）。
                 // 字は「みんな」・コレクションと同じ太い丸ゴシック。方眼の紙と天気の上に直接書くので、紙の色の縁取りを付ける（SkyText。決定 59）。
                 // 小さい画面では、画面名・高さ・残りと落下を 1 行に並べて、情報の段を低くする（塔を描く所が狭くなって、台が見えなくならないように。
@@ -224,7 +224,8 @@ fun StackScreen(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BlockWord("つむ", modifier = Modifier.padding(end = 12.dp))
+                        // 画面名は 5 文字あるので、小さい画面では積み木を一回り小さくして、高さ・残りと同じ行に収める
+                        BlockWord("みちをつむ", modifier = Modifier.padding(end = 12.dp), blockDp = 20.dp)
                         HeightMeter(vm.height.toFloat(), compact = true)
                         Spacer(Modifier.weight(1f))
                         RemainingAndFallen(vm.remaining, vm.fallenCount, compact = true)
@@ -235,7 +236,7 @@ fun StackScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BlockWord("つむ")
+                        BlockWord("みちをつむ")
                         RemainingAndFallen(vm.remaining, vm.fallenCount, compact = false)
                     }
                     HeightMeter(vm.height.toFloat(), compact = false)
