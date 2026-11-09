@@ -134,6 +134,61 @@ class StackViewModelTest {
         assertEquals(1, vm.placedCount)
     }
 
+    // ---- チェンジ（狙っているパーツを替える） ----
+
+    @Test
+    fun `チェンジすると、ほかのパーツに替わり、残りの回数が減る`() {
+        // a が出たあと、チェンジの候補（a 以外）から b を選ぶ
+        val vm = StackViewModel(random = SequenceRandom(listOf(0, 0)))
+        vm.updateInventory(listOf(a, b, c), true)
+        assertEquals("a", vm.current!!.id)
+        vm.rotate(45f)
+        vm.dragBy(0.3f)
+        vm.change()
+        assertEquals("b", vm.current!!.id)
+        assertEquals(StackViewModel.CHANGES_PER_GAME - 1, vm.changesLeft)
+        assertEquals(0f, vm.ghostAngleDeg, 0f) // 向きは 0° に戻す
+        assertEquals(0.3f, vm.ghostX, 1e-6f) // 位置はそのまま
+        assertEquals(0, vm.placedCount) // 置いたことにはならない
+    }
+
+    @Test
+    fun `チェンジは 1 ゲームに決まった回数までで、やり直すとまた使える`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b, c), true)
+        repeat(StackViewModel.CHANGES_PER_GAME) {
+            val before = vm.current!!.id
+            vm.change()
+            assertTrue(vm.current!!.id != before) // いつも違うパーツに替わる
+        }
+        assertEquals(0, vm.changesLeft)
+        assertFalse(vm.canChange)
+        val last = vm.current
+        vm.change()
+        assertSame(last, vm.current)
+
+        vm.restart(listOf(a, b, c))
+        assertEquals(StackViewModel.CHANGES_PER_GAME, vm.changesLeft)
+        assertTrue(vm.canChange)
+    }
+
+    @Test
+    fun `落下中と、ほかに替えるパーツが無いときはチェンジできない`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        placeFlat(vm)
+        assertFalse(vm.canChange) // 落下中
+        vm.change()
+        assertEquals(StackViewModel.CHANGES_PER_GAME, vm.changesLeft)
+
+        val single = StackViewModel()
+        single.updateInventory(listOf(a), true)
+        assertFalse(single.canChange) // パーツが 1 種類だけ
+        single.change()
+        assertEquals("a", single.current!!.id)
+        assertEquals(StackViewModel.CHANGES_PER_GAME, single.changesLeft)
+    }
+
     // ---- 終わり：台から落ちたら ----
 
     @Test

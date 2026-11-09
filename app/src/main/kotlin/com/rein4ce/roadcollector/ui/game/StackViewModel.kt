@@ -113,6 +113,13 @@ class StackViewModel(
     /** このゲームで置いたパーツの数 */
     var placedCount: Int by mutableStateOf(0)
         private set
+
+    /** このゲームで、あと何回チェンジ（狙っているパーツを別のパーツに替える）できるか（[CHANGES_PER_GAME] 回から） */
+    var changesLeft: Int by mutableStateOf(CHANGES_PER_GAME)
+        private set
+
+    /** いまチェンジできるか（狙っている間で、残りの回数があり、ほかに替えられるパーツがある） */
+    val canChange: Boolean get() = phase == Phase.Placing && current != null && changesLeft > 0 && pool.size > 1
     var shapes: List<StackWorld.RenderShape> by mutableStateOf(emptyList())
         private set
     var height: Float by mutableStateOf(0f)
@@ -206,6 +213,7 @@ class StackViewModel(
         sessionOrigins = origins
         placedSequence.clear()
         placedCount = 0
+        changesLeft = CHANGES_PER_GAME
         gameOver = false
         height = 0f
         fallenCount = 0
@@ -276,6 +284,20 @@ class StackViewModel(
             for (v in poly.points) reach = max(reach, hypot(v.x, v.y))
         }
         return reach.toFloat()
+    }
+
+    /**
+     * チェンジ：狙っているパーツを、ほかのパーツ（いまと違うもの）にランダムに替える（決定 62）。都合の悪い形が出たときのため。
+     * 1 ゲームに [CHANGES_PER_GAME] 回まで（何度でも替えられると、合わない形を全部飛ばせて、積み方を考える楽しさが減るため）。
+     * 狙っている位置はそのまま、向きは 0° に戻す。出てくる高さは同じだが、大きさが違うので、カメラは新しいパーツが入る所まで上げ直す
+     */
+    fun change() {
+        val part = current ?: return
+        if (!canChange) return
+        current = pool.filter { it.id != part.id }.random(random)
+        changesLeft--
+        ghostAngleDeg = 0f
+        camera = computeCamera()
     }
 
     fun dragBy(dxMeters: Float) {
@@ -384,6 +406,9 @@ class StackViewModel(
         const val DRAG_MARGIN_M = 0.8
 
         const val MESSAGE_COLLECTION_EMPTY = "コレクションにパーツがありません。"
+
+        /** 1 ゲームでチェンジできる回数（[change]） */
+        const val CHANGES_PER_GAME = 3
 
         /** 通常モードの台の幅 [m]。たくさん積めるように、1 本ずつ選んで積んでいたころ（1.4 m）の 2 倍（決定 62・#108）。画面に映る横 5 m に収まる */
         const val PLATFORM_WIDTH_M = 2.8

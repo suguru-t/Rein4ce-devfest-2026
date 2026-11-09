@@ -349,8 +349,14 @@ fun StackScreen(
                                 ) { Text("⟳ 15°") }
                                 MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
                             }
-                            // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
-                            PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                // チェンジ：都合の悪い形が出たら、ほかのパーツに替える（1 ゲームに 3 回まで。決定 62）。残りの回数を出す
+                                PressTextButton(onClick = vm::change, enabled = vm.canChange) {
+                                    Text("チェンジ（あと ${vm.changesLeft} 回）")
+                                }
+                                // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
+                                PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
+                            }
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
