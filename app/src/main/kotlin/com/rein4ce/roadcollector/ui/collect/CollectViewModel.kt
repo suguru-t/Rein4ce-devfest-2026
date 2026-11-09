@@ -139,7 +139,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * 軽跡を流してパーツにする。[label] は画面に出す呼び名（「デモ散歩を再生中」）、[origin] は出どころ。
+     * 軌跡を流してパーツにする。[label] は画面に出す呼び名（「デモ散歩を再生中」）、[origin] は出どころ。
      * 出どころは呼び名の字から決めず、そのまま記録の側に渡す（呼び名を変えても、デモがファイルにならないように）
      */
     private fun playPoints(label: String, origin: PartOrigin, load: suspend () -> List<TrackPoint>) {

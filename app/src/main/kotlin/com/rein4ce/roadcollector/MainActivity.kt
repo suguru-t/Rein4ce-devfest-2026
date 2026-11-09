@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
+import android.content.Intent
 import android.content.res.Resources
 import android.graphics.Color
 import android.media.AudioManager
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalView
@@ -43,7 +46,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 字を日本語として描く（#46）。画面の設定が変わると Android が端末の言語に戻すので、画面を作るたびに入れ直す
         JapaneseText.apply()
-        // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐって採集画面に入るように見せる
+        // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐってホーム（記録中に開いたときは記録画面）に入るように見せる
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash -> enterThroughGate(splash) }
         } else {
@@ -66,7 +69,7 @@ class MainActivity : ComponentActivity() {
         // 効果音は、最初に押したボタンから鳴るように、画面ができる前に読み込みを始めておく
         RoadCollectorApp.from(this).sfx
         setContent {
-            // 画面の明るさ：設定（採集画面の歯車）と、端末のダークテーマから決める
+            // 画面の明るさ：設定（ホームの歯車）と、端末のダークテーマから決める
             val mode by settings.themeMode.collectAsStateWithLifecycle()
             val dark = mode.isDark(isSystemInDarkTheme())
             // 野帳の色は、描く処理（Canvas）の中でも読むので、テーマとは別にここで切り替える。
@@ -103,9 +106,9 @@ class MainActivity : ComponentActivity() {
             }
             RoadCollectorTheme(dark = dark) {
                 Box {
-                    // タイトルを出している間は、下の記録画面を読み上げから外す（読み上げで、見えないボタンを押せないように）
+                    // タイトルを出している間は、下のホームを読み上げから外す（読み上げで、見えないボタンを押せないように）
                     Box(modifier = if (TitleIntroState.done) Modifier else Modifier.clearAndSetSemantics {}) {
-                        AppNav()
+                        AppNav(collectRequests = collectRequests)
                     }
                     // 開いたときのタイトル。終わったら何も描かない
                     if (showIntro) TitleIntro()
@@ -120,6 +123,22 @@ class MainActivity : ComponentActivity() {
      */
     private fun volumeStreamFor(bgmOn: Boolean, sfxOn: Boolean) =
         if (bgmOn || sfxOn) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
+
+    /**
+     * アプリが生きているまま、記録中の通知を押して戻ってきた回数。増えたら、ホームなどにいても記録画面へ移す（AppNav）。
+     * 画面の作り直しでは 0 に戻る（そのときは移さない）
+     */
+    private var collectRequests by mutableIntStateOf(0)
+
+    // 記録中の通知を押したとき：アプリが生きていれば（singleTop。通知は FLAG_ACTIVITY_SINGLE_TOP）、開き直さずにここに来る。
+    // 記録中なら、記録画面へ移す（ホームへ戻ってから裏に回していても、記録の様子が出るように。#101 の A のレビュー）。
+    // アプリが終わっていたときは開き直しになり、AppNav が記録画面から始める。
+    // アイコンから戻ったとき（ACTION_MAIN・CATEGORY_LAUNCHER）も singleTop なのでここに来るが、こちらは見ていた画面のままにする
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val fromLauncher = intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+        if (!fromLauncher && TrackRecorder.isRecording.value) collectRequests++
+    }
 
     // BGM は、アプリが前に出ている間だけ流す（ほかのアプリを見ているとき・記録中に画面を消したときは止める）
     override fun onStart() {
@@ -145,7 +164,7 @@ class MainActivity : ComponentActivity() {
     /**
      * 起動画面のアイコン（splash_icon）を、積み木の門の形の穴に向かって大きくしながら、起動画面ごとうすくして消す。
      * 開いたときのタイトルを出すときは、門をくぐらず、アイコンの題字の段の場所をタイトルに渡して、うすくして消す（[handTitleOver]）。
-     * 穴をくぐると採集画面が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
+     * 穴をくぐるとホーム（記録中に開いたときは記録画面）が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private fun enterThroughGate(splash: SplashScreenView) {
@@ -173,7 +192,7 @@ class MainActivity : ComponentActivity() {
             duration = 320
             interpolator = AccelerateInterpolator(2f)
         }
-        // くぐり始めてから、起動画面をうすくして採集画面を見せる
+        // くぐり始めてから、起動画面をうすくして、下の画面を見せる
         val fade = ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply {
             startDelay = 180
             duration = 140

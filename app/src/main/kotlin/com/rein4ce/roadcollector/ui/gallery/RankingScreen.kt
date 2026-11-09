@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -56,7 +57,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
-import com.rein4ce.roadcollector.ui.common.paperBand
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
@@ -67,6 +67,7 @@ import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
+import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
@@ -123,17 +124,16 @@ internal fun RankingScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, tiltDeg = -2f, onClick = onBack)
+        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
-            Text(
+            // 天気の雲の上に直接書くので、紙の色の縁取りを付ける（ダークのくもりで沈まないように）
+            SkyText(
                 if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
-                fontFamily = Pop.Rounded,
-                fontWeight = FontWeight.Black,
-                fontSize = 13.sp,
                 color = Fieldbook.Muted,
-                modifier = Modifier.padding(end = 4.dp).paperBand(),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(end = 4.dp),
             )
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
@@ -195,7 +195,7 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEachIndexed { i, s ->
+        options.forEach { s ->
             val selected = s == sort
             val source = remember { MutableInteractionSource() }
             Box(
@@ -220,8 +220,6 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     color = if (selected) Pop.Letter else sortInk(s),
                     maxLines = 1,
                     modifier = Modifier
-                        // 選んでいる札だけ少し傾けて、積み木を置いたように
-                        .graphicsLayer { rotationZ = if (selected) (if (i % 2 == 0) -2f else 2f) else 0f }
                         .popBlock(
                             face = if (selected) sortFace(s) else Fieldbook.Card,
                             corner = 50.dp,
@@ -359,7 +357,6 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
         modifier = Modifier
             .heightIn(min = 24.dp)
             .wrapContentWidth(Alignment.Start)
-            .then(if (status != null) Modifier.paperBand() else Modifier)
             .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -367,7 +364,7 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
             // 小さな積み木（傾けた四角）の印
             Box(modifier = Modifier.graphicsLayer { rotationZ = 12f }.size(10.dp).clip(RoundedCornerShape(3.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
-            Text(status.text, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Fieldbook.Muted)
+            SkyText(status.text, color = Fieldbook.Muted, fontSize = 12.sp)
         }
     }
 }
@@ -398,18 +395,16 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
             enabled = canPrev,
             onClick = { onPage(page - 1) },
         )
-        Text(
+        SkyText(
             "$first〜$last / $total",
-            fontFamily = Pop.Rounded,
-            fontWeight = FontWeight.Black,
-            fontSize = 13.sp,
             color = Fieldbook.Muted,
+            fontSize = 13.sp,
             maxLines = 1,
             modifier = Modifier
                 .weight(1f)
                 .wrapContentWidth(Alignment.CenterHorizontally)
-                .paperBand()
-                .semantics { contentDescription = "$total 個のうち $first から $last 番目" },
+                // 縁取りの字と本来の字の 2 つが中にあるので、外側で 1 つにまとめて、説明だけを読ませる（#115 のレビュー）
+                .clearAndSetSemantics { contentDescription = "$total 個のうち $first から $last 番目" },
         )
         PopChip(
             "次の $PAGE_SIZE 個 ›",

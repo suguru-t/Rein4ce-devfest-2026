@@ -16,12 +16,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
@@ -81,7 +81,7 @@ private val Blocks = listOf(
 private val TitleMotion = BlockMotionSpec(hopDp = 12f * K, hopBounceDp = 4f * K, fallMs = 160, landDxDp = 13f * K, landBounceDp = 8f * K)
 
 /**
- * 採集画面の題字「ミチツミ」。1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べた、積み木を積んでいる途中の絵。
+ * ホームの題字「ミチツミ」（開いたときのタイトルでも使う。前は記録画面の見出しで、#100 で画面名「みちのきろく」に替わった）。1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べた、積み木を積んでいる途中の絵。
  *
  * 押すと動く（遊び）：
  * - 「ミ」「チ」「ツ」：そのブロックがその場で軽く跳ね、1 回はねて元に戻る
@@ -122,9 +122,10 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                     .size(TITLE_BLOCK_DP.dp)
                     .onGloballyPositioned {
                         if (isLast) {
-                            val p = it.positionInRoot()
-                            lastCenter[0] = p.x + it.size.width / 2f
-                            lastCenter[1] = p.y + it.size.height / 2f
+                            // 画面の上でのまん中（まわりで大きくして出しているときも、大きくした後の位置）
+                            val c = it.localToRoot(Offset(it.size.width / 2f, it.size.height / 2f))
+                            lastCenter[0] = c.x
+                            lastCenter[1] = c.y
                         }
                     }
                     // 押すと動く（開いたときのタイトルでは押しを受けない）
