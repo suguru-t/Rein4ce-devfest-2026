@@ -253,21 +253,24 @@ private fun Overview(
         }
     }
 
-    // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
+    // 遊び方ごとの色合い（決定 81）。画面全体に薄く敷き、札・数字・ボタン・断面図の枠をこの色でそろえる
+    val theme = galleryTheme(mode)
+    // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは、その上に遊び方の色を薄く敷く
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(theme.wash)
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
         // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 77）、右にリロードのブロック
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
-            PopTag("${mode.fullLabel}のランキング", face = modeFace(mode), fontSize = 12.sp, tiltDeg = 2f)
+            PopTag("${mode.fullLabel}のランキング", face = theme.face, fontSize = 12.sp, tiltDeg = 2f)
             Spacer(Modifier.weight(1f))
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
 
-        GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, reduceMotion = reduceMotion)
+        GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, theme = theme, reduceMotion = reduceMotion)
 
         // 状態の行：読み込み中・つながらない・更新中・取り直せなかった、のときだけ出す（ランキングと共通）
         GalleryStatusRow(gallery)
@@ -287,7 +290,7 @@ private fun Overview(
                     Text("${howToSend(mode)}、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
                 }
             } else {
-                SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort)
+                SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort, theme = theme)
                 // 左：その物差しで 1 番。右：自分のいちばん良いタワー（自分が 1 番なら、他人で 1 番のタワー。その順位を呼び名に）
                 val slots = listOf(
                     SectionSlot(
@@ -318,6 +321,7 @@ private fun Overview(
                             // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、高すぎるときは頂上のあたりだけを読める大きさで映す。
                             // 押すと画面いっぱいに全体（TowerFullView。決定 77）
                             topWindow = mode != TowerMode.NORMAL,
+                            paper = theme.tint,
                             // weight は fill=false にして（fill=true だと高さが決め打ちの制約になり、heightIn(max) が効かない）、
                             // 上限を掛けたあとに fillMaxHeight で「残りか上限の小さいほう」の高さを取る
                             // （Canvas の中身は Spacer なので、高さが決まった制約でないと 0 になる）。
@@ -328,7 +332,7 @@ private fun Overview(
                                 .heightIn(max = SECTION_HEIGHT)
                                 .fillMaxHeight()
                                 // ブロックの面（下に側面がのぞく）。中身は TowerSection が同じ角の丸さで描く
-                                .popBlock(face = Fieldbook.Paper, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge),
+                                .popBlock(face = theme.tint, corner = SECTION_CORNER, depth = 4.dp, edge = theme.ink.copy(alpha = 0.45f)),
                         )
                         Spacer(Modifier.height(6.dp))
                         // 断面図の 2 基を 1 行ずつ（押すと紙片）
@@ -344,7 +348,7 @@ private fun Overview(
                                     "名前を付けると、次に送るタワーから名前が出ます ›",
                                     fontFamily = Pop.Rounded,
                                     fontWeight = FontWeight.Black,
-                                    color = Pop.TealLine,
+                                    color = theme.ink,
                                     fontSize = 12.sp,
                                 )
                             }
@@ -358,8 +362,8 @@ private fun Overview(
                     label = "あなたのタワー（$mineCount 個）",
                     onClick = onMine,
                     face = Fieldbook.Card,
-                    text = Pop.TealLine,
-                    edge = Pop.TealLine,
+                    text = theme.ink,
+                    edge = theme.ink,
                     fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -367,7 +371,7 @@ private fun Overview(
                 PopButton(
                     label = "ランキングを見る（${towers.size} 個）",
                     onClick = onRanking,
-                    face = Pop.OrangeDeep,
+                    face = theme.face,
                     text = Pop.Letter,
                     fontSize = 17.sp,
                     modifier = Modifier.fillMaxWidth(),
@@ -388,7 +392,7 @@ private object SectionIntro {
  * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, reduceMotion: Boolean) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, theme: GalleryTheme, reduceMotion: Boolean) {
     val isLoaded = state is TowerGallery.State.Loaded
     val isError = state is TowerGallery.State.Error
     val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
@@ -436,14 +440,14 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
                 // 天気の雲や光の上に直接書くので、紙の色の縁取りを付ける（SkyText）
                 SkyText(
                     if (myValue != null) sort.format(meter.value) else "—",
-                    color = sortInk(sort),
+                    color = theme.ink,
                     fontSize = 40.sp,
                     maxLines = 1,
                     softWrap = false,
                 )
                 SkyText(
                     sort.unit,
-                    color = sortInk(sort),
+                    color = theme.ink,
                     fontSize = 18.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
                 )
@@ -452,8 +456,9 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         Spacer(Modifier.height(4.dp))
         when {
             // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札。数字の下にそろえて、傾けずに水平に置く
-            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter)
-            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow)
+            // 札も遊び方の色（決定 81。前は黄色とオレンジで、強すぎて目に痛かった）
+            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = theme.face, text = Pop.Letter)
+            isLoaded && myValue != null -> PopChip(sub, face = Fieldbook.Card, text = theme.ink, edge = theme.ink)
             else -> Text(
                 sub,
                 fontFamily = Pop.Rounded,

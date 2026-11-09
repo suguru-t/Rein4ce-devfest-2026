@@ -122,9 +122,12 @@ internal fun RankingScreen(
     }
 
     // 「みんな」の最初の画面と同じ余白・同じ見出し（積み木）。上に「‹ 戻る」の黄色い札、その下に画面名と個数とリロード
+    // 遊び方ごとの色合い（決定 81。断面図の画面と同じ色を薄く敷き、札・横棒・1 番の札をこの色でそろえる）
+    val theme = galleryTheme(gallery.mode)
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(theme.wash)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
         PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
@@ -145,7 +148,7 @@ internal fun RankingScreen(
         GalleryStatusRow(gallery)
         // 物差しは遊び方ごと（決定 77）。「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
         val comparable = TowerSort.comparableFor(gallery.mode)
-        SortTabs(sort = sort, options = if (mineOnly) comparable + TowerSort.NEWEST else comparable, onSelect = { onSort(it); page = 0 })
+        SortTabs(sort = sort, options = if (mineOnly) comparable + TowerSort.NEWEST else comparable, onSelect = { onSort(it); page = 0 }, theme = theme)
         if (mineOnly && listed.isEmpty()) {
             // まだ送っていない（送ったタワーの印は、サーバの持ち主の印か、この端末の記録）
             Column(
@@ -179,6 +182,7 @@ internal fun RankingScreen(
                     referenceHeight = referenceHeight,
                     referenceWidth = referenceWidth,
                     ratio = sort.valueOf(t) / topValue,
+                    theme = theme,
                     onClick = { onOpen(t) },
                 )
             }
@@ -195,7 +199,7 @@ internal fun RankingScreen(
  * 読み上げではラジオボタンの組として伝える。押し心地（#76）はほかのボタンとそろえ、札の形だけが縮む（波紋は出さない）
  */
 @Composable
-internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit) {
+internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -223,14 +227,15 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
                     fontSize = 14.sp,
-                    color = if (selected) Pop.Letter else sortInk(s),
+                    // 「みんな」の遊び方の画面では、物差しごとの色ではなく遊び方の色にそろえる（決定 81）
+                    color = if (selected) Pop.Letter else theme?.ink ?: sortInk(s),
                     maxLines = 1,
                     modifier = Modifier
                         .popBlock(
-                            face = if (selected) sortFace(s) else Fieldbook.Card,
+                            face = if (selected) theme?.face ?: sortFace(s) else Fieldbook.Card,
                             corner = 50.dp,
                             depth = if (selected) 4.dp else 2.dp,
-                            edge = if (selected) null else sortInk(s),
+                            edge = if (selected) null else theme?.ink ?: sortInk(s),
                         )
                         .padding(horizontal = 16.dp, vertical = 6.dp),
                 )
@@ -255,6 +260,7 @@ private fun TowerCard(
     referenceHeight: Float,
     referenceWidth: Float,
     ratio: Float,
+    theme: GalleryTheme,
     onClick: () -> Unit,
 ) {
     val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
@@ -295,13 +301,13 @@ private fun TowerCard(
                     Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
                 }
                 // 全部の中で 1 番のタワーには、物差しに合わせた札（高い順は「最長」、多い順は「最多」）。記録の札は紺
-                if (rank == 1 && showTopTag) PopTag(sort.topLabel, face = Pop.Navy, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
+                if (rank == 1 && showTopTag) PopTag(sort.topLabel, face = theme.face, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
                 // 自分のタワーには「あなた」の札（自分の色＝道のオレンジを、白い字が読める濃さにしたもの）
                 if (mine) PopTag("あなた", face = Pop.OrangeDeep, tiltDeg = 3f, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
             }
             // 物差しの横棒：この一覧の 1 番を 100% にする（高い順・新しい順は高さ、多い順はパーツ数）。色は物差しの色
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Fieldbook.GridMajor, RoundedCornerShape(3.dp))) {
-                Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(6.dp).background(sortInk(sort), RoundedCornerShape(3.dp)))
+                Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(6.dp).background(theme.face, RoundedCornerShape(3.dp)))
             }
             Spacer(Modifier.height(7.dp))
             // 注記：本数・作者・日時（太い丸ゴシック。作者は「…」で詰める）。幅 360dp の端末では 1 行に入らないので、日時は 2 行目に。

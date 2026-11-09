@@ -28,6 +28,36 @@ internal fun sortFace(sort: TowerSort): Color = when (sort) {
     TowerSort.STREAK, TowerSort.NEWEST -> Pop.Navy
 }
 
+/**
+ * 「みんな」の遊び方ごとの色合い（決定 81）。遊び方のランキングを開いた先（断面図の画面・全部の一覧・あなたのタワー）を、
+ * この色でそろえる（下地・断面図の枠・物差しの札・数字・ボタン・一覧の横棒）。前はどの遊び方も同じオレンジのボタンと黄色の札で、
+ * 開いたあとにどの遊び方か分かりにくかった。色は、強すぎて目に痛くならないよう、彩度を落とした落ち着いた色にした：
+ * 通常はやわらかいテラコッタ、90 秒チャレンジはセージ（緑がかった青緑）、毎日 1 つずつ積むはラベンダー（モードを選ぶ画面の色の並びと同じ）
+ *
+ * @property face 塗りの色（白い字を載せる。太字で 3:1 以上）
+ * @property ink  字と縁の色（[tint] の上で 4.5:1 以上）
+ * @property tint 下地のやわらかい色（断面図の枠の面。画面全体には [wash] で薄く敷く）
+ */
+internal class GalleryTheme(val face: Color, val ink: Color, val tint: Color) {
+    /** 画面全体に敷く下地（後ろの方眼と天気がうっすら透ける） */
+    val wash: Color get() = tint.copy(alpha = 0.72f)
+}
+
+/** 遊び方 [mode] の色合い（ライトとダークで別の色） */
+internal fun galleryTheme(mode: TowerMode): GalleryTheme = if (!Fieldbook.dark) {
+    when (mode) {
+        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFC47A50), ink = Color(0xFF9A5634), tint = Color(0xFFF6E4D6))
+        TowerMode.CHALLENGE -> GalleryTheme(face = Color(0xFF4A8F84), ink = Color(0xFF2F6B61), tint = Color(0xFFDCEDE8))
+        TowerMode.DAILY -> GalleryTheme(face = Color(0xFF7A80B8), ink = Color(0xFF545A92), tint = Color(0xFFE5E6F3))
+    }
+} else {
+    when (mode) {
+        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFA8693F), ink = Color(0xFFE9B48F), tint = Color(0xFF3A2D25))
+        TowerMode.CHALLENGE -> GalleryTheme(face = Color(0xFF3D7D72), ink = Color(0xFF93CFC3), tint = Color(0xFF1F3431))
+        TowerMode.DAILY -> GalleryTheme(face = Color(0xFF5E6499), ink = Color(0xFFB9BDE6), tint = Color(0xFF292C42))
+    }
+}
+
 /** 遊び方の色の面（白い字を載せる）：通常はオレンジ、3 分チャレンジは青緑、毎日 1 つずつ積むは紺（モードを選ぶ画面のアイコンと同じ） */
 internal fun modeFace(mode: TowerMode): Color = when (mode) {
     TowerMode.NORMAL -> Pop.OrangeDeep
