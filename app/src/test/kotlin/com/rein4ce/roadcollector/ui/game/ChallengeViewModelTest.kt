@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.ui.game
 import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
+import com.rein4ce.roadcollector.core.challenge.ChallengeStyle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -139,5 +140,34 @@ class ChallengeViewModelTest {
         now += 50_000_000; vm.pause()
         assertEquals(ChallengeRun.Phase.FINISHED, vm.frame!!.phase)
         assertEquals(1, vm.ranking.size)
+    }
+
+    @Test fun `遊び方を選ぶと、その決まりの記録を読み直し、その遊び方で始める（決定 65）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val asked = mutableListOf<String>()
+        val styles = mutableListOf<ChallengeStyle>()
+        val vm = ChallengeViewModel(
+            updateRecords = { listOfNotNull(it) },
+            newRun = { style -> styles += style; ChallengeRun(1, style = style, clock = { now }) },
+            loadRecords = { rule -> asked += rule; emptyList() },
+        )
+        runCurrent()
+        assertEquals(listOf(ChallengeRules.ID), asked)
+        vm.selectStyle(ChallengeStyle.AUTO)
+        runCurrent()
+        assertEquals(ChallengeStyle.AUTO, vm.style)
+        assertEquals(listOf(ChallengeRules.ID, ChallengeRules.AUTO_ID), asked)
+        vm.start(); vm.resume()
+        assertEquals(listOf(ChallengeStyle.AUTO), styles)
+        // 自動で落ちる形は、狙っている間も下がる（フレームではなく ghostY で知らせる）
+        val start = vm.ghostY
+        val frame = vm.frame
+        repeat(5) { now += 50_000_000; vm.tick() }
+        assertTrue(vm.ghostY < start)
+        assertEquals("下がるだけでは、フレームは変わらない", frame, vm.frame)
+        // 遊んでいる間は、遊び方を変えられない
+        vm.selectStyle(ChallengeStyle.MANUAL)
+        assertEquals(ChallengeStyle.AUTO, vm.style)
     }
 }

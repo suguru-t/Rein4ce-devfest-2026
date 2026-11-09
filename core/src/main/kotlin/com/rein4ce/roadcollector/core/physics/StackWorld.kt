@@ -2,11 +2,13 @@ package com.rein4ce.roadcollector.core.physics
 
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Placement
+import org.dyn4j.collision.narrowphase.Gjk
 import org.dyn4j.dynamics.Body
 import org.dyn4j.geometry.Circle
 import org.dyn4j.geometry.Geometry
 import org.dyn4j.geometry.MassType
 import org.dyn4j.geometry.Polygon
+import org.dyn4j.geometry.Transform
 import org.dyn4j.geometry.Vector2
 import org.dyn4j.world.ContactCollisionData
 import org.dyn4j.world.ValueMixer
@@ -90,6 +92,30 @@ class StackWorld(
         scales[body] = scale
         return body
     }
+
+    /**
+     * [part] を ([x], [y]) に [angle] [rad] で置いたとしたら、台か、置いてあるパーツに重なるか（当たり判定の角ばった形どうし）。
+     * 3 分チャレンジの「自動で落ちる」で、下がってくる形が塔や台に触れたかを見るのに使う（決定 65）。ワールドは変えない
+     *
+     * @param scale パーツの大きさ（長辺 [m]）
+     */
+    fun overlaps(part: Part, x: Double, y: Double, angle: Double, scale: Double = 1.0): Boolean {
+        val transform = Transform().apply {
+            rotate(angle)
+            translate(x, y)
+        }
+        val shapes = PartGeometry.collisionShapes(part, scale).map { poly ->
+            Geometry.createPolygon(*poly.points.map { Vector2(it.x, it.y) }.toTypedArray())
+        }
+        for (body in listOf(platform) + placed.keys) {
+            for (fixture in body.fixtures) {
+                for (shape in shapes) if (gjk.detect(shape, transform, fixture.shape, body.transform)) return true
+            }
+        }
+        return false
+    }
+
+    private val gjk = Gjk()
 
     /** 経過時間ぶん進める。内部は固定ステップ（1/60 s）。 */
     fun step(elapsedSeconds: Double) {
