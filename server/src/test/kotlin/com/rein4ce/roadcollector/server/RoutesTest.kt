@@ -116,7 +116,7 @@ class RoutesTest {
     }
 
     @Test
-    fun `遊び方ごとに別の URL で受け、一覧も遊び方ごとに分ける（決定 73）`() = testApplication {
+    fun `遊び方ごとに別の URL で受け、一覧も遊び方ごとに分ける（決定 77）`() = testApplication {
         application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
         client.postTower(sampleTower())
         val challengeRes = client.post("/towers/challenge") {
@@ -150,7 +150,7 @@ class RoutesTest {
     }
 
     @Test
-    fun `毎日 1 つずつ積むは持ち主ごとに 1 基を新しくする（決定 73）`() = testApplication {
+    fun `毎日 1 つずつ積むは持ち主ごとに 1 基を新しくする（決定 77）`() = testApplication {
         application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
         val me = "a".repeat(64)
         suspend fun put(tower: Tower) = client.put("/towers/daily") {

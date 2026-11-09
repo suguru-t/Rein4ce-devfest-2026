@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.gallery
 
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
+import com.rein4ce.roadcollector.ui.game.PlayMode
 import java.time.LocalDate
 
 /**
@@ -19,7 +20,7 @@ internal enum class TowerSort(val label: String, val spoken: String, val topLabe
     PARTS("多い順", "パーツの多い順に並べる", "最多", "本", "あなたの最多"),
 
     /**
-     * 連続日数順（毎日 1 つずつ積むだけ。決定 73）。今も続いている日数（[currentStreak]）で並べる。
+     * 連続日数順（毎日 1 つずつ積むだけ。決定 77）。今も続いている日数（[currentStreak]）で並べる。
      * 最後に積んだ日が今日か昨日なら、その日までの連続日数。それより前なら 0（積むのをやめると、日がたつと 0 になる）
      */
     STREAK("連続日数順", "今も続いている連続日数の多い順に並べる", "最長連続", "日", "あなたの連続"),
@@ -65,7 +66,7 @@ internal enum class TowerSort(val label: String, val spoken: String, val topLabe
         val COMPARABLE: List<TowerSort> = listOf(HEIGHT, PARTS)
 
         /**
-         * 遊び方ごとに、断面図とランキングで選べる並び（決定 73）。
+         * 遊び方ごとに、断面図とランキングで選べる並び（決定 77）。
          * 通常と 3 分チャレンジは高い順・多い順、毎日 1 つずつ積むは高い順・連続日数順
          */
         fun comparableFor(mode: TowerMode): List<TowerSort> = when (mode) {
@@ -75,34 +76,36 @@ internal enum class TowerSort(val label: String, val spoken: String, val topLabe
     }
 }
 
-/** 「みんな」の遊び方の切り替えに出す短い名前（決定 73） */
-internal val TowerMode.shortLabel: String
-    get() = when (this) {
-        TowerMode.NORMAL -> "通常"
-        TowerMode.CHALLENGE -> "3分チャレンジ"
-        TowerMode.DAILY -> "毎日積む"
-    }
-
-/** 遊び方の名前（読み上げ。みちをつむのモードの名前と同じ） */
+/**
+ * 遊び方の名前（みちをつむのモードの名前と同じ。決定 77）。みちをつむの名前（[PlayMode.label]）から取るので、
+ * モードの名前が変わっても（3 分チャレンジ → 90 秒チャレンジなど）ここは直さなくてよい
+ */
 internal val TowerMode.fullLabel: String
-    get() = when (this) {
-        TowerMode.NORMAL -> "通常"
-        TowerMode.CHALLENGE -> "3 分チャレンジ"
-        TowerMode.DAILY -> "毎日 1 つずつ積む"
-    }
+    get() = playModeOf(this).label
+
+/** ランキングの上の個数の行に出す短い名前（空白を詰める。毎日 1 つずつ積むは「毎日積む」） */
+internal val TowerMode.shortLabel: String
+    get() = if (this == TowerMode.DAILY) "毎日積む" else fullLabel.replace(" ", "")
+
+/** 遊び方 → みちをつむのモード（ホームの行の色・アイコン・名前を同じにする） */
+internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
+    TowerMode.NORMAL -> PlayMode.NORMAL
+    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
+    TowerMode.DAILY -> PlayMode.DAILY
+}
 
 /**
- * まだ自分のタワーが無いときの、ランキングに並ぶまでの一言（「〜すると、ここに立ちます」の前半。決定 73）。
+ * まだ自分のタワーが無いときの、ランキングに並ぶまでの一言（「〜すると、ここに立ちます」の前半。決定 77）。
  * 通常は終わりのカードの「保存」で送る。3 分チャレンジと毎日 1 つずつ積むは、結果が出たら・積んで止まったら自動で送る
  */
 internal fun howToSend(mode: TowerMode): String = when (mode) {
     TowerMode.NORMAL -> "積んで「保存」すると"
-    TowerMode.CHALLENGE -> "3 分チャレンジで記録を出すと"
+    TowerMode.CHALLENGE -> "${PlayMode.CHALLENGE.label}で記録を出すと"
     TowerMode.DAILY -> "毎日 1 つずつ積むで積むと"
 }
 
 /**
- * 毎日 1 つずつ積むの、今も続いている連続日数（決定 73）。最後に積んだ日（[TowerSummary.lastDay]）が [today] か前の日なら、
+ * 毎日 1 つずつ積むの、今も続いている連続日数（決定 77）。最後に積んだ日（[TowerSummary.lastDay]）が [today] か前の日なら、
  * その日までの連続日数（[TowerSummary.streakDays]）。それより前・日付が読めない・ほかの遊び方なら 0
  */
 internal fun TowerSummary.currentStreak(today: LocalDate = LocalDate.now()): Int {

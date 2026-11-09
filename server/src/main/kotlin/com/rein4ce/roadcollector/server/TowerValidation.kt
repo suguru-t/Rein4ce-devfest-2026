@@ -20,7 +20,7 @@ const val MAX_TOWER_PARTS = 100
 
 /**
  * 配置（台に残った数）の上限。同じパーツを何度も置けるので（通常は全部のパーツから出し、3 分チャレンジは 5 種類の形をくり返す）、
- * パーツの種類より多くなる。前はパーツと同じ 100 で、通常で 100 個を超えて積むと「保存」が 400 で断られていた（決定 73）。
+ * パーツの種類より多くなる。前はパーツと同じ 100 で、通常で 100 個を超えて積むと「保存」が 400 で断られていた（決定 77）。
  * 配置は 1 つ 100 バイトほどなので、500 個でも 50 KB ほど
  */
 const val MAX_TOWER_PLACEMENTS = 500
@@ -96,7 +96,7 @@ internal fun Tower.validationError(): String? {
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
     val o = ownerId
     if (o != null && !OWNER_ID_PATTERN.matches(o)) return "ownerId must be 64 hex chars"
-    // 遊び方ごとに要るもの（決定 73）
+    // 遊び方ごとに要るもの（決定 77）
     when (mode) {
         TowerMode.NORMAL -> Unit
         TowerMode.CHALLENGE -> {

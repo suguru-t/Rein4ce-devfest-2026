@@ -20,7 +20,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
  * 物差しの色の面（白い字を載せる）：高い順はオレンジ、多い順は青緑、新しい順は紺。
- * 連続日数順も紺（毎日 1 つずつ積むの札の色。新しい順と同じ画面には並ばない。決定 73）
+ * 連続日数順も紺（毎日 1 つずつ積むの札の色。新しい順と同じ画面には並ばない。決定 77）
  */
 internal fun sortFace(sort: TowerSort): Color = when (sort) {
     TowerSort.HEIGHT -> Pop.OrangeDeep
@@ -62,7 +62,7 @@ internal fun TowerMeta(
     val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
     val parts: @Composable () -> Unit = {
         if (tower.mode == TowerMode.DAILY) {
-            // 毎日 1 つずつ積むは、本数の代わりに今も続いている連続日数（決定 73。1 日 1 つなので、本数はほぼ積んだ日数と同じ）
+            // 毎日 1 つずつ積むは、本数の代わりに今も続いている連続日数（決定 77。1 日 1 つなので、本数はほぼ積んだ日数と同じ）
             MetaText("連続 ${tower.currentStreak()} 日", strong = sort == TowerSort.STREAK)
         } else {
             MetaText(if (partsLabel) "パーツ ${tower.partCount} 本" else "${tower.partCount} 本", strong = sort == TowerSort.PARTS)

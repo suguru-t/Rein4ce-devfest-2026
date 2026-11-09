@@ -22,7 +22,7 @@ data class Placement(
 )
 
 /**
- * タワーを積んだ遊び方（決定 73）。「みんな」は遊び方ごとに別のランキングにする（みちをつむの 3 つのモードに合わせる）。
+ * タワーを積んだ遊び方（決定 77）。「みんな」は遊び方ごとに別のランキングにする（みちをつむの 3 つのモードに合わせる）。
  * 送る先もサーバの保存先も遊び方ごとに分ける（通常は `POST /towers`、3 分チャレンジは `POST /towers/challenge`、
  * 毎日 1 つずつ積むは `PUT /towers/daily`）。遊び方を入れる前のタワーには無いので、通常
  */
@@ -48,7 +48,7 @@ enum class TowerMode(val wire: String) {
  *   1 基の JSON では null にして返す）。古いアプリは送らないので null
  * @property platformWidth 台の幅 [m]。積む画面の通常（#108・決定 62）は広い台（2.8 m）で積むので、送ったあとの絵（「みんな」・共有ページ）も
  *   同じ幅の台で描くために持つ（決定 66）。入れる前のタワーには無いので、今までの台の幅（[StackWorld.PLATFORM_WIDTH]、1.4 m）
- * @property mode 積んだ遊び方（決定 73）。入れる前のタワーは通常
+ * @property mode 積んだ遊び方（決定 77）。入れる前のタワーは通常
  * @property rule 3 分チャレンジの決まりの ID（`manual-180-v6` など）。決まりが違う記録は同じランキングに混ぜない。ほかの遊び方は null
  * @property streakDays 毎日 1 つずつ積むの、最後に積んだ日（[lastDay]）までの連続日数。「今も続いている日数」は見るときに、
  *   [lastDay] が今日か昨日なら [streakDays]、それより前なら 0 と決める（送ったあとに積むのをやめると、日がたつと 0 になる）
@@ -74,7 +74,7 @@ data class Tower(
 /**
  * ギャラリー一覧用の軽い形。
  * @property mine 一覧を取ったアプリ（X-Owner-Id ヘッダの持ち主）が送ったタワーなら true。持ち主の印そのものは入れない
- * @property mode・rule・streakDays・lastDay は [Tower] と同じ（決定 73）
+ * @property mode・rule・streakDays・lastDay は [Tower] と同じ（決定 77）
  */
 @Serializable
 data class TowerSummary(

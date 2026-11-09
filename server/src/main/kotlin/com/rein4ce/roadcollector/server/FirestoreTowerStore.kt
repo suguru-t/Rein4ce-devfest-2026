@@ -19,7 +19,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Firestore 版。コレクション `towers`（TOWER_COLLECTION で変更可）に 1 タワー 1 ドキュメント。
- * 遊び方ごとにコレクションを分ける（決定 73）：通常は `towers`、3 分チャレンジは `towers_challenge`、毎日 1 つずつ積むは `towers_daily`。
+ * 遊び方ごとにコレクションを分ける（決定 77）：通常は `towers`、3 分チャレンジは `towers_challenge`、毎日 1 つずつ積むは `towers_daily`。
  * 1 つのコレクションに遊び方の項目を入れて絞ると、「遊び方 ＋ 新しい順」の複合インデックスを Firestore に作る手間が要るのと、
  * 今までのタワーには遊び方の項目が無いため。分けておけば、どのコレクションも今までと同じ「新しい順」だけで並べられる
  *
@@ -72,7 +72,7 @@ class FirestoreTowerStore(
     }
 
     /**
-     * 毎日 1 つずつ積む：同じ持ち主の 1 基を新しい形にする（決定 73）。持ち主の印で 1 件だけ探し（等しいかだけの問い合わせなので、
+     * 毎日 1 つずつ積む：同じ持ち主の 1 基を新しい形にする（決定 77）。持ち主の印で 1 件だけ探し（等しいかだけの問い合わせなので、
      * Firestore が自動で作る 1 項目のインデックスで足りる）、あれば同じ id のまま上書き、無ければ作る
      */
     override suspend fun putDaily(tower: Tower): Tower {
@@ -137,7 +137,7 @@ class FirestoreTowerStore(
         "author" to author,
         // 持ち主の印（アプリが端末ごとに作るハッシュ。古いアプリからは null）。一覧の「あなた」の判定に使う
         "ownerId" to ownerId,
-        // 3 分チャレンジの決まりの ID と、毎日 1 つずつ積むの連続日数・最後に積んだ日（決定 73。ほかの遊び方は null と 0）
+        // 3 分チャレンジの決まりの ID と、毎日 1 つずつ積むの連続日数・最後に積んだ日（決定 77。ほかの遊び方は null と 0）
         "rule" to rule,
         "streakDays" to streakDays,
         "lastDay" to lastDay,
@@ -149,7 +149,7 @@ class FirestoreTowerStore(
         /** 一覧で Firestore から取る項目。json は含めない */
         val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author", "ownerId", "rule", "streakDays", "lastDay")
 
-        /** 遊び方 [mode] のコレクションの名前。通常は [base] のまま、ほかは `_challenge`・`_daily` を付ける（決定 73） */
+        /** 遊び方 [mode] のコレクションの名前。通常は [base] のまま、ほかは `_challenge`・`_daily` を付ける（決定 77） */
         fun collectionFor(base: String, mode: TowerMode): String =
             if (mode == TowerMode.NORMAL) base else "${base}_${mode.wire}"
 

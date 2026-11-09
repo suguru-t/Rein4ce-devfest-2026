@@ -127,7 +127,7 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 
 名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
 
-## 遊び方ごとの URL（決定 73）
+## 遊び方ごとの URL（決定 77）
 
 「みんな」は遊び方（通常・3 分チャレンジ・毎日 1 つずつ積む）ごとに別のランキング。送る URL と Firestore のコレクションも分ける。
 
@@ -145,7 +145,7 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 
 | 断るもの | 上限・条件 |
 |---|---|
-| パーツ・配置が空、または多すぎ | パーツの種類は 1〜100 個（`MAX_TOWER_PARTS`。決定 66）、配置は 1〜500 個（`MAX_TOWER_PLACEMENTS`。同じパーツを何度も置けるので、種類より多い。決定 73） |
+| パーツ・配置が空、または多すぎ | パーツの種類は 1〜100 個（`MAX_TOWER_PARTS`。決定 66）、配置は 1〜500 個（`MAX_TOWER_PLACEMENTS`。同じパーツを何度も置けるので、種類より多い。決定 77） |
 | 3 分チャレンジの決まりの ID が無い・長すぎ | 1〜40 文字（`MAX_RULE_LENGTH`） |
 | 毎日 1 つずつ積むの持ち主の印・最後に積んだ日・連続日数が無い・おかしい | 印は必須、日は `yyyy-mm-dd`、連続日数は 1〜36500 |
 | 台の幅（`platformWidth`）がおかしい | 0.5〜10 m（`MIN_PLATFORM_WIDTH`〜`MAX_PLATFORM_WIDTH`。無ければ 1.4 m） |

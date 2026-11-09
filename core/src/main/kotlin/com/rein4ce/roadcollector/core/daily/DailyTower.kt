@@ -32,7 +32,7 @@ data class DailyBlock(
  * @property height 止まったときの塔の高さ [m]（台の上面からいちばん上まで。選ぶ画面のカードに出す）
  * @property fellDay 今日のパーツが台から落ちた日（[fellCount] を数えている日。"2026-11-10"）
  * @property fellCount [fellDay] に今日のパーツが台から落ちた回数。保存するので、画面を出入りしても置き直しは増えない
- * @property sentDay 「みんな」のランキングに送れた塔の、最後に積んだ日（[lastDay]）。これと違えば、まだ送っていない形がある（決定 73）
+ * @property sentDay 「みんな」のランキングに送れた塔の、最後に積んだ日（[lastDay]）。これと違えば、まだ送っていない形がある（決定 77）
  */
 @Serializable
 data class DailyTower(
@@ -65,7 +65,7 @@ data class DailyTower(
     val lastDay: String? get() = blocks.maxOfOrNull { it.day }
 
     /**
-     * 最後に積んだ日（[lastDay]）までの連続日数（決定 73）。最後に積んだ日から 1 日ずつさかのぼって、積んだ日が続くあいだを数える。
+     * 最後に積んだ日（[lastDay]）までの連続日数（決定 77）。最後に積んだ日から 1 日ずつさかのぼって、積んだ日が続くあいだを数える。
      * 積んでいなければ 0
      */
     val streakDays: Int
@@ -84,7 +84,7 @@ data class DailyTower(
     val needsSend: Boolean get() = lastDay != null && sentDay != lastDay
 
     /**
-     * 「みんな」に送るタワー（決定 73）。パーツは同じものを 1 つにまとめ、配置は積んだ数だけ。
+     * 「みんな」に送るタワー（決定 77）。パーツは同じものを 1 つにまとめ、配置は積んだ数だけ。
      * スマホ 1 台につき 1 基で、送るたびにサーバの同じ 1 基を新しい形にする（`PUT /towers/daily`）
      *
      * @param platformWidth 台の幅 [m]（通常と同じ 2.8 m。決定 71）

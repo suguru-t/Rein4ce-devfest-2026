@@ -54,12 +54,12 @@ class ChallengeViewModel(
     /** [ChallengeStyle] ごとの記録を読む（決まりの ID）。渡さなければ、自分で落とすの記録（テスト） */
     private val loadRecords: suspend (String) -> List<ChallengeScore> = { updateRecords(null) },
     /**
-     * 記録になった回の塔を「みんな」の 3 分チャレンジのランキングに送る（決定 73。画面からは ApiClient.postChallengeTower）。
+     * 記録になった回の塔を「みんな」の 3 分チャレンジのランキングに送る（決定 77。画面からは ApiClient.postChallengeTower）。
      * 結果が出たら自動で 1 回送る。null なら送らない（テスト）
      */
     private val sendTower: (suspend (Tower) -> TowerCreated)? = null,
 ) : ViewModel() {
-    /** 「みんな」に送ったようす（決定 73） */
+    /** 「みんな」に送ったようす（決定 77） */
     enum class SendState { IDLE, SENDING, SENT, FAILED }
 
     /** 今の回の塔を「みんな」に送ったようす。新しい回を始めたら IDLE に戻る */

@@ -44,7 +44,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * 「みんな」のホーム（決定 73）。みちをつむの、遊び方を選ぶ画面（ui/game/ModeSelect.kt の ModeSelectScreen）と同じ組み方：
+ * 「みんな」のホーム（決定 77）。みちをつむの、遊び方を選ぶ画面（ui/game/ModeSelect.kt の ModeSelectScreen）と同じ組み方：
  * - 上の部分：積み木で作った塔の絵（[RankingArt]）、大きな画面名「みんなのタワー」（ほかの画面と同じ積み木）、「どのランキングを見に行く？」
  * - 下に、遊び方の行（みちをつむと同じ行。左に色の積み木とアイコン、右に紙のカード：名前・一言・そのランキングのようす）
  * 行を押すと、その遊び方のランキング（断面図と「ランキングを見る」「あなたのタワー」）へ行き、「‹ 戻る」でここに戻る。
@@ -169,29 +169,22 @@ private fun DrawScope.star(color: Color, cx: Float, cy: Float, r: Float, tilt: F
     drawPath(path(0f), color)
 }
 
-/** 遊び方 → みちをつむのモード（行の色・アイコン・名前を同じにする） */
-private fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
-    TowerMode.NORMAL -> PlayMode.NORMAL
-    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
-    TowerMode.DAILY -> PlayMode.DAILY
-}
-
 /** ホームの行の一言（そのランキングで何を比べるか） */
 private fun rankingNote(mode: TowerMode): String = when (mode) {
     TowerMode.NORMAL -> "みんなの塔を、高さと本数で比べる"
-    TowerMode.CHALLENGE -> "3 分で積んだ高さと本数を比べる"
+    TowerMode.CHALLENGE -> "時間内に積んだ高さと本数を比べる"
     TowerMode.DAILY -> "育てた塔の高さと、続けた日数を比べる"
 }
 
 /**
- * ランキングに並べるタワー（[state] が取れていれば）。3 分チャレンジは今の決まりの記録だけ（決まりが違う記録は混ぜない。決定 73）
+ * ランキングに並べるタワー（[state] が取れていれば）。3 分チャレンジは今の決まりの記録だけ（決まりが違う記録は混ぜない。決定 77）
  */
 internal fun rankedTowers(state: TowerGallery.State, mode: TowerMode): List<TowerSummary> =
     (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
         .filter { mode != TowerMode.CHALLENGE || it.rule == ChallengeRules.ID }
 
 /**
- * ホームの行に出す、そのランキングのようす（決定 73）。自分のタワーがあれば自分の最高と順位（毎日は自分の塔と連続日数）、
+ * ホームの行に出す、そのランキングのようす（決定 77）。自分のタワーがあれば自分の最高と順位（毎日は自分の塔と連続日数）、
  * 無ければ 1 番の高さと数。読み込み中・つながらない・まだ無い、のときはその一言
  */
 internal fun homeRecord(state: TowerGallery.State, mode: TowerMode, isMine: (TowerSummary) -> Boolean): String {

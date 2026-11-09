@@ -50,7 +50,7 @@ object ApiClient {
     suspend fun ping(): String = client.get("$baseUrl/").body()
 
     /**
-     * [mode] の遊び方の一覧（決定 73）。持ち主の印をヘッダで送ると、自分が送ったタワーに mine が付いて返る（サーバの OWNER_HEADER と同じ名前）。
+     * [mode] の遊び方の一覧（決定 77）。持ち主の印をヘッダで送ると、自分が送ったタワーに mine が付いて返る（サーバの OWNER_HEADER と同じ名前）。
      * 遊び方を知らない前のサーバは mode を見ずに通常の一覧を返すので、受け取ったあと遊び方で絞る（遊び方の無い行は通常）
      */
     suspend fun listTowers(mode: TowerMode = TowerMode.NORMAL): List<TowerSummary> =
@@ -96,7 +96,7 @@ object ApiClient {
         }.body<TowerCreated>().also { onPosted(it, TowerMode.NORMAL) }
 
     /**
-     * 3 分チャレンジの塔を送る（POST /towers/challenge。決定 73）。結果が出たら自動で送る（ChallengeViewModel）。
+     * 3 分チャレンジの塔を送る（POST /towers/challenge。決定 77）。結果が出たら自動で送る（ChallengeViewModel）。
      * 作者名・持ち主の印・時刻の丸めは [postTower] と同じ
      */
     suspend fun postChallengeTower(tower: Tower): TowerCreated =
@@ -106,7 +106,7 @@ object ApiClient {
         }.body<TowerCreated>().also { onPosted(it, TowerMode.CHALLENGE) }
 
     /**
-     * 毎日 1 つずつ積むの塔を送る（PUT /towers/daily。決定 73）。サーバは持ち主の印ごとに 1 基を持ち、送るたびに新しい形にする。
+     * 毎日 1 つずつ積むの塔を送る（PUT /towers/daily。決定 77）。サーバは持ち主の印ごとに 1 基を持ち、送るたびに新しい形にする。
      * 積んで止まったら自動で送る（DailyViewModel）
      */
     suspend fun putDailyTower(tower: Tower): TowerCreated =

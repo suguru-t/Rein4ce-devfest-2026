@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory
  *
  * どちらを使うかは [TowerStore.fromEnvironment] が決める。
  *
- * 遊び方（[TowerMode]。通常・3 分チャレンジ・毎日 1 つずつ積む）ごとに分けて持ち、一覧も遊び方ごとに返す（決定 73）。
+ * 遊び方（[TowerMode]。通常・3 分チャレンジ・毎日 1 つずつ積む）ごとに分けて持ち、一覧も遊び方ごとに返す（決定 77）。
  */
 interface TowerStore {
     /**
@@ -25,7 +25,7 @@ interface TowerStore {
     suspend fun add(tower: Tower): Tower
 
     /**
-     * 毎日 1 つずつ積むの塔を、持ち主（[Tower.ownerId]）ごとに 1 基だけ持つ（決定 73）。同じ持ち主の塔があれば、その id のまま
+     * 毎日 1 つずつ積むの塔を、持ち主（[Tower.ownerId]）ごとに 1 基だけ持つ（決定 77）。同じ持ち主の塔があれば、その id のまま
      * 新しい形にし、無ければ id を振って作る。ownerId が無いタワーは渡さない（Routes の検査で断る）
      */
     suspend fun putDaily(tower: Tower): Tower

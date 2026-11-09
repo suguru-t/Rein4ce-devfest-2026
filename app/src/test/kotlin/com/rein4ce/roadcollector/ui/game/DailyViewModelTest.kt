@@ -119,7 +119,7 @@ class DailyViewModelTest {
         assertEquals(yesterday, kept.placement)
     }
 
-    @Test fun `今日のパーツが台に残ったら、塔を自動で「みんな」に送り、送れた日を残す（決定 73）`() {
+    @Test fun `今日のパーツが台に残ったら、塔を自動で「みんな」に送り、送れた日を残す（決定 77）`() {
         val sent = java.util.concurrent.CopyOnWriteArrayList<com.rein4ce.roadcollector.core.model.Tower>()
         val text = AppJson.encodeToString(DailyTower.serializer(), DailyTower())
         val store = DailyTowerStore(read = { text }, write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) }, quarantine = {})

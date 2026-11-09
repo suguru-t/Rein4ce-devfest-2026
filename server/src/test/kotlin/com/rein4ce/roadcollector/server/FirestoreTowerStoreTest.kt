@@ -44,7 +44,7 @@ class FirestoreTowerStoreTest {
     }
 
     @Test
-    fun `遊び方ごとに別のコレクションを新しい順に読む（決定 73）`() {
+    fun `遊び方ごとに別のコレクションを新しい順に読む（決定 77）`() {
         val s = store("towers")
         for ((mode, name) in listOf(TowerMode.NORMAL to "towers", TowerMode.CHALLENGE to "towers_challenge", TowerMode.DAILY to "towers_daily")) {
             val q = s.summariesQuery(mode).toProto().structuredQuery

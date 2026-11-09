@@ -195,7 +195,7 @@ class ChallengeViewModelTest {
         assertEquals(ChallengeRun.Phase.FALLING, vm.frame!!.phase)
     }
 
-    @Test fun `記録になった回の塔は、自動で 1 回だけ「みんな」に送り、送れなければもう一度送れる（決定 73）`() = runTest {
+    @Test fun `記録になった回の塔は、自動で 1 回だけ「みんな」に送り、送れなければもう一度送れる（決定 77）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val sent = mutableListOf<Tower>()

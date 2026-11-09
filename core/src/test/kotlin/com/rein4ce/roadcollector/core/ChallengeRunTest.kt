@@ -123,7 +123,7 @@ class ChallengeRunTest {
         assertEquals("manual-180-v6", ChallengeRules.ID)
     }
 
-    @Test fun `記録になった回は、止まった塔を「みんな」に送る形で持つ（決定 73）`() {
+    @Test fun `記録になった回は、止まった塔を「みんな」に送る形で持つ（決定 77）`() {
         var now = 0L
         val run = ChallengeRun(5, clock = { now }, wallClock = { 42 })
         run.resume()

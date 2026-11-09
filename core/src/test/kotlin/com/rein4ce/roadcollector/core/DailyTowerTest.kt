@@ -102,7 +102,7 @@ class DailyTowerTest {
     }
 
     @Test
-    fun `連続日数は、最後に積んだ日からさかのぼって途切れずに積んだ日数（決定 73）`() {
+    fun `連続日数は、最後に積んだ日からさかのぼって途切れずに積んだ日数（決定 77）`() {
         assertEquals(0, DailyTower().streakDays)
         val tower = DailyTower(listOf(block("a", "2026-11-05"), block("b", "2026-11-07"), block("c", "2026-11-08"), block("d", "2026-11-09")))
         assertEquals(3, tower.streakDays)
@@ -112,7 +112,7 @@ class DailyTowerTest {
     }
 
     @Test
-    fun `「みんな」に送る形：パーツは 1 つにまとめ、配置は積んだ数だけ、まだ送っていない形があるか（決定 73）`() {
+    fun `「みんな」に送る形：パーツは 1 つにまとめ、配置は積んだ数だけ、まだ送っていない形があるか（決定 77）`() {
         val tower = DailyTower(listOf(block("a", "2026-11-09", y = 0.1f), block("b", "2026-11-10", y = 0.3f)), height = 0.6)
         assertTrue(tower.needsSend)
         val sent = tower.toTower(platformWidth = 2.8, createdAt = 7L)

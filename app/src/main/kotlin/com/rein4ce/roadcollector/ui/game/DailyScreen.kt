@@ -151,7 +151,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                     DailyViewModel.Phase.Viewing -> when {
                         vm.placedToday -> {
                             Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
-                            // 積んで止まったら、自動で「みんな」に送る（決定 73）。送ったようすと「ランキング」
+                            // 積んで止まったら、自動で「みんな」に送る（決定 77）。送ったようすと「ランキング」
                             DailySendRow(vm, onGoRanking)
                         }
                         !vm.canPlaceToday -> Note(
@@ -210,7 +210,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
 }
 
 /**
- * 「みんな」に送ったようす（送っています・ランキングに出しました・送れませんでした）と、毎日 1 つずつ積むのランキングへのボタン（決定 73）。
+ * 「みんな」に送ったようす（送っています・ランキングに出しました・送れませんでした）と、毎日 1 つずつ積むのランキングへのボタン（決定 77）。
  * 送れなかったときは「もう一度送る」
  */
 @Composable

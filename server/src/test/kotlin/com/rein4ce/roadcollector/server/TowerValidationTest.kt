@@ -74,14 +74,14 @@ class TowerValidationTest {
     }
 
     @Test
-    fun `配置はパーツの種類より多くてよい（500 個まで。決定 73）`() {
+    fun `配置はパーツの種類より多くてよい（500 個まで。決定 77）`() {
         // 通常で 100 個を超えて積むと、前は「保存」が断られていた
         assertNull(ok.copy(placements = List(MAX_TOWER_PLACEMENTS) { ok.placements[0] }).validationError())
         assertEquals(500, MAX_TOWER_PLACEMENTS)
     }
 
     @Test
-    fun `3 分チャレンジは決まりの ID が要る（決定 73）`() {
+    fun `3 分チャレンジは決まりの ID が要る（決定 77）`() {
         val challenge = ok.copy(mode = TowerMode.CHALLENGE, rule = "manual-180-v6")
         assertNull(challenge.validationError())
         bad(challenge.copy(rule = null), "needs rule")
@@ -90,7 +90,7 @@ class TowerValidationTest {
     }
 
     @Test
-    fun `毎日 1 つずつ積むは持ち主の印・最後に積んだ日・連続日数が要る（決定 73）`() {
+    fun `毎日 1 つずつ積むは持ち主の印・最後に積んだ日・連続日数が要る（決定 77）`() {
         val daily = ok.copy(mode = TowerMode.DAILY, ownerId = "a".repeat(64), lastDay = "2026-11-10", streakDays = 3)
         assertNull(daily.validationError())
         bad(daily.copy(ownerId = null), "needs ownerId")

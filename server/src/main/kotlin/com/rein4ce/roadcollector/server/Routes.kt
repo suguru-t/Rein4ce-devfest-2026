@@ -31,11 +31,11 @@ import kotlinx.coroutines.withContext
  *   GET  /                     動作確認
  *   GET  /health               ヘルスチェック（/healthz は Cloud Run の予約パスで届かないため使わない）
  *   GET  /towers               一覧（新しい順）。X-Owner-Id ヘッダ（アプリの持ち主の印）を送ると、自分が送ったタワーに mine: true が付く。
- *                              ?mode=normal|challenge|daily で遊び方を選ぶ（無ければ通常。決定 73）。知らない値は 400
+ *                              ?mode=normal|challenge|daily で遊び方を選ぶ（無ければ通常。決定 77）。知らない値は 400
  *   POST /towers               通常のタワーを保存 → 201 { id, url }。壊れたタワー（空・多すぎ・NaN・知らない partId など）は 400（TowerValidation.kt）。
  *                              ownerId（持ち主の印）は保存するが、どの応答にも入れない。通常でないタワー（mode が challenge・daily）は 400
- *   POST /towers/challenge     3 分チャレンジのタワーを保存 → 201 { id, url }（決定 73）。決まりの ID（rule）が要る
- *   PUT  /towers/daily         毎日 1 つずつ積むの塔を、持ち主ごとに 1 基だけ持つ → 200 { id, url }（決定 73）。同じ持ち主の塔があれば、その id のまま
+ *   POST /towers/challenge     3 分チャレンジのタワーを保存 → 201 { id, url }（決定 77）。決まりの ID（rule）が要る
+ *   PUT  /towers/daily         毎日 1 つずつ積むの塔を、持ち主ごとに 1 基だけ持つ → 200 { id, url }（決定 77）。同じ持ち主の塔があれば、その id のまま
  *                              新しい形にする。持ち主の印（ownerId）・最後に積んだ日（lastDay）・連続日数（streakDays）が要る。
  *                              通常と URL を分けたのは、遊び方を知らない前のサーバに送っても 404 になり、通常のランキングに混ざらないようにするため
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON（ownerId は null にして返す）。どの遊び方のタワーでも
@@ -60,7 +60,7 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
 
     get("/towers") {
         if (call.overLimit(limits.towersGet)) return@get
-        // 遊び方（決定 73）。無ければ通常（前のアプリは付けずに取りに来る）
+        // 遊び方（決定 77）。無ければ通常（前のアプリは付けずに取りに来る）
         val modeParam = call.request.queryParameters["mode"]
         val mode = if (modeParam == null) TowerMode.NORMAL else TowerMode.of(modeParam)
         if (mode == null) {

@@ -120,7 +120,7 @@ class GalleryOrderTest {
     }
 
     @Test
-    fun `連続日数は、最後に積んだ日が今日か昨日のときだけ数える（決定 73）`() {
+    fun `連続日数は、最後に積んだ日が今日か昨日のときだけ数える（決定 77）`() {
         val today = java.time.LocalDate.parse("2026-11-10")
         fun daily(last: String?, streak: Int) = tower("d", 1f).copy(mode = TowerMode.DAILY, lastDay = last, streakDays = streak)
         assertEquals(4, daily("2026-11-10", 4).currentStreak(today))
@@ -131,7 +131,7 @@ class GalleryOrderTest {
     }
 
     @Test
-    fun `遊び方ごとの物差し：通常と 3 分チャレンジは高い順・多い順、毎日は高い順・連続日数順（決定 73）`() {
+    fun `遊び方ごとの物差し：通常と 3 分チャレンジは高い順・多い順、毎日は高い順・連続日数順（決定 77）`() {
         assertEquals(listOf(TowerSort.HEIGHT, TowerSort.PARTS), TowerSort.comparableFor(TowerMode.NORMAL))
         assertEquals(listOf(TowerSort.HEIGHT, TowerSort.PARTS), TowerSort.comparableFor(TowerMode.CHALLENGE))
         assertEquals(listOf(TowerSort.HEIGHT, TowerSort.STREAK), TowerSort.comparableFor(TowerMode.DAILY))
@@ -147,7 +147,7 @@ class GalleryOrderTest {
     }
 
     @Test
-    fun `ホームの行のようす：自分のがあれば最高と順位、無ければ 1 番、3 分チャレンジは今の決まりだけ（決定 73）`() {
+    fun `ホームの行のようす：自分のがあれば最高と順位、無ければ 1 番、3 分チャレンジは今の決まりだけ（決定 77）`() {
         val loaded = TowerGallery.State.Loaded(listOf(tower("a", 3f), tower("b", 2f), tower("c", 1f)))
         assertEquals("あなたの最高 2.00 m・2 位", homeRecord(loaded, TowerMode.NORMAL) { it.id == "b" })
         assertEquals("1 位 3.00 m・全部で 3 個", homeRecord(loaded, TowerMode.NORMAL) { false })

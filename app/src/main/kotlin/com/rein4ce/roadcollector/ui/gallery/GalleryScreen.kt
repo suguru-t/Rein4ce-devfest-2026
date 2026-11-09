@@ -97,7 +97,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     val context = LocalContext.current
     val app = RoadCollectorApp.from(context)
     val state = gallery.state
-    // いま見ている遊び方（ホームで選んだランキング。決定 73）。3 分チャレンジは、今の決まりの記録だけを並べる（決まりが違う記録は混ぜない）
+    // いま見ている遊び方（ホームで選んだランキング。決定 77）。3 分チャレンジは、今の決まりの記録だけを並べる（決まりが違う記録は混ぜない）
     val mode = gallery.mode
     val towers = rankedTowers(state, mode)
     // 自分のタワー：サーバの答え（持ち主の印が同じ）か、この端末から送った記録（data/MyTowers）のどちらか
@@ -122,7 +122,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     }
 
     // 物差しと、どの画面を開いているか（最初の画面・ランキング・あなたのタワー）。タブを行き来しても、画面を回しても残す。
-    // 物差しは遊び方ごとに持つ（毎日 1 つずつ積むだけ連続日数順がある。決定 73）
+    // 物差しは遊び方ごとに持つ（毎日 1 つずつ積むだけ連続日数順がある。決定 77）
     var normalSort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
     var challengeSort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
     var dailySort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
@@ -144,7 +144,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     val mineSort = mineSortChosen.takeIf { it == TowerSort.NEWEST || it in TowerSort.comparableFor(mode) } ?: TowerSort.NEWEST
 
     // 紙片を開いているタワーと、ニックネームの窓。
-    // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、紙片ではなく画面いっぱいに塔の全体を出す（決定 73）
+    // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、紙片ではなく画面いっぱいに塔の全体を出す（決定 77）
     var opened by remember { mutableStateOf<TowerSummary?>(null) }
     var showNickname by remember { mutableStateOf(false) }
 
@@ -213,7 +213,7 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
 }
 
 /**
- * 「みんな」の中の画面。ホーム（どのランキングを見に行くか。決定 73）から遊び方の最初の画面（断面図）へ、
+ * 「みんな」の中の画面。ホーム（どのランキングを見に行くか。決定 77）から遊び方の最初の画面（断面図）へ、
  * そこからランキングと「あなたのタワー」へ行き、戻るで帰る
  */
 private enum class GalleryPage { HOME, OVERVIEW, RANKING, MINE }
@@ -259,7 +259,7 @@ private fun Overview(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 73）、右にリロードのブロック
+        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 77）、右にリロードのブロック
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
             PopTag("${mode.fullLabel}のランキング", face = modeFace(mode), fontSize = 12.sp, tiltDeg = 2f)
@@ -316,7 +316,7 @@ private fun Overview(
                             progress = { intro.value },
                             onTap = onOpen,
                             // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、高すぎるときは頂上のあたりだけを読める大きさで映す。
-                            // 押すと画面いっぱいに全体（TowerFullView。決定 73）
+                            // 押すと画面いっぱいに全体（TowerFullView。決定 77）
                             topWindow = mode != TowerMode.NORMAL,
                             // weight は fill=false にして（fill=true だと高さが決め打ちの制約になり、heightIn(max) が効かない）、
                             // 上限を掛けたあとに fillMaxHeight で「残りか上限の小さいほう」の高さを取る
@@ -539,7 +539,7 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
 }
 
 /**
- * 3 分チャレンジと毎日 1 つずつ積むのタワーを、画面いっぱいに出す（決定 73）。断面図には頂上のあたりしか映らないので、
+ * 3 分チャレンジと毎日 1 つずつ積むのタワーを、画面いっぱいに出す（決定 77）。断面図には頂上のあたりしか映らないので、
  * 押すとここで塔の全体を見せる。中身は紙片（[TowerSheet]）と同じで、絵だけが画面の残り全部を使う。「× 閉じる」か戻るで閉じる
  */
 @Composable

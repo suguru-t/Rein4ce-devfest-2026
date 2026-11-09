@@ -41,14 +41,14 @@ class DailyViewModel(
     private val store: DailyTowerStore,
     private val today: () -> String = { LocalDate.now().toString() },
     /**
-     * 塔を「みんな」の毎日 1 つずつ積むのランキングに送る（決定 73。画面からは ApiClient.putDailyTower。サーバは持ち主ごとに 1 基を新しくする）。
+     * 塔を「みんな」の毎日 1 つずつ積むのランキングに送る（決定 77。画面からは ApiClient.putDailyTower。サーバは持ち主ごとに 1 基を新しくする）。
      * 積んで止まったら自動で送る。前に送れなかった形があれば、開いたときにも送る。null なら送らない（テスト）
      */
     private val sendTower: (suspend (Tower) -> TowerCreated)? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
-    /** 「みんな」に送ったようす（決定 73） */
+    /** 「みんな」に送ったようす（決定 77） */
     enum class SendState { IDLE, SENDING, SENT, FAILED }
 
     var sendState by mutableStateOf(SendState.IDLE)
@@ -118,7 +118,7 @@ class DailyViewModel(
     }
 
     /**
-     * まだ「みんな」に送っていない形があれば送る（決定 73）。送れたら、送った日（[DailyTower.sentDay]）を塔と一緒に保存する。
+     * まだ「みんな」に送っていない形があれば送る（決定 77）。送れたら、送った日（[DailyTower.sentDay]）を塔と一緒に保存する。
      * 送れなかったら [SendState.FAILED]（画面の「もう一度送る」か、次に開いたときに送り直す）
      */
     fun sendIfNeeded() {
@@ -256,7 +256,7 @@ class DailyViewModel(
         }
         viewModelScope.launch {
             saveFailed = runCatching { store.save(next) }.isFailure
-            // 今日のパーツが残ったら、新しい形を「みんな」に送る（決定 73）
+            // 今日のパーツが残ったら、新しい形を「みんな」に送る（決定 77）
             if (!lastFell) sendIfNeeded()
         }
     }

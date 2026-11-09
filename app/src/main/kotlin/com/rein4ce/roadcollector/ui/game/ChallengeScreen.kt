@@ -115,7 +115,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
                 ChallengeStorage(directory).let { storage ->
-                    // 記録になった回の塔は、自動で「みんな」の 3 分チャレンジのランキングに送る（決定 73）
+                    // 記録になった回の塔は、自動で「みんな」の 3 分チャレンジのランキングに送る（決定 77）
                     ChallengeViewModel(storage::update, loadRecords = storage::ranking, sendTower = { ApiClient.postChallengeTower(it) })
                 } as T
         }
@@ -466,7 +466,7 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
-            // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 73）
+            // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 77）
             PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = rankingInk(), edge = rankingInk())
         }
         Spacer(Modifier.height(8.dp))
@@ -475,7 +475,7 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
 }
 
 /**
- * 「みんな」に送ったようす（決定 73）：送っています・ランキングに出しました・送れませんでした（「もう一度送る」）。
+ * 「みんな」に送ったようす（決定 77）：送っています・ランキングに出しました・送れませんでした（「もう一度送る」）。
  * 記録になった回の塔は、結果が出たら自動で送る
  */
 @Composable

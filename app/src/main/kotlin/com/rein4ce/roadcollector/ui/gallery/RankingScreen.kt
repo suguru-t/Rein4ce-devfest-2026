@@ -133,7 +133,7 @@ internal fun RankingScreen(
             Spacer(Modifier.weight(1f))
             // 天気の雲の上に直接書くので、紙の色の縁取りを付ける（ダークのくもりで沈まないように）
             SkyText(
-                // どの遊び方のランキングか（決定 73）
+                // どの遊び方のランキングか（決定 77）
                 "${gallery.mode.shortLabel}・" + if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
                 fontSize = 13.sp,
@@ -143,7 +143,7 @@ internal fun RankingScreen(
         }
         // 読み込み中・つながらない・取り直せなかった、のときの知らせ（最初の画面と同じ）
         GalleryStatusRow(gallery)
-        // 物差しは遊び方ごと（決定 73）。「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
+        // 物差しは遊び方ごと（決定 77）。「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
         val comparable = TowerSort.comparableFor(gallery.mode)
         SortTabs(sort = sort, options = if (mineOnly) comparable + TowerSort.NEWEST else comparable, onSelect = { onSort(it); page = 0 })
         if (mineOnly && listed.isEmpty()) {

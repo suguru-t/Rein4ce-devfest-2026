@@ -171,7 +171,7 @@ class TowerGalleryTest {
     }
 
     @Test
-    fun `遊び方ごとに別の一覧を取り、見ている遊び方の一覧を出す（決定 73）`() = runTest {
+    fun `遊び方ごとに別の一覧を取り、見ている遊び方の一覧を出す（決定 77）`() = runTest {
         val asked = mutableListOf<TowerMode>()
         val g = TowerGallery(
             listTowers = { mode -> asked += mode; listOf(summary("${mode.wire}-1", 1f)) },

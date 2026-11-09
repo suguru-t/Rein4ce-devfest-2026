@@ -104,7 +104,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
-    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 73）
+    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 77）
     val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     when (mode) {
@@ -125,7 +125,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
             // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
-            // 結果のカードの「ランキング」は、「みんな」を 3 分チャレンジのランキングにしてから開く（決定 73）
+            // 結果のカードの「ランキング」は、「みんな」を 3 分チャレンジのランキングにしてから開く（決定 77）
             ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading ->
                 ChallengeScreen(leading = leading, onGoRanking = { gallery.open(TowerMode.CHALLENGE); onGoGallery() })
             }
@@ -262,7 +262,7 @@ private fun dailyRecord(tower: DailyTower?): String =
  * モードの行 1 つ。左に色の積み木（モードのアイコン）、右に紙のカード（名前・一言・記録・›）。
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
  * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
- * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 73。一言だけ [note] で替える）
+ * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 77。一言だけ [note] で替える）
  */
 @Composable
 internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
