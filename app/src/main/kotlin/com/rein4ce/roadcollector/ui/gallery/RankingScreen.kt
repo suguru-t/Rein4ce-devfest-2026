@@ -127,12 +127,11 @@ internal fun RankingScreen(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
-            Text(
+            // 天気の雲の上に直接書くので、紙の色の縁取りを付ける（ダークのくもりで沈まないように）
+            SkyText(
                 if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
-                fontFamily = Pop.Rounded,
-                fontWeight = FontWeight.Black,
-                fontSize = 13.sp,
                 color = Fieldbook.Muted,
+                fontSize = 13.sp,
                 modifier = Modifier.padding(end = 4.dp).paperBand(),
             )
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
@@ -367,7 +366,7 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
             // 小さな積み木（傾けた四角）の印
             Box(modifier = Modifier.graphicsLayer { rotationZ = 12f }.size(10.dp).clip(RoundedCornerShape(3.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
-            Text(status.text, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Fieldbook.Muted)
+            SkyText(status.text, color = Fieldbook.Muted, fontSize = 12.sp)
         }
     }
 }
@@ -398,12 +397,10 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
             enabled = canPrev,
             onClick = { onPage(page - 1) },
         )
-        Text(
+        SkyText(
             "$first〜$last / $total",
-            fontFamily = Pop.Rounded,
-            fontWeight = FontWeight.Black,
-            fontSize = 13.sp,
             color = Fieldbook.Muted,
+            fontSize = 13.sp,
             maxLines = 1,
             modifier = Modifier
                 .weight(1f)

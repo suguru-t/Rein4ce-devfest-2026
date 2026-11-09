@@ -367,31 +367,26 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
     ) {
         Spacer(Modifier.height(4.dp))
         Row(modifier = Modifier.paperBand(), verticalAlignment = Alignment.Bottom) {
-            Text(
+            SkyText(
                 label,
-                fontFamily = Pop.Rounded,
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
                 color = Fieldbook.Ink,
+                fontSize = 15.sp,
                 modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 8.dp),
             )
             if (!none) {
-                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色
-                Text(
+                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色。
+                // 天気の雲や光の上に直接書くので、紙の色の縁取りを付ける（SkyText）
+                SkyText(
                     if (myValue != null) sort.format(meter.value) else "—",
-                    fontFamily = Pop.Rounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 40.sp,
                     color = sortInk(sort),
+                    fontSize = 40.sp,
                     maxLines = 1,
                     softWrap = false,
                 )
-                Text(
+                SkyText(
                     sort.unit,
-                    fontFamily = Pop.Rounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
                     color = sortInk(sort),
+                    fontSize = 18.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
                 )
             }
