@@ -59,6 +59,14 @@ class PartRepository(
 
     /** お気に入りに登録したパーツの id の保存先。パーツのデータ形式は変えたくないので別のファイルにする */
     private val favoritesFile = File(file.parentFile, "${file.nameWithoutExtension}_favorites.json")
+
+    /**
+     * パーツの出どころ（id → 歩いた・デモ散歩・ファイル）の保存先。積む画面の完成カードの「使った道」に使う。
+     * 場所や天気と同じく、Part とは別のファイルでスマホの中だけに持つ（id に印を付けると、送ったタワーに見えるため）。
+     * 値は名前の字（"WALK" など）で持ち、知らない字は読み飛ばす
+     */
+    private val originsFile = File(file.parentFile, "${file.nameWithoutExtension}_origins.json")
+    private val originsSerializer = MapSerializer(String.serializer(), String.serializer())
     private val weatherSerializer = MapSerializer(String.serializer(), WalkWeather.serializer())
     private val writeLock = Mutex()
 
@@ -96,6 +104,13 @@ class PartRepository(
      * スマホの中だけに保存する（Part には入れない。共通のデータ形式を変えないため）。手持ちに無いパーツの id は持たない
      */
     val favorites: StateFlow<Set<String>> = _favorites
+
+    private val _origins = MutableStateFlow<Map<String, PartOrigin>>(emptyMap())
+
+    /**
+     * 記録したパーツの出どころ（id → [PartOrigin]）。出どころを残すようにする前に作ったパーツと見本は入っていない（[walkDistance]）
+     */
+    val origins: StateFlow<Map<String, PartOrigin>> = _origins
 
     private val _isLoaded = MutableStateFlow(false)
 
@@ -174,6 +189,25 @@ class PartRepository(
         }
         if (weatherChanged) persistWeather()
 
+        // 出どころ。場所と同じ決まりで、手持ちに無いパーツのものは捨てる。知らない字（先の版で増えた種類など）は読み飛ばす
+        val originsFromFile: Map<String, PartOrigin> = runCatching {
+            if (originsFile.exists()) {
+                AppJson.decodeFromString(originsSerializer, originsFile.readText())
+                    .mapNotNull { (id, name) -> PartOrigin.entries.firstOrNull { it.name == name }?.let { id to it } }
+                    .toMap()
+            } else {
+                emptyMap()
+            }
+        }.onFailure { logError("${originsFile.name} could not be read, ignoring", it) }.getOrDefault(emptyMap())
+        var originsChanged = false
+        _origins.update { early ->
+            val have = _parts.value.mapTo(HashSet()) { it.id }
+            val kept = (originsFromFile + early).filterKeys { it in have }
+            originsChanged = kept != originsFromFile
+            kept
+        }
+        if (originsChanged) persistOrigins()
+
         // お気に入り。場所と同じ決まりで、手持ちに無いパーツの id は捨てる
         val favoritesFromFile: Set<String> = runCatching {
             if (favoritesFile.exists()) AppJson.decodeFromString(orderSerializer, favoritesFile.readText()).toSet() else emptySet()
@@ -202,10 +236,15 @@ class PartRepository(
      * @param place 歩いた場所（TrackToPart の結果）。parts.json とは別のファイルに保存する
      * @param weather 決まっている天気（デモ散歩で、設定の「デモの天気」を選んでいるとき）。場所より先に入れるので、
      *   WeatherService は本当の天気を聞きに行かない（場所はあって天気が無いパーツだけを聞くため）。ふつうは null（あとで聞く）
+     * @param origin 記録の出どころ（本当に歩いた・デモ散歩・ファイル）。分からなければ null
      */
-    fun add(part: Part, place: PartPlace, weather: WalkWeather? = null) {
+    fun add(part: Part, place: PartPlace, weather: WalkWeather? = null, origin: PartOrigin? = null) {
         _parts.update { it + part }
         persist()
+        if (origin != null) {
+            _origins.update { it + (part.id to origin) }
+            persistOrigins()
+        }
         if (weather != null) {
             _weather.update { it + (part.id to weather) }
             persistWeather()
@@ -252,6 +291,10 @@ class PartRepository(
         if (id in _favorites.value) {
             _favorites.update { it - id }
             persistFavorites()
+        }
+        if (id in _origins.value) {
+            _origins.update { it - id }
+            persistOrigins()
         }
     }
 
@@ -359,6 +402,10 @@ class PartRepository(
     private fun persistWeather() = save(weatherFile) { AppJson.encodeToString(weatherSerializer, _weather.value) }
 
     private fun persistFavorites() = save(favoritesFile) { AppJson.encodeToString(orderSerializer, _favorites.value.toList()) }
+
+    private fun persistOrigins() = save(originsFile) {
+        AppJson.encodeToString(originsSerializer, _origins.value.mapValues { (_, origin) -> origin.name })
+    }
 
     /**
      * ファイルに保存する（parts.json も、並び順のファイルも同じ書き方）。

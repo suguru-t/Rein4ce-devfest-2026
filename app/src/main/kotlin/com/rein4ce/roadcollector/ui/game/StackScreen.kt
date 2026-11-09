@@ -48,6 +48,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -57,9 +59,13 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
@@ -78,6 +84,7 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.data.WalkDistance
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PressButton
@@ -93,6 +100,8 @@ import com.rein4ce.roadcollector.ui.inventory.PartPickerSheet
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.min
 
 /**
  * D 担当：積み上げゲーム画面。上から「情報（高さ・残り・落下）」「キャンバス」「操作（ボタン・完成カード）」の 3 段。
@@ -101,6 +110,7 @@ import kotlinx.coroutines.launch
  *   横 5 m がキャンバスの幅になる倍率で、台はキャンバスの下から 22% の位置。
  *   狙っている間と落下中は大きさを変えず、塔が高くなったら、次のパーツが出てくる高さが入るところまでカメラを上げる
  *   （台はキャンバスの下へ外れることがある）。置き切ったら、塔全体と台が入るように引いて見せる。
+ *   キャンバスの左端には、台の上面を 0 にした模型の高さの目盛（「みんな」の断面図と同じ標尺）を重ねて描く
  *
  * @param leading 情報の段の 1 行目の左に置くもの。モードで遊ぶ画面（ModeSelect.kt の ModePlayPage）からは「‹ 戻る」と今のモードの札が来る
  *   （行を別に足すと、その分だけ塔を描く所が狭くなるため。#116）。[compact] は小さい画面（1 行に並べるので、幅を取らないものにする）。
@@ -128,7 +138,8 @@ fun StackScreen(
 
     LaunchedEffect(inventory, order, isLoaded, startRequest) {
         // partsとisLoadedの収集順にかかわらず、開始境界ではRepositoryの現在値を使う。
-        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest)
+        // 出どころは「使った道」を数えるため。始めたときの値で数えて固定する
+        vm.updateInventory(repository.arrangedNow(), repository.isLoaded.value, startRequest, repository.origins.value)
     }
 
     // ゲームループ。画面が見えている間（STARTED 以上）だけ回す。アプリを裏に回すと止まり、戻ったときは
@@ -246,13 +257,14 @@ fun StackScreen(
                 }
                 val current = vm.current
                 if (vm.phase == StackViewModel.Phase.Placing && current != null) {
-                    // 長く歩いた道ほど大きい（PartSize）。何 m 歩いたから何倍か、を出す。
-                    // 「みんな」のタワーの注記の行と同じく、数字は墨、ほかは薄い墨
+                    // 長い道ほど大きい（PartSize）。何 m の道だから何倍か、を出す。
+                    // 「みんな」のタワーの注記の行と同じく、数字は墨、ほかは薄い墨。
+                    // 「歩いた道」とは書かない（見本やデモ散歩のパーツもあり、完成カードの「使った道」は歩いた道だけを数えるため。#87 の A のレビュー）
                     val size = partSizeText(current.distanceM)
                     SkyText(
                         buildAnnotatedString {
                             withStyle(SpanStyle(color = Fieldbook.Ink)) { append("${current.distanceM} m") }
-                            append(" 歩いた道 ・ 大きさ ")
+                            append(" の道 ・ 大きさ ")
                             withStyle(SpanStyle(color = Fieldbook.Ink)) { append(size) }
                         },
                         color = Fieldbook.Muted,
@@ -317,7 +329,7 @@ fun StackScreen(
                             }
                             // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                PressTextButton(onClick = { vm.restart(repository.arrangedNow()) }) { Text("やり直す") }
+                                PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
                                 PressTextButton(onClick = { picking = true }) { Text("パーツを選ぶ") }
                             }
                         }
@@ -331,7 +343,7 @@ fun StackScreen(
                                     vm = vm,
                                     result = result,
                                     unresolved = vm.phase == StackViewModel.Phase.Unresolved,
-                                    onRetry = { vm.restart(repository.arrangedNow()) },
+                                    onRetry = { vm.restart(repository.arrangedNow(), repository.origins.value) },
                                     onPick = { picking = true },
                                     onGoGallery = onGoGallery,
                                 )
@@ -405,10 +417,18 @@ private fun ResultCard(
             val title = when {
                 unresolved -> "揺れが止まりませんでした"
                 result.remainingCount == 0 -> "全部落ちました"
-                else -> "完成！ 高さ %.2f m".format(result.tower.height)
+                else -> "完成！ 模型の高さ %.2f m".format(result.tower.height)
             }
             Text(title, style = MaterialTheme.typography.titleLarge)
             Text("残ったパーツ ${result.remainingCount} / ${result.usedCount}", style = MaterialTheme.typography.bodyMedium)
+            // 使った道（本当に歩いた道の距離）。1 行目はふつうの字、2 行目（数えなかったパーツの断り）は小さい字
+            walkedLines(result.walked).forEachIndexed { i, line ->
+                Text(
+                    line,
+                    style = if (i == 0) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                )
+            }
             val reason = when {
                 unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
                 result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
@@ -487,6 +507,18 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         }
     }
 
+    // 模型の高さの目盛。「みんな」の断面図の標尺（TowerSection）と同じ字と色にする：太い丸ゴシック 9dp（図の一部なので、
+    // 文字の大きさの設定では大きくしない）、「1m」。キャンバスの左端に重ねて描くので、塔の大きさは目盛が無いときと同じ
+    val density = LocalDensity.current
+    val rulerInk = Fieldbook.Muted
+    val rulerMark = Fieldbook.Mark
+    val rulerGrid = Fieldbook.GridMajor
+    val rulerStyle = remember(rulerInk, density) {
+        TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 9.dp.toSp() }, color = rulerInk)
+    }
+    val textMeasurer = rememberTextMeasurer()
+    // 目盛の字は「0m」〜「99m」くらいしか出ないので、測った結果を覚えておき、カメラが動いている間も毎コマ測り直さない
+    val rulerLabels = remember(rulerStyle) { HashMap<String, TextLayoutResult>() }
     Canvas(
         modifier = modifier
             .onSizeChanged { canvasSize = it }
@@ -503,6 +535,9 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
         val scalePx = viewport.scale
         fun sx(x: Double) = viewport.toScreenX(x.toFloat())
         fun sy(y: Double) = viewport.toScreenY(y.toFloat())
+
+        // 目盛（塔と同じ変換なので、カメラが上がっても引いても塔の高さとずれない）。パーツの下になるように先に描く
+        drawHeightRuler(viewport, rulerMark, rulerGrid) { text -> rulerLabels.getOrPut(text) { textMeasurer.measure(text, rulerStyle) } }
 
         // 落下ライン
         drawLine(
@@ -548,6 +583,61 @@ private fun StackCanvas(vm: StackViewModel, modifier: Modifier = Modifier) {
 }
 
 /**
+ * 模型の高さの目盛を、キャンバスの左端に重ねて描く。「みんな」の断面図の標尺（TowerSection）と同じ形：
+ * 縦の線の左に「1m」の字と短い目盛り、右へ伸びる薄い点線。20 cm の細かい目盛りは、間が空くときだけ（[heightTicks]）。
+ * 縦の線は台の上面（0 m）から上だけ（台が下に外れているときは、キャンバスの下の端から）
+ *
+ * @param label 目盛りの字を測った結果（同じ字は覚えておいたものを使う）
+ */
+private fun DrawScope.drawHeightRuler(
+    viewport: StackViewport,
+    mark: Color,
+    grid: Color,
+    label: (String) -> TextLayoutResult,
+) {
+    val staffX = RULER_STAFF_DP.dp.toPx()
+    val labelGap = maxOf(28.dp.toPx(), label("0m").size.height * 1.5f)
+    val ticks = heightTicks(viewport, minorGapPx = 8.dp.toPx(), labelGapPx = labelGap)
+    if (ticks.isEmpty()) return
+    val bottom = min(size.height, viewport.toScreenY(0f))
+    if (bottom > 0f) drawLine(mark, Offset(staffX, 0f), Offset(staffX, bottom), 1.dp.toPx())
+    val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx()))
+    for (tick in ticks) {
+        val y = tick.screenY
+        val text = tick.label
+        if (text == null) {
+            drawLine(mark, Offset(staffX - 2.dp.toPx(), y), Offset(staffX, y), 1.dp.toPx())
+            continue
+        }
+        drawLine(mark, Offset(staffX - 4.dp.toPx(), y), Offset(staffX, y), 1.dp.toPx())
+        // 1 m ごとの薄い点線。台の上面（0 m）には台があるので引かない
+        if (tick.meters > 0f) drawLine(grid, Offset(staffX, y), Offset(size.width, y), 1.dp.toPx(), pathEffect = dash)
+        val layout = label(text)
+        val top = (y - layout.size.height / 2f).coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f))
+        drawText(layout, topLeft = Offset(staffX - 6.dp.toPx() - layout.size.width, top))
+    }
+}
+
+/**
+ * 完成カードの「使った道」の行。
+ * - 歩いて記録したパーツがある：「使った道：合計 1.23 km」。ほかのパーツも混ざっていれば、数えなかったことを 2 行目に
+ * - 1 本も無い（見本やデモ散歩だけで積んだ）：「合計 0.00 km」は出さず、距離が出ないわけを 1 行で。
+ *   発表は見本とデモで積むので、毎回「0.00 km」が出て失敗したように見えないように（#87 のレビュー）
+ */
+internal fun walkedLines(walked: WalkDistance): List<String> = when {
+    walked.walks > 0 -> listOfNotNull(
+        "使った道：合計 %.2f km".format(Locale.JAPAN, walked.meters / 1000.0),
+        if (walked.others > 0) "見本・デモ・歩いた記録か確かめられないパーツ ${walked.others} 個は距離に含めていません" else null,
+    )
+    walked.others == 0 -> emptyList()
+    walked.unknown == 0 -> listOf("見本・デモのパーツなので、歩いた距離は出ません")
+    else -> listOf("歩いた記録か確かめられないパーツなので、歩いた距離は出ません")
+}
+
+/** 目盛の縦の線の位置（キャンバスの左端から）[dp]。断面図の標尺の幅と同じ */
+private const val RULER_STAFF_DP = 30f
+
+/**
  * 画面名「みちをつむ」。コレクション・「みんな」・記録と同じく、題字「ミチツミ」と同じ積み木（ui/common/Pop.kt の BlockWord）で、押すと動く。
  * 積み木は文字の大きさの設定では大きくしない（dp で決める）。5 文字あるので、小さい画面（[compact]）では一回り小さくして、高さ・残りと同じ行に収める
  */
@@ -557,7 +647,7 @@ internal fun StackTitle(compact: Boolean) {
 }
 
 /**
- * いまの塔の高さ：「高さ」と、大きな数字と「m」。「みんな」の「あなたの最高」と同じ形（太い丸ゴシック・オレンジの数字・紙の色の縁取り）。
+ * いまの塔の高さ：「模型の高さ」と、大きな数字と「m」。「みんな」の「あなたの最高」と同じ形（太い丸ゴシック・オレンジの数字・紙の色の縁取り）。
  * 数字は、置いて高さが変わるたびに、前の値からメーターのように回って変わる（動きを減らす設定なら、すぐ変わる）。
  * 大きさは画面名の積み木と同じく dp で決め、文字の大きさの設定では大きくしない（もともと大きい字で、設定で大きくすると
  * 情報の段が伸びて、塔を描く所が狭くなるため。#116 のレビュー）
@@ -583,9 +673,9 @@ private fun HeightMeter(height: Float, compact: Boolean) {
     Row(
         verticalAlignment = Alignment.Bottom,
         // 読み上げは、回っている途中の数字ではなく、今の高さを 1 回で
-        modifier = Modifier.clearAndSetSemantics { contentDescription = "高さ %.2f メートル".format(height) },
+        modifier = Modifier.clearAndSetSemantics { contentDescription = "模型の高さ %.2f メートル".format(height) },
     ) {
-        SkyText("高さ", color = Fieldbook.Ink, fontSize = labelSize, modifier = Modifier.padding(end = 10.dp, bottom = if (compact) 6.dp else 8.dp))
+        SkyText("模型の高さ", color = Fieldbook.Ink, fontSize = labelSize, modifier = Modifier.padding(end = 10.dp, bottom = if (compact) 6.dp else 8.dp))
         SkyText("%.2f".format(shown), color = number, fontSize = numberSize, maxLines = 1, softWrap = false)
         SkyText("m", color = number, fontSize = unitSize, modifier = Modifier.padding(start = 4.dp, bottom = if (compact) 5.dp else 7.dp))
     }

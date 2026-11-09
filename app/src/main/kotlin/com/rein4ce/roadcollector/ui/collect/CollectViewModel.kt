@@ -21,6 +21,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleTracks
 import com.rein4ce.roadcollector.core.weather.WalkWeather
+import com.rein4ce.roadcollector.data.PartOrigin
 import com.rein4ce.roadcollector.net.ApiClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -109,24 +110,27 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     fun startRecording() {
         val ctx = getApplication<Application>()
         if (!LocationRecordingService.hasLocationPermission(ctx)) return
-        TrackRecorder.start()
+        TrackRecorder.start(PartOrigin.WALK)
         LocationRecordingService.start(ctx)
     }
 
-    /** 記録を止めてパーツに変換する。 */
+    /**
+     * 記録を止めてパーツに変換する。出どころは記録の側（TrackRecorder）が覚えているので、
+     * 記録中にアプリを閉じて開き直し、この ViewModel が作り直されていても、本当に歩いた道は「歩いた」のまま
+     */
     fun stopAndConvert() {
         val ctx = getApplication<Application>()
         demoJob?.cancel()
         playingLabel = null
         LocationRecordingService.stop(ctx)
-        val pts = TrackRecorder.stop()
-        convert(pts)
+        val recording = TrackRecorder.stop()
+        convert(recording.points, demoWeather(recording.origin), recording.origin)
     }
 
-    fun playDemo(track: SampleTracks.SampleTrack) = playPoints(DEMO_LABEL) { track.points }
+    fun playDemo(track: SampleTracks.SampleTrack) = playPoints(DEMO_LABEL, PartOrigin.DEMO) { track.points }
 
     /** 実機で録った GPX / JSON ファイルを読んで、デモ散歩と同じように流す。 */
-    fun playFile(uri: Uri) = playPoints("ファイル") {
+    fun playFile(uri: Uri) = playPoints("ファイル", PartOrigin.FILE) {
         val ctx = getApplication<Application>()
         val text = withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -134,7 +138,11 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
         TrackFileParser.parse(text)
     }
 
-    private fun playPoints(label: String, load: suspend () -> List<TrackPoint>) {
+    /**
+     * 軌跡を流してパーツにする。[label] は画面に出す呼び名（「デモ散歩を再生中」）、[origin] は出どころ。
+     * 出どころは呼び名の字から決めず、そのまま記録の側に渡す（呼び名を変えても、デモがファイルにならないように）
+     */
+    private fun playPoints(label: String, origin: PartOrigin, load: suspend () -> List<TrackPoint>) {
         if (isRecording.value) return
         demoJob?.cancel()
         demoJob = viewModelScope.launch {
@@ -148,11 +156,11 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
                     outcome = Outcome.Rejected("読み込めませんでした：${e.message ?: e.javaClass.simpleName}")
                     return@launch
                 }
-                DemoWalkPlayer.play(points)
+                DemoWalkPlayer.play(points, origin)
                 // 速すぎて途中で自動停止したなら、tooFast の購読側（onStoppedForSpeed）が処理する
                 if (!TrackRecorder.isRecording.value) return@launch
-                val pts = TrackRecorder.stop()
-                convert(pts, demoWeather(label))
+                val recording = TrackRecorder.stop()
+                convert(recording.points, demoWeather(recording.origin), recording.origin)
             } finally {
                 playingLabel = null
             }
@@ -163,13 +171,16 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
      * デモ散歩でできるパーツの天気。設定の「デモの天気」を選んでいれば、その天気（本当の天気を聞きに行かない）。
      * 本当の天気のまま、またはデモ散歩でない（実際に歩いた・ファイルを流した）なら null
      */
-    private fun demoWeather(label: String?): WalkWeather? = if (label == DEMO_LABEL) settings.demoSky.value.weather else null
+    private fun demoWeather(origin: PartOrigin): WalkWeather? = if (origin == PartOrigin.DEMO) settings.demoSky.value.weather else null
 
-    /** @param weather 決まっている天気（デモの天気）。null ならあとで本当の天気を聞く */
-    private fun convert(pts: List<TrackPoint>, weather: WalkWeather? = null) {
+    /**
+     * @param weather 決まっている天気（デモの天気）。null ならあとで本当の天気を聞く
+     * @param origin 記録の出どころ。パーツと一緒に保存する（完成カードの「使った道」で、本当に歩いた道だけを数えるため）
+     */
+    private fun convert(pts: List<TrackPoint>, weather: WalkWeather?, origin: PartOrigin) {
         when (val r = TrackToPart.convert(pts, ConversionParams.DEFAULT)) {
             is TrackToPart.Result.Success -> {
-                keep(r, weather = weather)
+                keep(r, weather = weather, origin = origin)
             }
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected("短すぎます（%.0f m、最低 %.0f m）".format(r.distanceM, r.minDistanceM))
@@ -188,9 +199,10 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
      * （decisions.md の 5。パーツはすぐ出し、届くまでは「名前を考え中…」）。
      * 名前の手がかりは形・距離・日時だけで、歩いた場所は送らない（8）。付かなければ「○ m の散歩」のまま（7）
      */
-    private fun keep(r: TrackToPart.Result.Success, note: String? = null, weather: WalkWeather? = null) {
-        // 歩いた場所はパーツとは別に、スマホの中だけに保存する（コレクションの拡大表示の背景の地図に使う）
-        repository.add(r.part, r.place, weather)
+    private fun keep(r: TrackToPart.Result.Success, note: String? = null, weather: WalkWeather?, origin: PartOrigin) {
+        // 歩いた場所と出どころはパーツとは別に、スマホの中だけに保存する（場所はコレクションの拡大表示の背景の地図に、
+        // 出どころは積む画面の完成カードの「使った道」に使う）
+        repository.add(r.part, r.place, weather, origin)
         // 変換の数字は画面に出さない（見ても分からないため）。実機で ε などを確かめるとき用に、Logcat にだけ出す（場所は出さない）
         Log.i(
             "CollectViewModel",
@@ -222,13 +234,13 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     private fun onStoppedForSpeed(stop: TrackRecorder.TooFast) {
         TrackRecorder.consumeTooFast()
         LocationRecordingService.stop(getApplication())
-        val weather = demoWeather(playingLabel)
+        val weather = demoWeather(stop.origin)
         demoJob?.cancel()
         playingLabel = null
         val stopped = "速すぎたので記録を止めました（${kmh(stop.speedMps, RoundingMode.CEILING)}）"
         val limitNote = "歩きかジョギング（${kmh(walkMaxSpeedMps, RoundingMode.FLOOR)} まで）だけ記録できます"
         when (val r = TrackToPart.convert(stop.keptPoints, ConversionParams.DEFAULT)) {
-            is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました", weather = weather)
+            is TrackToPart.Result.Success -> keep(r, note = "$stopped。止める前までをパーツにしました", weather = weather, origin = stop.origin)
             is TrackToPart.Result.TooShort ->
                 outcome = Outcome.Rejected(
                     "$stopped。止める前までの %.0f m は短すぎてパーツになりません（最低 %.0f m）。$limitNote".format(r.distanceM, r.minDistanceM),
@@ -248,7 +260,7 @@ class CollectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        /** デモ散歩を流しているときの呼び名（画面の「デモ散歩を再生中」など）。デモの天気を当てるかの目印にも使う */
+        /** デモ散歩を流しているときの呼び名（画面の「デモ散歩を再生中」など）。デモの天気を当てるかは、呼び名ではなく出どころ（PartOrigin.DEMO）で決める */
         const val DEMO_LABEL = "デモ散歩"
 
         /**
