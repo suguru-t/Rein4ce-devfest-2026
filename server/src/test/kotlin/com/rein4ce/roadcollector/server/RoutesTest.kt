@@ -4,12 +4,14 @@ import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -106,6 +108,73 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, png.status)
         assertTrue(png.contentType()?.match(ContentType.Image.PNG) == true)
         assertContains(png.headers[HttpHeaders.CacheControl].orEmpty(), "max-age")
+    }
+
+    private suspend fun HttpClient.summariesOf(mode: String?, owner: String? = null): List<TowerSummary> {
+        val body = get(if (mode == null) "/towers" else "/towers?mode=$mode") { owner?.let { header(OWNER_HEADER, it) } }.bodyAsText()
+        return AppJson.decodeFromString(ListSerializer(TowerSummary.serializer()), body)
+    }
+
+    @Test
+    fun `遊び方ごとに別の URL で受け、一覧も遊び方ごとに分ける（決定 77）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        client.postTower(sampleTower())
+        val challengeRes = client.post("/towers/challenge") {
+            contentType(ContentType.Application.Json)
+            // 本文の mode は見ない（URL で決める）
+            setBody(AppJson.encodeToString(Tower.serializer(), sampleTower().copy(rule = "manual-180-v6")))
+        }
+        assertEquals(HttpStatusCode.Created, challengeRes.status)
+        val challenge = AppJson.decodeFromString(TowerCreated.serializer(), challengeRes.bodyAsText())
+
+        assertEquals(1, client.summariesOf(null).size, "mode なし（前のアプリ）は通常だけ")
+        assertEquals(TowerMode.NORMAL, client.summariesOf("normal").single().mode)
+        val c = client.summariesOf("challenge").single()
+        assertEquals(challenge.id, c.id)
+        assertEquals(TowerMode.CHALLENGE, c.mode)
+        assertEquals("manual-180-v6", c.rule)
+        assertTrue(client.summariesOf("daily").isEmpty())
+        assertEquals(HttpStatusCode.BadRequest, client.get("/towers?mode=weekly").status)
+        // 共有ページと JSON は、どの遊び方のタワーでも id で取れる
+        val json = client.get("/towers/${challenge.id}") { header(HttpHeaders.Accept, "application/json") }.bodyAsText()
+        assertEquals(TowerMode.CHALLENGE, AppJson.decodeFromString(Tower.serializer(), json).mode)
+        assertEquals(HttpStatusCode.OK, client.get("/towers/${challenge.id}").status)
+        // 決まりの ID が無い 3 分チャレンジ・通常の URL に送った 3 分チャレンジは断る
+        val noRule = client.post("/towers/challenge") {
+            contentType(ContentType.Application.Json)
+            setBody(AppJson.encodeToString(Tower.serializer(), sampleTower()))
+        }
+        assertEquals(HttpStatusCode.BadRequest, noRule.status)
+        assertEquals(HttpStatusCode.BadRequest, client.postTower(sampleTower().copy(mode = TowerMode.CHALLENGE, rule = "manual-180-v6")).status)
+        assertEquals(1, client.summariesOf("normal").size)
+    }
+
+    @Test
+    fun `毎日 1 つずつ積むは持ち主ごとに 1 基を新しくする（決定 77）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val me = "a".repeat(64)
+        suspend fun put(tower: Tower) = client.put("/towers/daily") {
+            contentType(ContentType.Application.Json)
+            setBody(AppJson.encodeToString(Tower.serializer(), tower))
+        }
+        val day1 = sampleTower().copy(ownerId = me, lastDay = "2026-11-09", streakDays = 1)
+        val first = put(day1)
+        assertEquals(HttpStatusCode.OK, first.status)
+        val id = AppJson.decodeFromString(TowerCreated.serializer(), first.bodyAsText()).id
+        val second = put(day1.copy(height = 1.6f, lastDay = "2026-11-10", streakDays = 2))
+        assertEquals(id, AppJson.decodeFromString(TowerCreated.serializer(), second.bodyAsText()).id, "同じ持ち主は同じ id")
+        put(sampleTower().copy(ownerId = "b".repeat(64), lastDay = "2026-11-10", streakDays = 1))
+
+        val list = client.summariesOf("daily", owner = me)
+        assertEquals(2, list.size)
+        val mine = list.single { it.mine }
+        assertEquals(id, mine.id)
+        assertEquals(1.6f, mine.height)
+        assertEquals(2, mine.streakDays)
+        assertEquals("2026-11-10", mine.lastDay)
+        assertTrue(client.summariesOf("normal").isEmpty(), "通常のランキングには混ざらない")
+        // 持ち主の印が無い毎日の塔は、誰のか分からないので断る
+        assertEquals(HttpStatusCode.BadRequest, put(day1.copy(ownerId = null)).status)
     }
 
     @Test

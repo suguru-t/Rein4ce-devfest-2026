@@ -1,5 +1,8 @@
 package com.rein4ce.roadcollector.ui.game
 
+import com.rein4ce.roadcollector.core.model.TowerMode
+import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
@@ -192,7 +195,7 @@ class ChallengeViewModelTest {
         assertEquals(ChallengeRun.Phase.FALLING, vm.frame!!.phase)
     }
 
-    @Test fun `新しい回は「3・2・1」を数え終えるまで、動かす・回す・落とすを受け付けない（決定 75）`() = runTest {
+    @Test fun `新しい回は「3・2・1」を数え終えるまで、動かす・回す・落とすを受け付けない（決定 76）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val now = 0L
         val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { style -> ChallengeRun(1, style = style, clock = { now }) })
@@ -219,5 +222,40 @@ class ChallengeViewModelTest {
         vm.showCountdown(2)
         vm.leave()
         assertEquals(0, vm.countdown)
+    }
+
+    @Test fun `記録になった回の塔は、自動で 1 回だけ「みんな」に送り、送れなければもう一度送れる（決定 77）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val sent = mutableListOf<Tower>()
+        var broken = true
+        val vm = ChallengeViewModel(
+            updateRecords = { listOfNotNull(it) },
+            newRun = { ChallengeRun(1, clock = { now }) },
+            sendTower = { tower -> if (broken) error("offline"); sent += tower; TowerCreated("c1", "https://example.test/towers/c1") },
+        )
+        // 「3・2・1」を数え終えてから置く（決定 76）
+        vm.start(); vm.finishCountdown(); vm.resume()
+        vm.place()
+        repeat(40) { now += 50_000_000; vm.tick() }
+        now = ChallengeRules.DURATION_NS; vm.tick()
+        repeat(200) { now += 50_000_000; vm.tick() }
+        runCurrent()
+        assertEquals(ChallengeRun.Phase.FINISHED, vm.frame!!.phase)
+        assertEquals(ChallengeViewModel.SendState.FAILED, vm.sendState)
+        // 毎コマ送り直さない
+        repeat(5) { now += 50_000_000; vm.tick() }
+        runCurrent()
+        assertTrue(sent.isEmpty())
+        broken = false
+        vm.resend()
+        runCurrent()
+        assertEquals(ChallengeViewModel.SendState.SENT, vm.sendState)
+        assertEquals(1, sent.size)
+        assertEquals(TowerMode.CHALLENGE, sent[0].mode)
+        assertEquals(ChallengeRules.ID, sent[0].rule)
+        // 次の回は、まだ送っていない
+        vm.start()
+        assertEquals(ChallengeViewModel.SendState.IDLE, vm.sendState)
     }
 }

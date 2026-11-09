@@ -60,7 +60,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.ColumnScope
 import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
@@ -74,7 +78,6 @@ import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
-import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
@@ -94,36 +97,74 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     val context = LocalContext.current
     val app = RoadCollectorApp.from(context)
     val state = gallery.state
-    val towers = (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
+    // いま見ている遊び方（ホームで選んだランキング。決定 77）。3 分チャレンジは、今の決まりの記録だけを並べる（決まりが違う記録は混ぜない）
+    val mode = gallery.mode
+    val towers = rankedTowers(state, mode)
     // 自分のタワー：サーバの答え（持ち主の印が同じ）か、この端末から送った記録（data/MyTowers）のどちらか
     val local by app.myTowers.ids.collectAsStateWithLifecycle()
     val isMine: (TowerSummary) -> Boolean = { it.mine || it.id in local }
     val nickname by app.settings.nickname.collectAsStateWithLifecycle()
 
-    // 画面を開くたびに一覧を取り直す（タブを切り替えて戻ったときも）。起動時の先読み（TowerGallery.prefetch）が
+    // ほかのタブ（記録・コレクション・積む）に移って戻ってきたときは、ホーム（どのランキングを見に行くか）から。
+    // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、ホームに戻る）。
+    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から来たときだけ、その遊び方のランキングから（TowerGallery.open）
+    var page by remember { mutableStateOf(if (gallery.consumeOpenRequest()) GalleryPage.OVERVIEW else GalleryPage.HOME) }
+    BackHandler(enabled = page != GalleryPage.HOME) {
+        page = if (page == GalleryPage.OVERVIEW) GalleryPage.HOME else GalleryPage.OVERVIEW
+    }
+
+    // 画面を開くたび（タブを切り替えて戻ったときも）・ホームに戻ったとき・遊び方を選んだときに一覧を取り直す。
+    // ホームでは、行にそれぞれのランキングのようすを出すので 3 つとも。起動時の先読み（TowerGallery.prefetch）が
     // まだ走っていれば止めずに待ち、その結果を先に出す
-    LaunchedEffect(Unit) { gallery.refresh() }
+    val atHome = page == GalleryPage.HOME
+    LaunchedEffect(atHome, mode) {
+        if (atHome) TowerMode.entries.forEach { gallery.refresh(it) } else gallery.refresh(mode)
+    }
 
-    // 物差し（高い順・多い順）と、どの画面を開いているか（最初の画面・ランキング・あなたのタワー）。タブを行き来しても、画面を回しても残す
-    var sort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
-    // 「あなたのタワー」の並びは別に持つ（ここだけ新しい順も選べるので、断面図の物差しと混ぜない）
-    var mineSort by rememberSaveable { mutableStateOf(TowerSort.NEWEST) }
-    // ほかのタブ（記録・コレクション・積む）に移って戻ってきたときは、ランキングや「あなたのタワー」ではなく最初の画面から。
-    // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、最初の画面に戻る）
-    var page by remember { mutableStateOf(GalleryPage.OVERVIEW) }
-    BackHandler(enabled = page != GalleryPage.OVERVIEW) { page = GalleryPage.OVERVIEW }
+    // 物差しと、どの画面を開いているか（最初の画面・ランキング・あなたのタワー）。タブを行き来しても、画面を回しても残す。
+    // 物差しは遊び方ごとに持つ（毎日 1 つずつ積むだけ連続日数順がある。決定 77）
+    var normalSort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
+    var challengeSort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
+    var dailySort by rememberSaveable { mutableStateOf(TowerSort.HEIGHT) }
+    val sort = when (mode) {
+        TowerMode.NORMAL -> normalSort
+        TowerMode.CHALLENGE -> challengeSort
+        TowerMode.DAILY -> dailySort
+    }
+    val setSort: (TowerSort) -> Unit = {
+        when (mode) {
+            TowerMode.NORMAL -> normalSort = it
+            TowerMode.CHALLENGE -> challengeSort = it
+            TowerMode.DAILY -> dailySort = it
+        }
+    }
+    // 「あなたのタワー」の並びは別に持つ（ここだけ新しい順も選べるので、断面図の物差しと混ぜない）。
+    // その遊び方に無い物差し（3 分チャレンジでの連続日数順など）になっていたら、新しい順で見せる
+    var mineSortChosen by rememberSaveable { mutableStateOf(TowerSort.NEWEST) }
+    val mineSort = mineSortChosen.takeIf { it == TowerSort.NEWEST || it in TowerSort.comparableFor(mode) } ?: TowerSort.NEWEST
 
-    // 紙片を開いているタワーと、ニックネームの窓
+    // 紙片を開いているタワーと、ニックネームの窓。
+    // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、紙片ではなく画面いっぱいに塔の全体を出す（決定 77）
     var opened by remember { mutableStateOf<TowerSummary?>(null) }
     var showNickname by remember { mutableStateOf(false) }
 
     when (page) {
+        GalleryPage.HOME -> GalleryHome(
+            stateOf = gallery::stateOf,
+            isMine = isMine,
+            onPick = {
+                gallery.mode = it
+                page = GalleryPage.OVERVIEW
+            },
+        )
         GalleryPage.OVERVIEW -> Overview(
             gallery = gallery,
             towers = towers,
             isMine = isMine,
+            mode = mode,
+            onBack = { page = GalleryPage.HOME },
             sort = sort,
-            onSort = { sort = it },
+            onSort = setSort,
             openedId = opened?.id,
             onOpen = { opened = it },
             onRanking = { page = GalleryPage.RANKING },
@@ -137,19 +178,29 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
             isMine = isMine,
             mineOnly = page == GalleryPage.MINE,
             sort = if (page == GalleryPage.MINE) mineSort else sort,
-            onSort = { if (page == GalleryPage.MINE) mineSort = it else sort = it },
+            onSort = { if (page == GalleryPage.MINE) mineSortChosen = it else setSort(it) },
             onBack = { page = GalleryPage.OVERVIEW },
             onOpen = { opened = it },
         )
     }
 
     opened?.let { t ->
-        TowerSheet(
-            tower = t,
-            sketch = gallery.sketches[t.id],
-            mine = isMine(t),
-            onDismiss = { opened = null },
-        )
+        if (t.mode == TowerMode.NORMAL) {
+            TowerSheet(
+                tower = t,
+                sketch = gallery.sketches[t.id],
+                mine = isMine(t),
+                onDismiss = { opened = null },
+            )
+        } else {
+            LaunchedEffect(t.id) { gallery.loadSketch(t.id) }
+            TowerFullView(
+                tower = t,
+                sketch = gallery.sketches[t.id],
+                mine = isMine(t),
+                onDismiss = { opened = null },
+            )
+        }
     }
     // ニックネームの窓を直接開く（設定の窓をまるごと開くより 1 回で済む）。設定の中のものと同じ窓
     if (showNickname) {
@@ -161,8 +212,11 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     }
 }
 
-/** 「みんな」の中の画面。最初の画面（断面図）から、ランキングと「あなたのタワー」へ行き、戻るで帰る */
-private enum class GalleryPage { OVERVIEW, RANKING, MINE }
+/**
+ * 「みんな」の中の画面。ホーム（どのランキングを見に行くか。決定 77）から遊び方の最初の画面（断面図）へ、
+ * そこからランキングと「あなたのタワー」へ行き、戻るで帰る
+ */
+private enum class GalleryPage { HOME, OVERVIEW, RANKING, MINE }
 
 /** 「みんな」の最初の画面：見出し、物差しの切り替え、断面図（1 番と自分）、2 基の行、「ランキングを見る」「あなたのタワー」 */
 @Composable
@@ -170,6 +224,8 @@ private fun Overview(
     gallery: TowerGallery,
     towers: List<TowerSummary>,
     isMine: (TowerSummary) -> Boolean,
+    mode: TowerMode,
+    onBack: () -> Unit,
     sort: TowerSort,
     onSort: (TowerSort) -> Unit,
     openedId: String?,
@@ -203,14 +259,15 @@ private fun Overview(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 画面名（題字と同じ積み木）と、右にリロードのブロック
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BlockWord("みんなのタワー")
+        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 77）、右にリロードのブロック
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
+            PopTag("${mode.fullLabel}のランキング", face = modeFace(mode), fontSize = 12.sp, tiltDeg = 2f)
             Spacer(Modifier.weight(1f))
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
 
-        GalleryHero(state = state, cmp = cmp, sort = sort, reduceMotion = reduceMotion)
+        GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, reduceMotion = reduceMotion)
 
         // 状態の行：読み込み中・つながらない・更新中・取り直せなかった、のときだけ出す（ランキングと共通）
         GalleryStatusRow(gallery)
@@ -227,10 +284,10 @@ private fun Overview(
             is TowerGallery.State.Loaded -> if (towers.isEmpty()) {
                 Note {
                     Text("まだタワーがありません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                    Text("積んで「保存」すると、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                    Text("${howToSend(mode)}、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
                 }
             } else {
-                SortTabs(sort = sort, options = TowerSort.COMPARABLE, onSelect = onSort)
+                SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort)
                 // 左：その物差しで 1 番。右：自分のいちばん良いタワー（自分が 1 番なら、他人で 1 番のタワー。その順位を呼び名に）
                 val slots = listOf(
                     SectionSlot(
@@ -258,6 +315,9 @@ private fun Overview(
                             selected = openedId,
                             progress = { intro.value },
                             onTap = onOpen,
+                            // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、高すぎるときは頂上のあたりだけを読める大きさで映す。
+                            // 押すと画面いっぱいに全体（TowerFullView。決定 77）
+                            topWindow = mode != TowerMode.NORMAL,
                             // weight は fill=false にして（fill=true だと高さが決め打ちの制約になり、heightIn(max) が効かない）、
                             // 上限を掛けたあとに fillMaxHeight で「残りか上限の小さいほう」の高さを取る
                             // （Canvas の中身は Spacer なので、高さが決まった制約でないと 0 になる）。
@@ -328,7 +388,7 @@ private object SectionIntro {
  * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, reduceMotion: Boolean) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, reduceMotion: Boolean) {
     val isLoaded = state is TowerGallery.State.Loaded
     val isError = state is TowerGallery.State.Error
     val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
@@ -344,12 +404,12 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         if (reduceMotion) meter.snapTo(myValue)
         else meter.animateTo(myValue, tween(durationMillis = 1_100, easing = FastOutSlowInEasing))
     }
-    val label = if (none) "まだ送っていません" else if (sort == TowerSort.HEIGHT) "あなたの最高" else "あなたの最多"
+    val label = if (none) "まだ送っていません" else sort.mineLabel
     // つながらないときは、下の状態の行と同じ言葉にする（「読み込み中」のままだと食い違って見える）
     val sub = when {
         isError -> "サーバに接続できません"
         !isLoaded -> "読み込み中…"
-        myValue == null -> "積んで「保存」すると、ここに立ちます"
+        myValue == null -> "${howToSend(mode)}、ここに立ちます"
         cmp.mineIsTop -> "あなたが${sort.topLabel}です"
         else -> "${sort.topLabel}まで あと ${sort.format(topValue - myValue)} ${sort.unit}"
     }
@@ -359,7 +419,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
                 isError -> "$label。サーバに接続できません"
                 !isLoaded -> "読み込み中"
                 myValue == null -> "$label。$sub"
-                else -> "$label ${sort.format(myValue)} ${if (sort == TowerSort.HEIGHT) "メートル" else "本"}。$sub"
+                else -> "$label ${sort.format(myValue)} ${sort.spokenUnit}。$sub"
             }
         },
     ) {
@@ -466,9 +526,6 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
-    val url = "${ApiClient.baseUrl}/towers/${tower.id}"
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -476,56 +533,86 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
         contentColor = Fieldbook.Ink,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    "%.2f".format(Locale.US, tower.height),
-                    fontFamily = Pop.Rounded,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 40.sp,
-                    color = Fieldbook.Ink,
-                )
-                Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 7.dp))
-                if (mine) {
-                    PopTag("あなたのタワー", face = Pop.OrangeDeep, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge)
-                    .clip(RoundedCornerShape(SECTION_CORNER)),
-            ) {
-                if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(12.dp))
-            }
-            Spacer(Modifier.height(10.dp))
-            // 紙片では物差しに関係なく並べる（どの値も塗らない）。並びは高い順として渡す（高さは上の大きな数字）
-            TowerMeta(tower, TowerSort.HEIGHT, partsLabel = true)
-            Spacer(Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                PopButton(
-                    label = "共有ページを開く",
-                    onClick = { uriHandler.openUri(url) },
-                    face = Pop.OrangeDeep,
-                    text = Pop.Letter,
-                    fontSize = 15.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                PopButton(
-                    label = "リンクをコピー",
-                    onClick = {
-                        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("ミチツミ", url))
-                        // Android 13 以降は端末が「コピーしました」を出すので、それより前だけ自分で知らせる
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, "リンクをコピーしました", Toast.LENGTH_SHORT).show()
-                    },
-                    face = Fieldbook.Card,
-                    text = Pop.TealLine,
-                    edge = Pop.TealLine,
-                    fontSize = 14.sp,
-                )
-            }
+            TowerDetail(tower, sketch, mine, picture = Modifier.fillMaxWidth().height(220.dp))
         }
+    }
+}
+
+/**
+ * 3 分チャレンジと毎日 1 つずつ積むのタワーを、画面いっぱいに出す（決定 77）。断面図には頂上のあたりしか映らないので、
+ * 押すとここで塔の全体を見せる。中身は紙片（[TowerSheet]）と同じで、絵だけが画面の残り全部を使う。「× 閉じる」か戻るで閉じる
+ */
+@Composable
+private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Fieldbook.Paper)
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+        ) {
+            PopChip("× 閉じる", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onDismiss)
+            Spacer(Modifier.height(4.dp))
+            TowerDetail(tower, sketch, mine, picture = Modifier.fillMaxWidth().weight(1f))
+        }
+    }
+}
+
+/**
+ * タワー 1 基の中身：高さ、絵（[picture] の大きさ）、本数（毎日 1 つずつ積むは連続日数）・作者・日時、
+ * 「共有ページを開く」（ブラウザ）と「リンクをコピー」。コピーしたら同じ言葉で知らせる
+ */
+@Composable
+private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: Boolean, picture: Modifier) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val url = "${ApiClient.baseUrl}/towers/${tower.id}"
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            "%.2f".format(Locale.US, tower.height),
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 40.sp,
+            color = Fieldbook.Ink,
+        )
+        Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 7.dp))
+        if (mine) {
+            PopTag("あなたのタワー", face = Pop.OrangeDeep, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+    Box(
+        modifier = picture
+            .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge)
+            .clip(RoundedCornerShape(SECTION_CORNER)),
+    ) {
+        if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(12.dp))
+    }
+    Spacer(Modifier.height(10.dp))
+    // 紙片では物差しに関係なく並べる（どの値も塗らない）。並びは高い順として渡す（高さは上の大きな数字）
+    TowerMeta(tower, TowerSort.HEIGHT, partsLabel = true)
+    Spacer(Modifier.height(16.dp))
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+        PopButton(
+            label = "共有ページを開く",
+            onClick = { uriHandler.openUri(url) },
+            face = Pop.OrangeDeep,
+            text = Pop.Letter,
+            fontSize = 15.sp,
+            modifier = Modifier.weight(1f),
+        )
+        PopButton(
+            label = "リンクをコピー",
+            onClick = {
+                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("ミチツミ", url))
+                // Android 13 以降は端末が「コピーしました」を出すので、それより前だけ自分で知らせる
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, "リンクをコピーしました", Toast.LENGTH_SHORT).show()
+            },
+            face = Fieldbook.Card,
+            text = Pop.TealLine,
+            edge = Pop.TealLine,
+            fontSize = 14.sp,
+        )
     }
 }
 

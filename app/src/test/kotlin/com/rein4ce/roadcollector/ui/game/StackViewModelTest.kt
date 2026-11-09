@@ -637,6 +637,66 @@ class StackViewModelTest {
         assertEquals(WeatherBonus.NONE, vm.bonus)
     }
 
+    // ---- 遊び方を選ぶ画面へ戻る（決定 76） ----
+
+    @Test
+    fun `戻ると止まり、次に開いたときにそのときのコレクションで新しいゲームを始める`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        assertNull("途中で戻った回は数えない", vm.leave())
+        assertEquals(StackViewModel.Phase.Idle, vm.phase)
+        assertNull(vm.current)
+        val left = vm.runId
+        // 戻っている間に道が増えた。開いたときの一覧で始める
+        vm.updateInventory(listOf(a, b, c), true)
+        assertEquals(left + 1, vm.runId)
+        assertEquals(listOf(a, b, c), vm.pool)
+        assertEquals(0, vm.placedCount)
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        // 始めたあとは、一覧が変わっても始め直さない（今までどおり）
+        vm.updateInventory(listOf(a), true)
+        assertEquals(left + 1, vm.runId)
+    }
+
+    @Test
+    fun `戻ったときにコレクションが空なら、開いたときは始めずに案内を出す`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        vm.leave()
+        vm.updateInventory(emptyList(), true)
+        assertEquals(StackViewModel.Phase.Idle, vm.phase)
+        vm.updateInventory(listOf(c), true)
+        assertEquals(listOf(c), vm.pool)
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+    }
+
+    @Test
+    fun `落ちて終わり、塔が落ち着くのを待っている途中に戻ったら、その場で結果を決めて返す`() {
+        // 落ちたパーツを取り除いたあとも、しばらく落ち着くのを待つ（止まったかを見るのは 3 秒たってから）
+        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 3.0, maxSeconds = 6.0))
+        vm.updateInventory(listOf(a, b), true)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.fallenCount > 0 }
+        assertEquals("まだ落ち着くのを待っている", StackViewModel.Phase.Settling, vm.phase)
+        val result = vm.leave()
+        assertTrue("台に 1 本残った、数えてよい結果", result != null && result.settled && result.remainingCount == 1)
+        assertEquals(StackViewModel.Phase.Idle, vm.phase)
+    }
+
+    @Test
+    fun `終わったあとに戻ると、その結果を返す（もう数えてあっても、最高は大きい方だけ残る）`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        finishWithTower(vm)
+        val result = vm.result
+        assertEquals(result, vm.leave())
+        assertNull("2 回目は無い", vm.leave())
+    }
+
     /** 置いてから落ちきるまで（約 0.5 秒）より短い待ち時間。時間切れの扱いを確かめるのに使う */
     private val shortTiming = StackViewModel.SettleTiming(minSeconds = 0.2, maxSeconds = 0.3)
 

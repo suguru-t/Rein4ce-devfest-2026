@@ -8,6 +8,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartNameResponse
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -17,7 +18,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -46,9 +49,15 @@ object ApiClient {
 
     suspend fun ping(): String = client.get("$baseUrl/").body()
 
-    /** 一覧。持ち主の印をヘッダで送ると、自分が送ったタワーに mine が付いて返る（サーバの OWNER_HEADER と同じ名前） */
-    suspend fun listTowers(): List<TowerSummary> =
-        client.get("$baseUrl/towers") { ownerId()?.let { header(OWNER_HEADER, it) } }.body()
+    /**
+     * [mode] の遊び方の一覧（決定 77）。持ち主の印をヘッダで送ると、自分が送ったタワーに mine が付いて返る（サーバの OWNER_HEADER と同じ名前）。
+     * 遊び方を知らない前のサーバは mode を見ずに通常の一覧を返すので、受け取ったあと遊び方で絞る（遊び方の無い行は通常）
+     */
+    suspend fun listTowers(mode: TowerMode = TowerMode.NORMAL): List<TowerSummary> =
+        client.get("$baseUrl/towers") {
+            parameter("mode", mode.wire)
+            ownerId()?.let { header(OWNER_HEADER, it) }
+        }.body<List<TowerSummary>>().filter { it.mode == mode }
 
     /**
      * タワー 1 基の中身（パーツと置き方）。
@@ -74,17 +83,40 @@ object ApiClient {
      * 送信できたタワーの id を受け取る係（自分のタワーの印。data/MyTowers）。
      * アプリの起動時に RoadCollectorApp がつなぐ
      */
-    var onPosted: (TowerCreated) -> Unit = {}
+    var onPosted: (TowerCreated, TowerMode) -> Unit = { _, _ -> }
 
     /**
-     * タワーを送る。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる。
+     * 通常のタワーを送る（POST /towers）。作者名がまだ入っていなければ設定のニックネームを、持ち主の印を入れて送る。送れたら [onPosted] に知らせる。
      * 送ったタワーは誰でも読めるので、パーツを歩いた時刻とタワーを作った時刻は、日付までに丸めてから送る（[withDayOnlyTimes]）
      */
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
-            setBody(withOwner(withAuthor(withDayOnlyTimes(tower), authorName()), ownerId()))
-        }.body<TowerCreated>().also(onPosted)
+            setBody(prepared(tower))
+        }.body<TowerCreated>().also { onPosted(it, TowerMode.NORMAL) }
+
+    /**
+     * 3 分チャレンジの塔を送る（POST /towers/challenge。決定 77）。結果が出たら自動で送る（ChallengeViewModel）。
+     * 作者名・持ち主の印・時刻の丸めは [postTower] と同じ
+     */
+    suspend fun postChallengeTower(tower: Tower): TowerCreated =
+        client.post("$baseUrl/towers/challenge") {
+            contentType(ContentType.Application.Json)
+            setBody(prepared(tower))
+        }.body<TowerCreated>().also { onPosted(it, TowerMode.CHALLENGE) }
+
+    /**
+     * 毎日 1 つずつ積むの塔を送る（PUT /towers/daily。決定 77）。サーバは持ち主の印ごとに 1 基を持ち、送るたびに新しい形にする。
+     * 積んで止まったら自動で送る（DailyViewModel）
+     */
+    suspend fun putDailyTower(tower: Tower): TowerCreated =
+        client.put("$baseUrl/towers/daily") {
+            contentType(ContentType.Application.Json)
+            setBody(prepared(tower))
+        }.body<TowerCreated>().also { onPosted(it, TowerMode.DAILY) }
+
+    /** 送る形：時刻を日付までに丸め、作者名と持ち主の印を入れる */
+    private fun prepared(tower: Tower): Tower = withOwner(withAuthor(withDayOnlyTimes(tower), authorName()), ownerId())
 
     /**
      * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。
