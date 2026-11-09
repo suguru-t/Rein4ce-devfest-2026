@@ -1,7 +1,16 @@
 package com.rein4ce.roadcollector.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.PopRadio
+import com.rein4ce.roadcollector.ui.common.PopSliderThumb
+import com.rein4ce.roadcollector.ui.common.PopSwitch
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.SLIDER_THUMB_SIZE
+import com.rein4ce.roadcollector.ui.common.popBlock
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -23,14 +32,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,7 +72,6 @@ import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.data.WeatherMotion
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.PressIconButton
-import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlin.math.roundToInt
@@ -118,15 +123,19 @@ fun SettingsDialog(onDismiss: () -> Unit) {
         onDismiss = { if (page == Page.LIST) onDismiss() else back() },
         onClose = onDismiss,
         onBack = if (page == Page.LIST) null else back,
+        // コレクションの拡大表示と同じポップな枠（紺の名札の見出し・下に側面がのぞく紙の面。決定 56）
+        pop = true,
+        // 見出しは名札にせず字だけ（名札はボタンのように見えたため）
+        nameTag = false,
     ) {
         when (page) {
             Page.LIST -> {
                 // ニックネーム（「みんな」に出る作者名）を、いちばん上に置く（名前を付ける所なので、最初に目に入るように）
-                Section("みんなのタワー") {
+                Section("みんなのタワー", accent = Pop.Navy) {
                     LinkRow("ニックネーム", nickname.ifBlank { "名無し" }) { editingNickname = true }
                 }
                 // 前は「見た目」。振動も入れたので「システム」にした
-                Section("システム") {
+                Section("システム", accent = Pop.Teal) {
                     LinkRow(Page.THEME.title, theme.label) { page = Page.THEME }
                     ItemDivider()
                     LinkRow(Page.MOTION.title, motion.label) { page = Page.MOTION }
@@ -137,27 +146,29 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     ItemDivider()
                     LinkRow(Page.SFX.title, onOff(sfxOn)) { page = Page.SFX }
                 }
-                Section("記録") {
+                Section("記録", accent = Pop.Orange) {
                     LinkRow(Page.KEEP_ON.title, onOff(keepOn)) { page = Page.KEEP_ON }
                     ItemDivider()
                     LinkRow(Page.AI.title, onOff(aiNaming)) { page = Page.AI }
                 }
                 // 発表が終わったら、DEMO_SETTINGS（AppSettings.kt）を false にすれば出なくなる
                 if (DEMO_SETTINGS) {
-                    Section("デモ") {
+                    Section("デモ", accent = Pop.Yellow) {
                         LinkRow(Page.SAMPLES.title, if (samplesShown) "出す" else "出さない") { page = Page.SAMPLES }
                         ItemDivider()
                         LinkRow(Page.DEMO_SKY.title, demoSky.label) { page = Page.DEMO_SKY }
                     }
                 }
-                Section("その他") {
+                Section("その他", accent = Fieldbook.Mark) {
                     LinkRow(Page.HOWTO.title, null) { page = Page.HOWTO }
                     ItemDivider()
                     LinkRow(Page.ABOUT.title, null) { page = Page.ABOUT }
                 }
             }
-            Page.THEME -> Column(modifier = Modifier.selectableGroup().padding(top = 8.dp)) {
-                for (m in ThemeMode.entries) {
+            Page.THEME -> Section(null) {
+                Column(modifier = Modifier.selectableGroup()) {
+                ThemeMode.entries.forEachIndexed { i, m ->
+                    if (i > 0) ItemDivider()
                     Choice(
                         label = m.label,
                         // 端末の設定がいまどちらかも出す（選んだときにどちらになるか分かるように）
@@ -165,6 +176,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                         selected = m == theme,
                         onSelect = { settings.setThemeMode(m) },
                     )
+                }
                 }
             }
             Page.MOTION -> MotionSlider(motion = motion, onChange = settings::setWeatherMotion)
@@ -203,6 +215,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 explanation = "記録したパーツに AI が名前を付けます。送るのは形・距離・日時だけです。",
             )
             Page.SAMPLES -> {
+                Section(null) {
                 Toggle(
                     label = if (samplesShown) "出す" else "出さない",
                     note = null,
@@ -212,12 +225,13 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                         if (on) repository.restoreMissingSamples() else repository.removeSamples()
                     },
                 )
+                }
                 Text(
                     "コレクションに見本（${SampleParts.all.size} 本）を出します。記録したパーツはそのままです。",
                     style = noteStyle,
                     fontSize = 14.sp,
                     color = Fieldbook.Ink,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
                 )
             }
             Page.DEMO_SKY -> Column(modifier = Modifier.padding(top = 8.dp)) {
@@ -228,9 +242,12 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                     color = Fieldbook.Ink,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                Column(modifier = Modifier.selectableGroup()) {
-                    for (sky in DemoSky.entries) {
-                        Choice(label = sky.label, note = null, selected = sky == demoSky, onSelect = { settings.setDemoSky(sky) })
+                Section(null) {
+                    Column(modifier = Modifier.selectableGroup()) {
+                        DemoSky.entries.forEachIndexed { i, sky ->
+                            if (i > 0) ItemDivider()
+                            Choice(label = sky.label, note = null, selected = sky == demoSky, onSelect = { settings.setDemoSky(sky) })
+                        }
                     }
                 }
             }
@@ -270,6 +287,8 @@ private fun onOff(on: Boolean) = if (on) "オン" else "オフ"
  * 背景の天気の動きを選ぶスライダー（左ほど動きが少ない）。目盛りの下に段階の名前、その下に選んでいる段階の説明。
  * 動かすとすぐに効く（後ろの天気が変わる）。段階の名前を押しても選べる
  */
+// つまみを積み木のブロックにするため、つまみを差し替えられる Slider を使う（Material ではまだ試験中の形）
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Unit) {
     val stops = WeatherMotion.entries
@@ -294,13 +313,8 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
                     onValueChange = { select(it.roundToInt()) },
                     valueRange = 0f..stops.lastIndex.toFloat(),
                     steps = stops.size - 2,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Fieldbook.Survey,
-                        activeTrackColor = Fieldbook.Survey,
-                        activeTickColor = Fieldbook.Card,
-                        inactiveTrackColor = Fieldbook.CardEdge,
-                        inactiveTickColor = Fieldbook.Muted,
-                    ),
+                    colors = popSliderColors(),
+                    thumb = { PopSliderThumb() },
                     modifier = Modifier
                         .padding(horizontal = (cell / 2 - SliderThumbHalfWidth).coerceAtLeast(0.dp))
                         .semantics {
@@ -313,9 +327,10 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
                         val selected = m == motion
                         Text(
                             m.label,
+                            fontFamily = Pop.Rounded,
+                            fontWeight = FontWeight.Black,
                             fontSize = labelSize,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) Fieldbook.Survey else Fieldbook.Muted,
+                            color = if (selected) Pop.TealLine else Fieldbook.Muted,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             softWrap = false,
@@ -350,6 +365,8 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
  * オフのときは、曲と音量をうすくして選べない。説明、いちばん下に「初期設定に戻す」（オン・トコトコ・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。
  * 選ぶ・動かすとすぐに音が変わる（曲は、新しい曲の頭から流れる）
  */
+// つまみを積み木のブロックにするため、つまみを差し替えられる Slider を使う（Material ではまだ試験中の形）
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BgmPage(
     on: Boolean,
@@ -360,13 +377,15 @@ private fun BgmPage(
     onVolumeChange: (Int) -> Unit,
     onReset: () -> Unit,
 ) {
-    Toggle(label = if (on) "オン" else "オフ", note = null, checked = on, onChange = onOnChange)
-    Column(modifier = Modifier.padding(top = 8.dp).alpha(if (on) 1f else 0.45f)) {
+    Section(null) {
+        Toggle(label = if (on) "オン" else "オフ", note = null, checked = on, onChange = onOnChange)
+    }
+    Column(modifier = Modifier.padding(top = 10.dp).alpha(if (on) 1f else 0.45f)) {
         TrackPicker(track = track, enabled = on, onChange = onTrackChange)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("音量", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
-            Text("$volume", fontFamily = Fieldbook.Data, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Survey)
+            Text("音量", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
+            Text("$volume", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 17.sp, color = Pop.TealLine)
         }
         Slider(
             value = volume.toFloat(),
@@ -374,18 +393,8 @@ private fun BgmPage(
             valueRange = 1f..AppSettings.MAX_BGM_VOLUME.toFloat(),
             steps = AppSettings.MAX_BGM_VOLUME - 2,
             enabled = on,
-            colors = SliderDefaults.colors(
-                thumbColor = Fieldbook.Survey,
-                activeTrackColor = Fieldbook.Survey,
-                activeTickColor = Fieldbook.Card,
-                inactiveTrackColor = Fieldbook.CardEdge,
-                inactiveTickColor = Fieldbook.Muted,
-                disabledThumbColor = Fieldbook.Muted,
-                disabledActiveTrackColor = Fieldbook.Muted,
-                disabledActiveTickColor = Fieldbook.Card,
-                disabledInactiveTrackColor = Fieldbook.CardEdge,
-                disabledInactiveTickColor = Fieldbook.Muted,
-            ),
+            colors = popSliderColors(),
+            thumb = { PopSliderThumb(enabled = on) },
             modifier = Modifier.semantics {
                 contentDescription = "BGM の音量"
                 stateDescription = "${AppSettings.MAX_BGM_VOLUME} 段階の $volume"
@@ -405,9 +414,17 @@ private fun BgmPage(
     )
     // 初期設定（オン・トコトコ・音量 まん中）に戻す。すでに初期設定なら押せない
     val isDefault = on && track == BgmTrack.MARIMBA && volume == AppSettings.DEFAULT_BGM_VOLUME
-    PressTextButton(onClick = onReset, enabled = !isDefault, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
-        Text("初期設定に戻す", color = if (isDefault) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
-    }
+    // 「みんな」の二番手のボタンと同じ、紙の面に青緑の縁のブロック
+    PopButton(
+        "初期設定に戻す",
+        onClick = onReset,
+        face = Fieldbook.Card,
+        text = Pop.TealLine,
+        edge = Pop.TealLine,
+        enabled = !isDefault,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+    )
 }
 
 /**
@@ -421,15 +438,16 @@ private fun TrackPicker(track: BgmTrack, enabled: Boolean, onChange: (BgmTrack) 
     val index = all.indexOf(track)
     fun step(by: Int) = onChange(all[Math.floorMod(index + by, all.size)])
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        Text("曲", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
+        Text("曲", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
         PressIconButton(onClick = { step(-1) }, enabled = enabled) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "前の曲", tint = Fieldbook.Survey)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "前の曲", tint = Pop.TealLine)
         }
         Text(
             track.label,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
             fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = Fieldbook.Survey,
+            color = Pop.TealLine,
             textAlign = TextAlign.Center,
             maxLines = 1,
             modifier = Modifier
@@ -440,7 +458,7 @@ private fun TrackPicker(track: BgmTrack, enabled: Boolean, onChange: (BgmTrack) 
                 },
         )
         PressIconButton(onClick = { step(1) }, enabled = enabled) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "次の曲", tint = Fieldbook.Survey)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "次の曲", tint = Pop.TealLine)
         }
     }
 }
@@ -451,39 +469,39 @@ private val TrackNameWidth = 104.dp
 /** スライダーの段階の名前の左右の余白 */
 private val LabelPadding = 2.dp
 
-/** M3 のスライダーのつまみの幅の半分（つまみのまん中は、スライダーの端からこれだけ内側までしか行かない） */
-private val SliderThumbHalfWidth = 2.dp
+/** スライダーのつまみの幅の半分（つまみのまん中は、スライダーの端からこれだけ内側までしか行かない） */
+private val SliderThumbHalfWidth = SLIDER_THUMB_SIZE / 2
 
-/** オン・オフを切り替える画面：スイッチの行と、その下にくわしい説明 */
+/** オン・オフを切り替える画面：スイッチの行（紙の面）と、その下にくわしい説明 */
 @Composable
 private fun SwitchPage(checked: Boolean, onChange: (Boolean) -> Unit, explanation: String) {
-    Toggle(label = if (checked) "オン" else "オフ", note = null, checked = checked, onChange = onChange)
-    Text(explanation, style = noteStyle, fontSize = 14.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+    Section(null) {
+        Toggle(label = if (checked) "オン" else "オフ", note = null, checked = checked, onChange = onChange)
+    }
+    Text(explanation, style = noteStyle, fontSize = 14.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 10.dp, bottom = 8.dp))
 }
 
 /**
- * ひとまとまりの項目（見た目・採集など）。[title] があれば上に小さな見出し。
- * まとまりごとに 1 つの枠（コレクションの紙片と同じ、紙の色の角丸）でくくり、中の項目は細い線（[ItemDivider]）で分ける
+ * ひとまとまりの項目（システム・記録など）。[title] があれば上に見出し：[accent] の色の小さな積み木と、太い丸ゴシックの名前
+ * （「みんな」の断面図の下の行の印と同じ形）。まとまりごとに、コレクションのカードと同じ紙の面（縁と下の側面）でくくり、
+ * 中の項目は細い線（[ItemDivider]）で分ける
  */
 @Composable
-private fun Section(title: String?, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(6.dp)
-    Column(modifier = Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun Section(title: String?, accent: Color = Fieldbook.Mark, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (title != null) {
-            Text(
-                title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Fieldbook.Muted,
-                modifier = Modifier.semantics { heading() },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { heading() }) {
+                Box(Modifier.size(width = 12.dp, height = 14.dp).popBlock(face = accent, corner = 3.dp, depth = 2.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(title, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Ink)
+            }
         }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(Fieldbook.Card)
-                .border(1.dp, Fieldbook.CardEdge, shape),
+                .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
+                // 押したときの波紋を、角の丸い面の中に収める
+                .clip(RoundedCornerShape(SECTION_CORNER)),
             content = content,
         )
     }
@@ -492,56 +510,44 @@ private fun Section(title: String?, content: @Composable ColumnScope.() -> Unit)
 /** 枠の中の項目と項目のあいだの細い線 */
 @Composable
 private fun ItemDivider() {
-    HorizontalDivider(modifier = Modifier.padding(start = 14.dp), color = Fieldbook.CardEdge)
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp), color = Fieldbook.CardEdge)
 }
 
-/** 1 つだけ選ぶ項目の 1 行（行ごと押せる） */
+/** 1 つだけ選ぶ項目の 1 行（行ごと押せる）。左にブロックの丸い印 */
 @Composable
 private fun Choice(label: String, note: String?, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton),
+            .heightIn(min = 52.dp)
+            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(
-            selected = selected,
-            onClick = null, // 行ごと押せる（selectable）
-            colors = RadioButtonDefaults.colors(selectedColor = Fieldbook.Survey, unselectedColor = Fieldbook.Muted),
-        )
-        Spacer(Modifier.width(8.dp))
-        Labels(label, note, modifier = Modifier.padding(vertical = 4.dp))
+        PopRadio(selected = selected)
+        Spacer(Modifier.width(12.dp))
+        Labels(label, note, modifier = Modifier.padding(vertical = 6.dp))
     }
 }
 
-/** オン・オフの項目の 1 行（行ごと押せる） */
+/** オン・オフの項目の 1 行（行ごと押せる）。右にブロックのスイッチ */
 @Composable
 private fun Toggle(label: String, note: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .toggleable(value = checked, onValueChange = onChange, role = Role.Switch),
+            .toggleable(value = checked, onValueChange = onChange, role = Role.Switch)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Labels(label, note, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
         Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = null, // 行ごと押せる（toggleable）
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = androidx.compose.ui.graphics.Color.White,
-                checkedTrackColor = Fieldbook.Survey,
-                uncheckedThumbColor = Fieldbook.Muted,
-                uncheckedTrackColor = Fieldbook.Card,
-                uncheckedBorderColor = Fieldbook.Muted,
-            ),
-        )
+        PopSwitch(checked = checked)
     }
 }
 
-/** 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定と「›」（まとまりの枠の中に並べる） */
+/** 押すと別の画面が開く項目の 1 行。左に名前、右に今の設定（灰色の丸ゴシック）と「›」（まとまりの枠の中に並べる） */
 @Composable
 private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
     Row(
@@ -549,23 +555,44 @@ private fun LinkRow(label: String, value: String?, onClick: () -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 52.dp)
             .clickable(onClick = onClick, role = Role.Button)
-            .padding(start = 14.dp, end = 10.dp),
+            .padding(start = 14.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 16.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
+        Text(
+            label,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = 15.sp,
+            color = Fieldbook.Ink,
+            modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+        )
         if (value != null) {
             Spacer(Modifier.width(8.dp))
-            Text(value, fontSize = 15.sp, color = Fieldbook.Muted, maxLines = 1)
+            // 今の設定は、項目の名前と同じ丸ゴシックで、少し小さく灰色にして控えめに
+            Text(value, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Muted, maxLines = 1)
         }
-        Text("　›", fontSize = 18.sp, color = Fieldbook.Muted)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Fieldbook.Muted, modifier = Modifier.size(24.dp))
     }
 }
 
-/** 項目の名前と、その下の小さな説明 */
+/** 項目の名前（太い丸ゴシック）と、その下の小さな説明 */
 @Composable
 private fun Labels(label: String, note: String?, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
-        Text(label, fontSize = 16.sp, color = Fieldbook.Ink)
+        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink)
         if (note != null) Text(note, style = noteStyle, fontSize = 12.sp, color = Fieldbook.Muted)
     }
 }
+
+/** スライダーの色：つまみの左は青緑、右は灰色の線（つまみは [PopSliderThumb]） */
+@Composable
+private fun popSliderColors() = SliderDefaults.colors(
+    activeTrackColor = Pop.TealLine,
+    activeTickColor = Fieldbook.Card,
+    inactiveTrackColor = Fieldbook.CardEdge,
+    inactiveTickColor = Fieldbook.Muted,
+    disabledActiveTrackColor = Fieldbook.Muted,
+    disabledActiveTickColor = Fieldbook.Card,
+    disabledInactiveTrackColor = Fieldbook.CardEdge,
+    disabledInactiveTickColor = Fieldbook.Muted,
+)

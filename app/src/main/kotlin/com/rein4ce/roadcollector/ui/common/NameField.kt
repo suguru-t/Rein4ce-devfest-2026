@@ -1,5 +1,8 @@
 package com.rein4ce.roadcollector.ui.common
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -42,12 +45,12 @@ internal fun fieldbookTextFieldColors(): TextFieldColors = OutlinedTextFieldDefa
     focusedContainerColor = Fieldbook.Card,
     unfocusedContainerColor = Fieldbook.Card,
     errorContainerColor = Fieldbook.Card,
-    cursorColor = Fieldbook.Survey,
+    cursorColor = Pop.TealLine,
     errorCursorColor = Fieldbook.Danger,
-    focusedBorderColor = Fieldbook.Survey,
+    focusedBorderColor = Pop.TealLine,
     unfocusedBorderColor = Fieldbook.CardEdge,
     errorBorderColor = Fieldbook.Danger,
-    focusedLabelColor = Fieldbook.Survey,
+    focusedLabelColor = Pop.TealLine,
     unfocusedLabelColor = Fieldbook.Muted,
     errorLabelColor = Fieldbook.Danger,
     focusedPlaceholderColor = Fieldbook.Mark,
@@ -123,16 +126,46 @@ internal fun AiNamingRow(naming: AiNaming, enabled: Boolean, idleNote: String, f
 internal fun AiNameButton(asking: Boolean, again: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     PressTextButton(onClick = onClick, enabled = enabled && !asking) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (asking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Fieldbook.Survey)
+            if (asking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Pop.TealLine)
             Text(
                 when {
                     asking -> "考え中…"
                     again -> "AI にもう一度考えてもらう"
                     else -> "AI に考えてもらう"
                 },
-                color = if (asking || !enabled) Fieldbook.Muted else Fieldbook.Survey,
-                fontWeight = FontWeight.Bold,
+                color = if (asking || !enabled) Fieldbook.Muted else Pop.TealLine,
+                fontFamily = Pop.Rounded,
+                fontWeight = FontWeight.Black,
             )
         }
+    }
+}
+
+/**
+ * 名前を付ける窓の枠（パーツの「名前を付ける」と、設定のニックネーム。決定 56）。設定やコレクションの拡大表示と同じポップな枠
+ * （紺の名札の見出し・下に側面がのぞく紙の面）に中身（入力欄と AI のボタン）を載せ、いちばん下に「保存」（青緑のブロック）。
+ * やめるときは、枠の下の丸い「×」か、枠の外を押す
+ *
+ * @param saveEnabled 「保存」を押せるか（字数を超えているときは押せない）
+ */
+@Composable
+internal fun NameDialogFrame(
+    title: String,
+    saveEnabled: Boolean,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    FramedDialog(
+        title = title,
+        onDismiss = onDismiss,
+        pop = true,
+        nameTag = false,
+        footer = {
+            PopButton("保存", onClick = onSave, face = Pop.TealDeep, text = Pop.Letter, enabled = saveEnabled, modifier = Modifier.fillMaxWidth())
+        },
+    ) {
+        // 入力欄で字を長押しして選ぶときの振動も、設定の「振動」に従わせる（ui/common/Haptics.kt）
+        ProvideAppHaptics { Column(content = content) }
     }
 }
