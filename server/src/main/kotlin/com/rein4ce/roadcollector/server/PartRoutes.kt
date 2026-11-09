@@ -21,10 +21,12 @@ const val MAX_PART_POINTS = 50
  *   200 { "name": "..." }   名前が付いた（10 文字以内）
  *   400                     Part として読めない、頂点が 0 個か多すぎる
  *   503                     名前を付けられなかった（時間切れ、Gemini の失敗、命名が無効）。アプリは今の表示のままにする
+ *   429                     1 分あたりの回数を超えた（RateLimit.kt）。アプリは 503 と同じに今の表示のままにする
  */
-fun Route.partRoutes(namer: PartNamer) {
+fun Route.partRoutes(namer: PartNamer, limits: RateLimits = RateLimits.OFF) {
 
     post("/parts/name") {
+        if (call.overLimit(limits.partName)) return@post
         val part = try {
             call.receive<Part>()
         } catch (e: CancellationException) {
@@ -54,8 +56,10 @@ fun Route.partRoutes(namer: PartNamer) {
      *   400                     NicknameHints として読めない、数が変（負の数・多すぎる名前）
      *   413                     大きすぎる（16 KB を超える）
      *   503                     考えられなかった（時間切れ、Gemini の失敗、命名が無効）。アプリは入力欄をそのままにする
+ *   429                     1 分あたりの回数を超えた（RateLimit.kt）。アプリは入力欄をそのままにする
      */
     post("/nickname") {
+        if (call.overLimit(limits.nickname)) return@post
         // 受け取る大きさの上限（名前 50 個ぶんでも数 KB。それより大きいものは読まない。#81 のレビュー）
         val size = call.request.contentLength()
         if (size != null && size > MAX_NICKNAME_BODY_BYTES) {

@@ -37,9 +37,11 @@ import kotlinx.coroutines.withContext
  *
  *   POST /parts/name           パーツに名前を付ける（Gemini）→ { name }。失敗は 503。PartRoutes.kt
  *   POST /nickname             ニックネームを考える（Gemini）→ { name }。失敗は 503。PartRoutes.kt
+ *
+ *   一覧・投稿・名前・ニックネームは、1 分あたりの回数を数え、超えたら 429（Retry-After 付き）。RateLimit.kt
  *   TODO(C): 対戦方式が決まったら /challenges
  */
-fun Route.towerRoutes(store: TowerStore) {
+fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
 
     get("/") {
         call.respondText("Road Collector server OK (${store.count()} towers)")
@@ -50,6 +52,7 @@ fun Route.towerRoutes(store: TowerStore) {
     }
 
     get("/towers") {
+        if (call.overLimit(limits.towersGet)) return@get
         // アプリは自分の持ち主の印を X-Owner-Id で送る。形が違うもの（他人の印を探る試しなど）は無いものとして扱う
         val owner = call.request.header(OWNER_HEADER)?.takeIf { OWNER_ID_PATTERN.matches(it) }
         // 答えが人（印）によって違うので、途中のキャッシュ（CDN など）に共有させない
@@ -58,6 +61,8 @@ fun Route.towerRoutes(store: TowerStore) {
     }
 
     post("/towers") {
+        // 回数を数えてから読む（壊れたものを送り続けられても、1 分の上限で止まる。RateLimit.kt）
+        if (call.overLimit(limits.towersPost)) return@post
         // 誰でも叩ける URL なので、壊れたタワーは保存前に 400 で断る（TowerValidation.kt）。
         // 読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする
         val tower = try {

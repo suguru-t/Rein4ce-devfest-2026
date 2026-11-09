@@ -272,7 +272,7 @@ internal fun PopTag(label: String, face: Color, modifier: Modifier = Modifier, f
 internal val SECTION_CORNER: Dp = 14.dp
 
 /**
- * リロードの印：青緑のブロックに白い矢印。少し傾けて、題字の積み木と並べたときに浮かないように。
+ * リロードの印：青緑のブロックに白い矢印。傾けずに水平に置く（見出しの札・並びの札とそろえる）。
  * 取り直している間は矢印が回る（端末で動きを減らしていれば回さない）
  */
 @Composable
@@ -300,7 +300,6 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .graphicsLayer { rotationZ = 5f }
                 .size(width = 38.dp, height = 41.dp)
                 .popBlock(face = if (refreshing) Pop.Teal.copy(alpha = 0.7f) else Pop.Teal, corner = 10.dp, depth = 3.dp),
         ) {
