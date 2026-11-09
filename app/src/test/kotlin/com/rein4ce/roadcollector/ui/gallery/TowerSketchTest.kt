@@ -58,4 +58,14 @@ class TowerSketchTest {
         assertTrue("maxY=${b.maxY}", b.maxY >= 2.4f)
         assertEquals(b.maxY - b.minY, b.height, 1e-6f)
     }
+
+    @Test
+    fun `広い台で積んだタワーは、台の幅に合わせて範囲を広げ、台の上のパーツで下に広げない（決定 66）`() {
+        val wide = tower(height = 0.2f, Placement("p1", x = 1.2f, y = 0.07f, angleRad = 0f)).copy(platformWidth = 2.8f)
+        val b = sketchBounds(wide)
+        assertTrue(b.minX <= -1.4f && b.maxX >= 1.4f)
+        // x = 1.2 は広い台の上（今までの台なら外）なので、下には広げない
+        assertTrue(b.minY >= -PLATFORM_THICKNESS - 0.1f - 0.0001f)
+        assertTrue(rankingWidthFor(2.8f) > RANKING_WIDTH_M)
+    }
 }

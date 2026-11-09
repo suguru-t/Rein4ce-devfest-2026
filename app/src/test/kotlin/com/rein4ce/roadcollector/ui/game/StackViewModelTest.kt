@@ -230,6 +230,17 @@ class StackViewModelTest {
     }
 
     @Test
+    fun `送るタワーには台の幅を入れ、みんなの絵と共有画像も同じ幅の台で描く`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a), true)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Finished }
+        assertEquals(2.8f, vm.result!!.tower.platformWidth, 1e-6f) // 決定 66
+    }
+
+    @Test
     fun `狙っている間に塔が崩れて落ちたら、狙っていたパーツは置かずに終わる`() {
         // 1 個目を台の外に置き、落ちきる前に時間切れにして次へ進む。2 個目を狙っている間に、1 個目が落ちる
         val vm = StackViewModel(settleTiming = shortTiming)

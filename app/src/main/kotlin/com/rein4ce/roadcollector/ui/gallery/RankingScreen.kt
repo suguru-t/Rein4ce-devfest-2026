@@ -108,6 +108,9 @@ internal fun RankingScreen(
     // 絵の縮尺は、この一覧でいちばん高いタワーが枠に入る大きさにそろえる（絵そのものが高さの差を語る）。
     // 横棒は、この一覧の 1 番を 100% にする
     val referenceHeight = sketchHeightFor(listed.maxOfOrNull { it.height } ?: 1f)
+    // 幅も、このページの絵が届いている中でいちばん広い台に合わせる（広い台で積んだタワーがはみ出さないように。決定 66）
+    val referenceWidth = shown.mapNotNull { gallery.sketches[it.id]?.platformWidth }.maxOfOrNull { rankingWidthFor(it) }
+        ?.coerceAtLeast(RANKING_WIDTH_M) ?: RANKING_WIDTH_M
     val topValue = listed.maxOfOrNull { sort.valueOf(it) }?.coerceAtLeast(0.01f) ?: 1f
 
     val listState = rememberLazyListState()
@@ -172,6 +175,7 @@ internal fun RankingScreen(
                     // 「最長」「最多」の札は全部の中での 1 番だけ（あなたのタワーの 1 番には付けない）
                     showTopTag = !mineOnly,
                     referenceHeight = referenceHeight,
+                    referenceWidth = referenceWidth,
                     ratio = sort.valueOf(t) / topValue,
                     onClick = { onOpen(t) },
                 )
@@ -247,6 +251,7 @@ private fun TowerCard(
     mine: Boolean,
     showTopTag: Boolean,
     referenceHeight: Float,
+    referenceWidth: Float,
     ratio: Float,
     onClick: () -> Unit,
 ) {
@@ -276,7 +281,7 @@ private fun TowerCard(
                 .background(Fieldbook.Paper, SketchShape)
                 .then(if (sketch == null) Modifier.dashedOutline(Fieldbook.CardEdge, corner = 8.dp) else Modifier.border(1.dp, Fieldbook.CardEdge, SketchShape)),
         ) {
-            if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(4.dp), referenceHeight = referenceHeight)
+            if (sketch != null) TowerSketch(sketch, modifier = Modifier.fillMaxSize().padding(4.dp), referenceHeight = referenceHeight, referenceWidth = referenceWidth)
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
