@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -690,17 +691,18 @@ private fun PartCard(
     val selected = order != null && selecting && !editing
     // 主役は形そのもの。分類（L字など）は出さない
     val date = if (isSample) "見本" else walkDate(part.walkedAt)
-    // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない
-    val angle = if (editing && !isDragging && !reduceMotion) {
-        val wobble = rememberInfiniteTransition(label = "jiggle")
-        wobble.animateFloat(
+    // 並べ替え中の揺れ（±1.2°）。持ち上げているカードは揺らさない。
+    // 揺れの値は、下の graphicsLayer の中（描くとき）で読む。ここで読むと、揺れが動くたび（1 秒に 60 回）に
+    // カードの中身（図・名前・☆）まで組み立て直して描き直すので重い（並べ替え中に CPU が倍になっていた）
+    val wobble: State<Float>? = if (editing && !isDragging && !reduceMotion) {
+        rememberInfiniteTransition(label = "jiggle").animateFloat(
             initialValue = -1f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(durationMillis = 140, easing = LinearEasing), RepeatMode.Reverse),
             label = "jiggle",
-        ).value * 1.2f * jiggleDirection
+        )
     } else {
-        0f
+        null
     }
     val source = remember { MutableInteractionSource() }
     Column(
@@ -711,7 +713,7 @@ private fun PartCard(
                 val s = if (isDragging) 1.05f else 1f
                 scaleX = s
                 scaleY = s
-                rotationZ = angle
+                rotationZ = (wobble?.value ?: 0f) * 1.2f * jiggleDirection
                 shadowElevation = if (isDragging) 10.dp.toPx() else 0f
                 shape = CardShape
             }
