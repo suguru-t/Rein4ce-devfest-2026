@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -246,7 +247,18 @@ fun StackScreen(
                         leading(false)
                         PlacedAndFallen(vm.placedCount, vm.fallenCount, compact = false)
                     }
-                    HeightMeter(vm.height.toFloat(), compact = false)
+                    // 高さの右に「チェンジ」（狙っているパーツを替える。決定 62）。高さの数字より少し下げ、下の「○ m の道」の行の右にかかる所に置く
+                    // （ずらすのは見た目だけで、段の高さは変えない。右側は空いているので、下の行の字には重ならない）
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        HeightMeter(vm.height.toFloat(), compact = false)
+                        Spacer(Modifier.weight(1f))
+                        ChangeButton(
+                            enabled = vm.canChange,
+                            left = vm.changesLeft,
+                            onClick = vm::change,
+                            modifier = Modifier.offset(y = CHANGE_BUTTON_DROP),
+                        )
+                    }
                 }
                 val current = vm.current
                 if (vm.phase == StackViewModel.Phase.Placing && current != null) {
@@ -273,7 +285,19 @@ fun StackScreen(
             }
 
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
-            StackCanvas(vm = vm, modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds())
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                StackCanvas(vm = vm, modifier = Modifier.fillMaxSize().clipToBounds())
+                // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
+                // （段を伸ばすと塔を描く所が狭くなるため）
+                if (compact) {
+                    ChangeButton(
+                        enabled = vm.canChange,
+                        left = vm.changesLeft,
+                        onClick = vm::change,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 4.dp),
+                    )
+                }
+            }
 
             // 3 段目：操作（ボタン・完成カード）
             Column(
@@ -349,14 +373,8 @@ fun StackScreen(
                                 ) { Text("⟳ 15°") }
                                 MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                // チェンジ：都合の悪い形が出たら、ほかのパーツに替える（1 ゲームに 3 回まで。決定 62）。残りの回数を出す
-                                PressTextButton(onClick = vm::change, enabled = vm.canChange) {
-                                    Text("チェンジ（あと ${vm.changesLeft} 回）")
-                                }
-                                // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
-                                PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
-                            }
+                            // 今のコレクションの全部のパーツで、はじめから（パーツを選ぶ機能はやめた。決定 62）
+                            PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
                         }
                         StackViewModel.Phase.Settling -> {
                             // 段の高さは狙っているときのまま（controlsMinHeightDp）なので、ここでは文字だけ
@@ -720,6 +738,9 @@ private fun PlacedAndFallen(placed: Int, fallen: Int, compact: Boolean) {
         SkyText("落下 $fallen 個", color = FALLEN_RED, fontSize = size, modifier = fallenModifier)
     }
 }
+
+/** 「チェンジ」を、高さの行のまん中からどれだけ下げて置くか（ふつうの画面） */
+private val CHANGE_BUTTON_DROP = 24.dp
 
 /** 「落下 ○ 個」の赤 */
 private val FALLEN_RED = Color(0xFFD64545)
