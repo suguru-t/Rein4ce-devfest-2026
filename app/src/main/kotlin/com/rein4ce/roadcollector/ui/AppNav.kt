@@ -28,6 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -43,6 +48,8 @@ import com.rein4ce.roadcollector.collect.TrackRecorder
 import com.rein4ce.roadcollector.ui.collect.CollectScreen
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
+import com.rein4ce.roadcollector.ui.common.zoomInFrom
+import com.rein4ce.roadcollector.ui.common.zoomOrigin
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackTab
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
@@ -68,8 +75,9 @@ sealed class Dest(val route: String, val label: String, val iconOutline: ImageVe
     data object Collect : Dest("collect", "記録", AppIcons.FootprintsOutline)
     data object Inventory : Dest("inventory", "コレクション", AppIcons.NotebookOutline)
     data object Stack : Dest("stack", "積む", AppIcons.BlocksOutline)
-    // 「みんな」は、高さを競うランキングなのでトロフィー（前は共有の印）
-    data object Gallery : Dest("gallery", "みんな", AppIcons.TrophyOutline)
+    // 高さを競うランキングなのでトロフィー（前は共有の印）。名前は前は「みんな」で、何の画面か分かりにくかったので「ランキング」にした
+    // （ホームの行・タブの読み上げ・使い方。B の希望。画面の中の「みんなのタワー」はそのまま。route とコードの名前もそのまま）
+    data object Gallery : Dest("gallery", "ランキング", AppIcons.TrophyOutline)
 
     companion object {
         // 使うときに作る。すぐ作ると、`Dest.all` より先に `Dest.Collect` などを使ったとき（背景の天気の判定など）、
@@ -99,9 +107,17 @@ fun AppNav(collectRequests: Int = 0) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { RoadCollectorApp.from(context).gallery.prefetch() }
 
+    // 下のタブバーの家のボタンでホームへ戻るときだけ、ホームをそのボタンの所から大きくして出す（決定 78。ui/common/ZoomFrom.kt）。
+    // 値は大きくなり始める点（画面の中の割合）。端末の「戻る」やタブの行き来では null にして、ふだんどおりうすく入れ替える。
+    // 切り替えの動きは切り替わった時点で決まるので、次に移るときまで残しておいてよい
+    var homeZoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
+    // 画面の切り替えの入れ物（NavHost）の、アプリの画面の中での位置と大きさ（家のボタンの位置を割合にするため）
+    val navArea = remember { arrayOf(Rect.Zero) }
+
     // 4 つの画面へ移る（ホームのボタンと、下のタブバーから）。いつもホームの上に 1 つだけ積む。
     // さっきまで見ていた画面は、状態を残して下ろす（戻ってきたら続きから）
     fun go(dest: Dest) {
+        homeZoomFrom = null
         navController.navigate(dest.route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
@@ -112,6 +128,13 @@ fun AppNav(collectRequests: Int = 0) {
     // 4 つの画面で端末の「戻る」を押したら、ホームへ戻る。タブを切り替えたときと同じく、画面の状態は残す
     // （記録画面のデモ散歩の再生や、コレクションのスクロールの位置が、ホームへ戻っただけで消えないように）
     fun backHome() {
+        homeZoomFrom = null
+        navController.popBackStack(HOME_ROUTE, inclusive = false, saveState = true)
+    }
+
+    // タブバーの家のボタンでホームへ戻る。戻り方は端末の「戻る」と同じで、ホームが [center]（家のボタンのまん中）から大きくなって出てくる
+    fun zoomHome(center: Offset) {
+        homeZoomFrom = zoomOrigin(center, navArea[0]) ?: HOME_ZOOM_FALLBACK
         navController.popBackStack(HOME_ROUTE, inclusive = false, saveState = true)
     }
 
@@ -167,11 +190,19 @@ fun AppNav(collectRequests: Int = 0) {
             NavHost(
                 navController = navController,
                 startDestination = HOME_ROUTE,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().onGloballyPositioned { navArea[0] = it.boundsInRoot() },
                 enterTransition = { if (instant) EnterTransition.None else fadeIn(tween(NAV_FADE_MS)) },
                 exitTransition = { if (instant) ExitTransition.None else fadeOut(tween(NAV_FADE_MS)) },
+                // ホームへ戻るとき（戻る先はいつもホーム）の、見ていた画面の消え方。家のボタンからなら、さっと消して
+                // ホームが大きくなるのを見せる（戻るときは、消える画面がホームより上に描かれるため）
+                popExitTransition = {
+                    if (homeZoomFrom != null) fadeOut(tween(HOME_ZOOM_OUT_MS)) else fadeOut(tween(NAV_FADE_MS))
+                },
             ) {
-                composable(HOME_ROUTE) { HomeScreen(onGo = ::go) }
+                composable(
+                    HOME_ROUTE,
+                    popEnterTransition = { homeZoomFrom?.let(::zoomInFrom) ?: fadeIn(tween(NAV_FADE_MS)) },
+                ) { HomeScreen(onGo = ::go) }
                 composable(Dest.Collect.route) {
                     TabPage(tabPadding, onBack = ::backHome) { CollectScreen(onGoInventory = { go(Dest.Inventory) }) }
                 }
@@ -189,14 +220,15 @@ fun AppNav(collectRequests: Int = 0) {
                 }
             }
             // 下のタブバー。ホームでは隠し、4 つの画面に入ると下から出てくる（ホームへ戻ると下へ隠れる）。
-            // 左の丸い家のボタンは、端末の「戻る」と同じくホームへ戻る（見ていた画面は続きから）
+            // 左の丸い家のボタンは、端末の「戻る」と同じくホームへ戻る（見ていた画面は続きから）。
+            // こちらは、ホームが家のボタンの所から大きくなって出てくる（決定 78）
             AnimatedVisibility(
                 visible = !atHome,
                 modifier = Modifier.align(Alignment.BottomCenter),
                 enter = if (instant) EnterTransition.None else slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
             ) {
-                TabBar(lastTab[0], onGo = ::go, onHome = ::backHome)
+                TabBar(lastTab[0], onGo = ::go, onHome = ::zoomHome)
             }
 
             // 開いたときに使い方を出す。「次回から表示しない」にチェックを入れて閉じるまで、開くたびに出す
@@ -229,3 +261,9 @@ private fun TabPage(padding: PaddingValues, onBack: () -> Unit, content: @Compos
 
 /** 画面を切り替えるときに、うすく入れ替わる時間 [ms]（Navigation の決まりの値と同じ） */
 private const val NAV_FADE_MS = 700
+
+/** 家のボタンで戻るとき、見ていた画面が消える時間 [ms] */
+private const val HOME_ZOOM_OUT_MS = 150
+
+/** 家のボタンの位置が分からないとき（置かれる前に押された など）に大きくなり始める点：画面の左下 */
+private val HOME_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.95f)
