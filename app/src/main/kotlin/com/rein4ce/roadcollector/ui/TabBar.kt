@@ -1,5 +1,13 @@
 package com.rein4ce.roadcollector.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import com.rein4ce.roadcollector.ui.common.AppIcons
+import com.rein4ce.roadcollector.ui.common.pressFeel
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
@@ -76,15 +84,23 @@ import kotlin.math.min
  * - 指をタブバーの外へ出してから離すと、取り消し（切り替えない）。押している途中に取り消されたときも切り替えない
  *
  * 文字が無いぶん、読み上げ（TalkBack）にはタブ名と選択状態を渡し、ダブルタップで切り替えられるようにする
+ *
+ * ピルの左には、ホームへ戻る丸いボタン（家）を、ピルとは別に浮かせて置く（決定 52）。ピルの中に入れると、
+ * タブを押すつもりで家に当たってホームに出てしまうので、すき間をあけて形も変える。なぞる操作もピルの中だけで効く
+ *
+ * @param onHome 家のボタンを押したとき（ホームへ戻る）
  */
 @Composable
-internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
-    Box(
+internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit, onHome: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = 28.dp, end = 28.dp, top = 8.dp, bottom = 10.dp),
+            .padding(start = BarSideGap, end = BarSideGap, top = BarTopGap, bottom = BarBottomGap),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        HomeBubble(onClick = onHome)
+        Spacer(Modifier.width(HomeGap))
         // 指でなぞっている間は、しずくのまん中を指の位置に置く（null のときは選ばれているタブ）
         var fingerX by remember { mutableStateOf<Float?>(null) }
         // タブバーそのものの押された感じ：押すと少しへこみ（縮む）、離すとぷるんと戻る（少し行き過ぎてから）。
@@ -97,7 +113,7 @@ internal fun TabBar(current: NavDestination?, onGo: (Dest) -> Unit) {
         val maxPull = with(LocalDensity.current) { BarPull.toPx() }
         BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(BarHeight)
                 .graphicsLayer {
                     val p = press.value
@@ -326,6 +342,20 @@ private val OutsideMargin = 24.dp
 private val PillShape = RoundedCornerShape(28.dp)
 private val BarHeight = 56.dp
 
+/** ピルの上と下（端末の下のバーとの間）の余白と、左右の画面の端との間 */
+private val BarTopGap = 8.dp
+private val BarBottomGap = 10.dp
+private val BarSideGap = 20.dp
+
+/** 家のボタンとピルのすき間（押し間違えないように、離して別の丸に見せる） */
+private val HomeGap = 10.dp
+
+/**
+ * タブバーが画面の下で取る高さ（端末の下のバーの分は除く）。4 つの画面は、下をこれだけあけて置く（AppNav）。
+ * タブバーはホームでは隠れるが、出し入れの途中で画面の下のあけ方が変わらないよう、測らずにこの値を使う
+ */
+internal val TabBarSpace = BarTopGap + BarHeight + BarBottomGap
+
 /** 押したときに、タブバーがどれだけ縮むか（横。縦はその 1.4 倍）と、なぞったときに指の方へ引っぱられる上限 */
 private const val BarSquash = 0.035f
 private val BarPull = 6.dp
@@ -339,3 +369,26 @@ private const val LensMagnify = 0.22f
 
 /** 選ばれたタブのアイコンの大きさ（元の何倍か） */
 private const val SelectedScale = 1.18f
+
+/**
+ * ホームへ戻る丸いボタン（家）。ピルと同じ紙の色・縁・影の丸で、ピルの高さにそろえる。
+ * 押すと、ほかのボタンと同じく縮んで、振動と押した音を返す（ui/common/PressFeel）
+ */
+@Composable
+private fun HomeBubble(onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(BarHeight)
+            .pressFeel(source)
+            .shadow(elevation = 6.dp, shape = CircleShape, ambientColor = Fieldbook.Ink, spotColor = Fieldbook.Ink)
+            .background(Fieldbook.Paper.copy(alpha = 0.88f), CircleShape)
+            .border(1.dp, Fieldbook.GridMajor, CircleShape)
+            .clip(CircleShape)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "ホームへ戻る", onClick = onClick)
+            .semantics { contentDescription = "ホーム" },
+    ) {
+        Icon(AppIcons.HomeOutline, contentDescription = null, tint = Fieldbook.Ink, modifier = Modifier.size(26.dp))
+    }
+}

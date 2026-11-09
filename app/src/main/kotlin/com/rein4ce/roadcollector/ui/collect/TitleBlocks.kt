@@ -16,12 +16,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
@@ -29,6 +30,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.audio.BlockNotes
@@ -40,6 +44,7 @@ import com.rein4ce.roadcollector.ui.common.rememberHaptics
 import com.rein4ce.roadcollector.ui.common.rememberSfx
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** 題字のブロックの上の字の色（起動画面の題字と同じ） */
 private val TitleLetter = Color(0xFFF3F6F0)
@@ -81,7 +86,7 @@ private val Blocks = listOf(
 private val TitleMotion = BlockMotionSpec(hopDp = 12f * K, hopBounceDp = 4f * K, fallMs = 160, landDxDp = 13f * K, landBounceDp = 8f * K)
 
 /**
- * 採集画面の題字「ミチツミ」。1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べた、積み木を積んでいる途中の絵。
+ * ホームの題字「ミチツミ」（開いたときのタイトルでも使う。前は記録画面の見出しで、#100 で画面名「みちのきろく」に替わった）。1 文字ずつ色の付いたブロックに白抜きで載せ、少しずつ傾けて並べた、積み木を積んでいる途中の絵。
  *
  * 押すと動く（遊び）：
  * - 「ミ」「チ」「ツ」：そのブロックがその場で軽く跳ね、1 回はねて元に戻る
@@ -92,9 +97,11 @@ private val TitleMotion = BlockMotionSpec(hopDp = 12f * K, hopBounceDp = 4f * K,
  * 端末で「動きを減らす」（アニメーションの速度 0）にしていれば、動きは飛ばされてすぐ元の位置に戻る
  *
  * @param interactive 押すと動くか。開いたときのタイトル（ui/TitleIntro.kt）では、押すと飛ばすので false
+ * @param scale 何倍の大きさで出すか（ホームでは大きく出す。ui/HomeScreen.kt）。動きも同じ倍率で大きくなり、
+ *   最後の「ミ」は、大きさが変わってもカメラの穴のあたりから落ちてくる。場所もこの大きさの分を取る
  */
 @Composable
-internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = true) {
+internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = true, scale: Float = 1f) {
     val density = LocalDensity.current
     val shape = RoundedCornerShape((7f * K).dp)
     val scope = rememberCoroutineScope()
@@ -106,7 +113,9 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
     val view = LocalView.current
     val lastCenter = remember { FloatArray(2) }
     Row(
-        modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
+        modifier = modifier
+            .then(if (scale != 1f) Modifier.scaled(scale) else Modifier)
+            .semantics(mergeDescendants = true) { contentDescription = "ミチツミ" },
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(TITLE_GAP_DP.dp),
     ) {
@@ -122,9 +131,10 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                     .size(TITLE_BLOCK_DP.dp)
                     .onGloballyPositioned {
                         if (isLast) {
-                            val p = it.positionInRoot()
-                            lastCenter[0] = p.x + it.size.width / 2f
-                            lastCenter[1] = p.y + it.size.height / 2f
+                            // 大きくして出しているときも、画面の上でのまん中（大きくした後）
+                            val c = it.localToRoot(Offset(it.size.width / 2f, it.size.height / 2f))
+                            lastCenter[0] = c.x
+                            lastCenter[1] = c.y
                         }
                     }
                     // 押すと動く（開いたときのタイトルでは押しを受けない）
@@ -136,9 +146,10 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                                     // 押したときは、ほかの積み木と同じく自分の高さの「ぴょん」。落ちてきて着いたら、軽い「ことっ」
                                     sfx.play(Sfx.HOP, BlockNotes.rate(i, Blocks.size))
                                     // カメラの穴のあたりに、ブロックのまん中が来るところから落とす
-                                    val camera = cameraPoint(view, blockPx = TITLE_BLOCK_DP * density.density)
-                                    val fromDx = (camera.x - lastCenter[0]) / density.density
-                                    val fromDy = (camera.y - lastCenter[1]) / density.density - liftDp
+                                    // 動きは大きくする前の寸法で付けるので、画面の上の距離を倍率で割る
+                                    val camera = cameraPoint(view, blockPx = TITLE_BLOCK_DP * density.density * scale)
+                                    val fromDx = (camera.x - lastCenter[0]) / density.density / scale
+                                    val fromDy = (camera.y - lastCenter[1]) / density.density / scale - liftDp
                                     motion.dropIn(fromDx, fromDy, TitleMotion) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         sfx.play(Sfx.LAND)
@@ -170,6 +181,22 @@ internal fun TitleBlocks(modifier: Modifier = Modifier, interactive: Boolean = t
                     color = TitleLetter,
                 )
             }
+        }
+    }
+}
+
+/**
+ * 中身を [scale] 倍の大きさで出す。場所も大きくした分を取り、まん中を合わせる（押せる場所も一緒に大きくなる）
+ */
+private fun Modifier.scaled(scale: Float): Modifier = layout { measurable, constraints ->
+    fun shrink(max: Int) = if (max == Constraints.Infinity) max else (max / scale).toInt()
+    val placeable = measurable.measure(Constraints(maxWidth = shrink(constraints.maxWidth), maxHeight = shrink(constraints.maxHeight)))
+    val width = constraints.constrainWidth((placeable.width * scale).roundToInt())
+    val height = constraints.constrainHeight((placeable.height * scale).roundToInt())
+    layout(width, height) {
+        placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) {
+            scaleX = scale
+            scaleY = scale
         }
     }
 }

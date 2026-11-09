@@ -45,15 +45,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * 開いたときのタイトルの進み具合。アプリ全体で 1 つ（MainActivity・記録画面の題字・使い方の窓から見る）
+ * 開いたときのタイトルの進み具合。アプリ全体で 1 つ（MainActivity・ホームの題字・使い方の窓から見る）
  *
  * @property splashGone 起動画面が消えきったか。タイトルの題字は、それまで出さず、消えきったら起動画面の題字の場所に出て大きくなり始める
  *   （消えかけの起動画面と二重に見えないように）
  * @property splashTitle 起動画面のアイコンの中の題字「ミチツミ」の段のまん中（画面の左上から [px]）。
  *   タイトルの題字は、ここから同じ大きさで出て、まん中へ大きくなる（起動画面の題字がそのまま大きくなるように見える）。
  *   起動画面がない（Android 11 以前）・分からないときは null で、はじめからまん中に大きく出す
- * @property anchor 記録画面の見出しの題字の場所（画面の左上から）。タイトルの題字はここへ飛んで収まる
- * @property done タイトルが終わったか（出さないときもすぐ true）。終わるまで、記録画面の題字と使い方の窓は出さない
+ * @property anchor ホームの題字の場所（画面の左上から。大きくして出しているので、その大きさ）。
+ *   タイトルの題字はここへ飛んで、この大きさになって収まる
+ * @property done タイトルが終わったか（出さないときもすぐ true）。終わるまで、ホームの題字と使い方の窓は出さない
  */
 internal object TitleIntroState {
     var splashGone by mutableStateOf(false)
@@ -67,14 +68,14 @@ internal object TitleIntroState {
  *
  * 起動画面の積み木の塔はそのままうすく消え、その下の題字「ミチツミ」だけが、方眼の紙のまん中へ大きくなりながら移る
  * （起動画面の題字と同じ位置・大きさから始めるので、起動画面の題字がそのまま大きくなるように見える）。その下に一言を出す。
- * [HOLD_MS] たったら、題字が縮みながら記録画面の見出しの定位置へ飛んで収まり、紙がうすくなって記録画面になる。
+ * [HOLD_MS] たったら、題字が縮みながらホームの題字の場所へ飛んで収まり、紙がうすくなってホームになる（決定 52。前は記録画面の見出し）。
  * 記録中や画面の作り直しのとき、端末で動きを減らしているときは出さない（MainActivity が決める）
  */
 @Composable
 internal fun TitleIntro() {
     if (TitleIntroState.done) return
     val grow = remember { Animatable(0f) } // 0：起動画面の題字の位置と大きさ、1：まん中に大きく
-    val fly = remember { Animatable(0f) } // 0：まん中に大きく、1：見出しの定位置
+    val fly = remember { Animatable(0f) } // 0：まん中に大きく、1：ホームの題字の場所
     val tagline = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var titleBounds by remember { mutableStateOf<Rect?>(null) }
@@ -95,7 +96,7 @@ internal fun TitleIntro() {
         TitleIntroState.done = true
     }
 
-    // 押したら、すぐに見出しへ飛ばして終わる
+    // 押したら、すぐにホームの題字へ飛ばして終わる
     fun skip() {
         if (skipping) return
         skipping = true
@@ -109,13 +110,13 @@ internal fun TitleIntro() {
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) { detectTapGestures { skip() } }
-            // 読み上げでは、題字の名前と「飛ばす」を伝える（下の記録画面は、タイトルの間は読み上げから外している。MainActivity）
+            // 読み上げでは、題字の名前と「飛ばす」を伝える（下のホームは、タイトルの間は読み上げから外している。MainActivity）
             .semantics(mergeDescendants = true) {
                 contentDescription = "ミチツミ。$TAGLINE"
                 onClick(label = "飛ばす") { skip(); true }
             },
     ) {
-        // 紙（方眼）。題字が飛ぶにつれて、うすくなって記録画面が見えてくる
+        // 紙（方眼）。題字が飛ぶにつれて、うすくなってホームが見えてくる
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -131,7 +132,7 @@ internal fun TitleIntro() {
             TitleBlocks(
                 interactive = false,
                 modifier = Modifier
-                    // 大きくする前の場所（ここから見出しの定位置までの距離を出す）
+                    // 大きくする前の場所（ここからホームの題字までの距離を出す）
                     .onGloballyPositioned { titleBounds = it.boundsInRoot() }
                     .graphicsLayer {
                         val g = grow.value
@@ -154,14 +155,16 @@ internal fun TitleIntro() {
                                 translationY = (start.y - dropPx - from.center.y) * (1f - g)
                             }
                         } else {
-                            val s = BIG + (1f - BIG) * f
+                            // 収まる先（ホームの題字）の大きさまで縮める。先が分からないときは、ふつうの大きさ
+                            val end = if (from != null && to != null && from.width > 0f) to.width / from.width else 1f
+                            val s = BIG + (end - BIG) * f
                             scaleX = s
                             scaleY = s
                             if (from != null && to != null) {
                                 translationX = (to.center.x - from.center.x) * f
                                 translationY = (to.center.y - from.center.y) * f
                             } else {
-                                // 見出しの場所が分からないとき（記録画面が出ていない）は、その場でうすくする
+                                // 収まる先が分からないとき（ホームが出ていない）は、その場でうすくする
                                 alpha = 1f - f
                             }
                         }
@@ -178,8 +181,8 @@ internal fun TitleIntro() {
     }
 }
 
-/** 題字の下の一言 */
-private const val TAGLINE = "歩いた道を、積み上げよう"
+/** 題字の下の一言（ホームの題字の下にも出す） */
+internal const val TAGLINE = "歩いた道を、積み上げよう"
 
 /** 見出しの題字の、ブロック 1 つ分の送り [dp]（TitleBlocks の大きさ + 間） */
 private const val TITLE_PITCH_DP = TITLE_BLOCK_DP + TITLE_GAP_DP

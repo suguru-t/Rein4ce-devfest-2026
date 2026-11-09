@@ -93,7 +93,7 @@ internal fun ColumnScope.HowToContent(firstTime: Boolean = false) {
     Tip("パーツになるのは歩きとジョギングだけです。乗り物で動いた道は入りません。")
     Tip("歩いた場所はスマホの中だけに残り、サーバには送りません。")
     if (firstTime) {
-        Tip("この説明は、設定（右上の歯車）の「使い方」でいつでも見られます。")
+        Tip("この説明は、設定（ホームの右上の歯車）の「使い方」でいつでも見られます。")
     }
 }
 
