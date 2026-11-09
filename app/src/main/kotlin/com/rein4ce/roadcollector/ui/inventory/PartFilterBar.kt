@@ -33,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.PartFilter
 import com.rein4ce.roadcollector.data.PartSort
+import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
@@ -69,7 +73,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         Box {
             var open by remember { mutableStateOf(false) }
             FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true, enabled = enabled) { open = true }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
+            FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "並び") {
                 for (sort in PartSort.entries) {
                     MenuRow(label = sort.label, selected = sort == filter.sort, enabled = true) {
                         onChange(filter.copy(sort = sort))
@@ -82,7 +86,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         Box {
             var open by remember { mutableStateOf(false) }
             FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true, enabled = enabled) { open = true }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Fieldbook.Card) {
+            FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "歩いた日の天気") {
                 MenuRow(label = "すべて", selected = filter.sky == null, enabled = true) {
                     onChange(filter.copy(sky = null))
                     open = false
@@ -158,9 +162,15 @@ private fun FilterTag(text: String, active: Boolean, menu: Boolean, enabled: Boo
 /** 一覧の 1 行。選んでいるものに印（✓）、天気なら小さなアイコン（パーツの図と同じ絵）を左に付ける */
 @Composable
 private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky? = null, onClick: () -> Unit) {
+    val isSelected = selected
     DropdownMenuItem(
         enabled = enabled,
         onClick = onClick,
+        // 選んでいるものは、色と太字だけでなく、読み上げでも分かるように（1 つだけ選ぶので、ラジオボタンと同じ扱い。#84 のレビュー）
+        modifier = Modifier.semantics {
+            role = Role.RadioButton
+            this.selected = isSelected
+        },
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (sky != null) {
@@ -169,13 +179,21 @@ private fun MenuRow(label: String, selected: Boolean, enabled: Boolean, sky: Sky
                 }
                 Text(
                     label,
-                    color = if (enabled) Fieldbook.Ink else Fieldbook.Mark,
+                    // 選んでいるものは、札と同じ測量の青の太字
+                    color = when {
+                        !enabled -> Fieldbook.Mark
+                        selected -> Fieldbook.Survey
+                        else -> Fieldbook.Ink
+                    },
                     fontSize = 14.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 )
             }
         },
-        trailingIcon = { if (selected) Text("✓", color = Fieldbook.Survey, fontWeight = FontWeight.Bold) },
+        // ✓ は目で見る印。読み上げは上の「選択済み」で足りるので、読ませない
+        trailingIcon = {
+            if (selected) Text("✓", color = Fieldbook.Survey, fontWeight = FontWeight.Bold, modifier = Modifier.clearAndSetSemantics {})
+        },
     )
 }
 
