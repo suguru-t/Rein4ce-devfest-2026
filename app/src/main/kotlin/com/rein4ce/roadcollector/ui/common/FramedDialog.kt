@@ -6,6 +6,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -53,6 +55,9 @@ private val POP_CORNER = 18.dp
  * @param pop 「みんな」・コレクションと同じポップな見た目にする（Pop.kt）：枠と下の丸いボタンを、
  *   下に側面がのぞくブロックの面にし、角を大きく丸める。見出しは灰色の帯の代わりに、紺の名札のブロックに白い字で載せる
  *   （「みんな」の断面図の名札の台と同じ考え方）。コレクションの拡大表示で使う（設定などは野帳の見た目のまま）
+ * @param nameTag [pop] のとき、見出しを紺の名札のブロックに載せるか（パーツの名前など、そのものの名前を出すとき）。
+ *   false なら、名札にせず丸ゴシックの字だけにして、下に題字の積み木と同じ 4 色の短い線を引く（設定・使い方・名前を付ける窓。
+ *   名札はボタンのように見えて押せそうに見えたため。決定 56）
  * @param backdrop 枠の紙の上・見出しと中身の下に敷くもの（`Modifier.matchParentSize()` で枠いっぱいに敷く）。
  *   コレクションの拡大表示で、そのパーツを歩いた日の天気を降らせるのに使う。中身を動かしても、敷いたものは動かない
  * @param footer あれば、枠の中のいちばん下に、中身とは別に置くもの（ボタンなど）。中身が長くて動かすときも、ここは動かず
@@ -68,6 +73,7 @@ fun FramedDialog(
     onClose: () -> Unit = onDismiss,
     onBack: (() -> Unit)? = null,
     pop: Boolean = false,
+    nameTag: Boolean = true,
     backdrop: (@Composable BoxScope.() -> Unit)? = null,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     scrollContent: Boolean = true,
@@ -91,7 +97,26 @@ fun FramedDialog(
             ) {
                 backdrop?.invoke(this)
                 Column {
-                    if (pop) {
+                    if (pop && !nameTag) {
+                        // 見出しは字だけ（押せそうに見えないように）。設定などの決まった言葉なので、丸ゴシック
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 22.dp, bottom = 2.dp),
+                        ) {
+                            Text(
+                                title,
+                                fontFamily = Pop.Rounded,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 20.sp,
+                                color = Fieldbook.Ink,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            TitleColorLine()
+                        }
+                    } else if (pop) {
                         // 見出しは名札のブロック。見出し（パーツの名前など）は人や AI が付ける字なので、丸ゴシック（使う字だけの切り出し）
                         // ではなく端末の字体の極太にする。読みやすいよう、札は傾けない
                         Box(
@@ -186,5 +211,15 @@ private fun RoundButton(icon: ImageVector, label: String, pop: Boolean, onClick:
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = label, tint = Fieldbook.Ink, modifier = Modifier.size(24.dp))
+    }
+}
+
+/** 見出しの下の飾りの線：題字の積み木と同じ 4 色（オレンジ・青緑・黄・紺）の短い線を、少しすき間をあけて並べる */
+@Composable
+private fun TitleColorLine() {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (color in listOf(Pop.Orange, Pop.Teal, Pop.Yellow, Pop.Navy)) {
+            Box(Modifier.size(width = 14.dp, height = 4.dp).background(color, RoundedCornerShape(2.dp)))
+        }
     }
 }

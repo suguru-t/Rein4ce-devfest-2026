@@ -34,6 +34,12 @@ SOURCES = [
     APP / "ui/common/Pop.kt",
     # ホームのボタン（画面の名前と一言）
     APP / "ui/HomeScreen.kt",
+    # 設定の窓と使い方（項目の名前・今の設定・見出し。決定 56）と、設定の選択肢の名前（画面の明るさ・天気の動き・曲・デモの天気）
+    APP / "ui/settings/SettingsDialog.kt",
+    APP / "ui/settings/HowToContent.kt",
+    APP / "data/AppSettings.kt",
+    # 名前を付ける窓（「保存」「AI に考えてもらう」。パーツの名前とニックネーム）
+    APP / "ui/common/NameField.kt",
     # 並びの名前（いつもの順・長い順…）
     APP / "data/PartFilter.kt",
     # 天気の名前（晴れ・霧雨…）
