@@ -70,6 +70,7 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.rankOf
+import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.ui.common.PressButton
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -107,13 +108,16 @@ import java.util.Locale
  *   compact は小さい画面（積む画面の高さが 600dp 未満。札を出さず「‹ 戻る」だけにする）
  */
 @Composable
-internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
+internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {}, onGoRanking: () -> Unit = {}) {
     val directory = LocalContext.current.applicationContext.filesDir
     val factory = remember(directory) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChallengeStorage(directory).let { storage -> ChallengeViewModel(storage::update, loadRecords = storage::ranking) } as T
+                ChallengeStorage(directory).let { storage ->
+                    // 記録になった回の塔は、自動で「みんな」の 3 分チャレンジのランキングに送る（決定 77）
+                    ChallengeViewModel(storage::update, loadRecords = storage::ranking, sendTower = { ApiClient.postChallengeTower(it) })
+                } as T
         }
     }
     val vm: ChallengeViewModel = viewModel(factory = factory)
@@ -219,7 +223,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                         }
                         ChallengeRun.Phase.FINALIZING ->
                             SkyText("時間です。塔が落ち着くのを待っています…", color = Fieldbook.Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
-                        ChallengeRun.Phase.FINISHED, ChallengeRun.Phase.UNRESOLVED -> ChallengeResult(vm, frame)
+                        ChallengeRun.Phase.FINISHED, ChallengeRun.Phase.UNRESOLVED -> ChallengeResult(vm, frame, onGoRanking)
                     }
                 }
             }
@@ -436,9 +440,9 @@ private fun RunControls(onRestart: () -> Unit) {
     }
 }
 
-/** 結果のカード：記録と順位、保存のようす、「もう一度」、この端末の記録 */
+/** 結果のカード：記録と順位、保存のようす、「みんな」に送ったようす、「もう一度」と「ランキング」、この端末の記録 */
 @Composable
-private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame) {
+private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoRanking: () -> Unit) {
     val score = frame.score
     // 通常のモードの終わりのカードと同じ、紙の面（縁と下にのぞく側面）。字は太い丸ゴシック、ボタンはブロック（決定 67）
     Column(
@@ -458,12 +462,38 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame) {
             Text("塔が落ち着かなかったので、記録には残しません。", style = MaterialTheme.typography.bodyMedium, color = Fieldbook.Muted, textAlign = TextAlign.Center)
         }
         SaveState(vm)
+        if (score != null) SendState(vm)
         Spacer(Modifier.height(12.dp))
-        PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
+            // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 77）
+            PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = rankingInk(), edge = rankingInk())
+        }
         Spacer(Modifier.height(8.dp))
         Records(vm.ranking, highlight = score?.runId)
     }
 }
+
+/**
+ * 「みんな」に送ったようす（決定 77）：送っています・ランキングに出しました・送れませんでした（「もう一度送る」）。
+ * 記録になった回の塔は、結果が出たら自動で送る
+ */
+@Composable
+private fun SendState(vm: ChallengeViewModel) {
+    when (vm.sendState) {
+        ChallengeViewModel.SendState.IDLE -> Unit
+        ChallengeViewModel.SendState.SENDING -> Text("ランキングに送っています…", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
+        ChallengeViewModel.SendState.SENT -> Text("ランキングに出しました", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Pop.TealLine)
+        ChallengeViewModel.SendState.FAILED -> {
+            Text("ランキングに送れませんでした", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
+            PopChip("もう一度送る", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::resend)
+        }
+    }
+}
+
+/** 終わりのカードの「ランキング」の字と縁の色（「みんな」のタブの紺。ダークモードでは明るい紺。通常の終わりのカードと同じ） */
+@Composable
+private fun rankingInk(): Color = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
 
 /** 記録の保存のようす（保存中・保存できなかった）。保存できなかったら「再試行」 */
 @Composable

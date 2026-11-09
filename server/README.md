@@ -127,13 +127,27 @@ curl -X POST localhost:8080/parts/name -H "Content-Type: application/json" \
 
 名前の雰囲気は `NamingPrompt.kt` の `NAMING_TONE` の 1 行で替えられる。
 
+## 遊び方ごとの URL（決定 77）
+
+「みんな」は遊び方（通常・3 分チャレンジ・毎日 1 つずつ積む）ごとに別のランキング。送る URL と Firestore のコレクションも分ける。
+
+| 遊び方 | 送る | 一覧 | コレクション |
+|---|---|---|---|
+| 通常 | `POST /towers` → 201 | `GET /towers`（`?mode=normal` と同じ） | `towers` |
+| 3 分チャレンジ | `POST /towers/challenge` → 201。決まりの ID（`rule`）が要る | `GET /towers?mode=challenge` | `towers_challenge` |
+| 毎日 1 つずつ積む | `PUT /towers/daily` → 200。持ち主の印ごとに 1 基を新しくする（同じ id のまま）。`ownerId`・`lastDay`・`streakDays` が要る | `GET /towers?mode=daily` | `towers_daily` |
+
+共有ページ・JSON・絵（`GET /towers/{id}`…）は、どの遊び方のタワーでも id で取れる（通常・3 分チャレンジ・毎日の順に探す）。`POST /towers` に通常でないタワー（`mode` が challenge・daily）を送ると 400。
+
 ## 受け付けるタワー（POST /towers の検査）
 
 `POST /towers` は認証なしで誰でも叩けるので、壊れたタワーは保存前に `400` で断る（`TowerValidation.kt`。本文に理由が英語で入る）。壊れたタワーが 1 基入ると、「みんな」の絵や共有ページの PNG がそのタワーで落ちるため。上限はゲームのルール（5 本）より余裕を見てあり、アプリが正しく作ったタワーは弾かない。
 
 | 断るもの | 上限・条件 |
 |---|---|
-| パーツ・配置が空、または多すぎ | 1〜100 個（`MAX_TOWER_PARTS`。決定 66） |
+| パーツ・配置が空、または多すぎ | パーツの種類は 1〜100 個（`MAX_TOWER_PARTS`。決定 66）、配置は 1〜500 個（`MAX_TOWER_PLACEMENTS`。同じパーツを何度も置けるので、種類より多い。決定 77） |
+| 3 分チャレンジの決まりの ID が無い・長すぎ | 1〜40 文字（`MAX_RULE_LENGTH`） |
+| 毎日 1 つずつ積むの持ち主の印・最後に積んだ日・連続日数が無い・おかしい | 印は必須、日は `yyyy-mm-dd`、連続日数は 1〜36500 |
 | 台の幅（`platformWidth`）がおかしい | 0.5〜10 m（`MIN_PLATFORM_WIDTH`〜`MAX_PLATFORM_WIDTH`。無ければ 1.4 m） |
 | パーツの id が空・重複 | |
 | パーツの頂点が 0 個・多すぎ | 1〜50 個（`MAX_PART_POINTS`。命名 API と同じ） |

@@ -1,10 +1,11 @@
 package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import kotlin.math.abs
 
 /**
- * POST /towers で受け付けるタワーの検査。
+ * POST /towers・POST /towers/challenge・PUT /towers/daily で受け付けるタワーの検査。
  *
  * この URL は認証なしで誰でも叩けるので、壊れたデータを Firestore に入れない歯止め。
  * 壊れたタワーが 1 基入ると、「みんな」の一覧の絵や共有ページの PNG がそのタワーで落ちる（NaN や巨大な座標）。
@@ -12,10 +13,26 @@ import kotlin.math.abs
  */
 
 /**
- * タワー 1 基のパーツ数・配置数の上限。積む画面の通常は、台から落ちるまで終わりなく積む（#108・決定 62）ので、
+ * タワー 1 基のパーツ（種類）の数の上限。積む画面の通常は、台から落ちるまで終わりなく積む（#108・決定 62）ので、
  * 10 から 100 に上げた（決定 66）。100 個（点は 1 つ 50 まで）でも JSON は 200 KB ほどで、Firestore の 1 件の上限（1 MiB）に収まる
  */
 const val MAX_TOWER_PARTS = 100
+
+/**
+ * 配置（台に残った数）の上限。同じパーツを何度も置けるので（通常は全部のパーツから出し、3 分チャレンジは 5 種類の形をくり返す）、
+ * パーツの種類より多くなる。前はパーツと同じ 100 で、通常で 100 個を超えて積むと「保存」が 400 で断られていた（決定 77）。
+ * 配置は 1 つ 100 バイトほどなので、500 個でも 50 KB ほど
+ */
+const val MAX_TOWER_PLACEMENTS = 500
+
+/** 3 分チャレンジの決まりの ID の上限（文字。`manual-180-v6` など） */
+const val MAX_RULE_LENGTH = 40
+
+/** 毎日 1 つずつ積むの連続日数の上限（壊れた値を弾くだけ。100 年ぶん） */
+const val MAX_STREAK_DAYS = 36_500
+
+/** 毎日 1 つずつ積むの日付の形（"2026-11-10"） */
+private val DAY_PATTERN = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
 /** 作者名の上限（文字）。みんなの一覧のカードに収まる長さ */
 const val MAX_AUTHOR_LENGTH = 20
@@ -55,7 +72,7 @@ internal fun Tower.validationError(): String? {
     if (parts.isEmpty()) return "parts is empty"
     if (parts.size > MAX_TOWER_PARTS) return "too many parts (${parts.size} > $MAX_TOWER_PARTS)"
     if (placements.isEmpty()) return "placements is empty"
-    if (placements.size > MAX_TOWER_PARTS) return "too many placements (${placements.size} > $MAX_TOWER_PARTS)"
+    if (placements.size > MAX_TOWER_PLACEMENTS) return "too many placements (${placements.size} > $MAX_TOWER_PLACEMENTS)"
 
     val ids = HashSet<String>()
     for (p in parts) {
@@ -79,6 +96,21 @@ internal fun Tower.validationError(): String? {
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
     val o = ownerId
     if (o != null && !OWNER_ID_PATTERN.matches(o)) return "ownerId must be 64 hex chars"
+    // 遊び方ごとに要るもの（決定 77）
+    when (mode) {
+        TowerMode.NORMAL -> Unit
+        TowerMode.CHALLENGE -> {
+            val r = rule
+            if (r.isNullOrBlank() || r.length > MAX_RULE_LENGTH) return "challenge tower needs rule (1..$MAX_RULE_LENGTH chars)"
+        }
+        TowerMode.DAILY -> {
+            // 持ち主ごとに 1 基を新しくするので、持ち主の印が無いと誰の塔か分からない
+            if (o == null) return "daily tower needs ownerId"
+            val d = lastDay
+            if (d == null || !DAY_PATTERN.matches(d)) return "daily tower needs lastDay (yyyy-mm-dd)"
+            if (streakDays < 1 || streakDays > MAX_STREAK_DAYS) return "streakDays out of range"
+        }
+    }
     return null
 }
 

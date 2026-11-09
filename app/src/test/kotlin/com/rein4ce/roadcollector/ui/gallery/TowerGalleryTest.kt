@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import kotlinx.coroutines.CompletableDeferred
@@ -35,7 +36,7 @@ class TowerGalleryTest {
     @Test
     fun `先読みは何度呼んでも 1 回しか取らない`() = runTest {
         val server = FakeServer()
-        val g = TowerGallery(listTowers = server::list, getTower = { error("unused") }, scope = this)
+        val g = TowerGallery(listTowers = { server.list() }, getTower = { error("unused") }, scope = this)
         g.prefetch()
         g.prefetch() // 画面の回転などでもう一度
         runCurrent()
@@ -54,7 +55,7 @@ class TowerGalleryTest {
     @Test
     fun `先読みの最中に開いても止めずにその結果を出し、そのあと 1 回だけ取り直す`() = runTest {
         val server = FakeServer()
-        val g = TowerGallery(listTowers = server::list, getTower = { error("unused") }, scope = this)
+        val g = TowerGallery(listTowers = { server.list() }, getTower = { error("unused") }, scope = this)
         g.prefetch()
         runCurrent()
         g.refresh() // 「みんな」を開いた
@@ -78,7 +79,7 @@ class TowerGalleryTest {
     @Test
     fun `先読みが失敗していたら、開いたときに取り直す`() = runTest {
         val server = FakeServer()
-        val g = TowerGallery(listTowers = server::list, getTower = { error("unused") }, scope = this)
+        val g = TowerGallery(listTowers = { server.list() }, getTower = { error("unused") }, scope = this)
         g.prefetch()
         runCurrent()
         server.responses[0].completeExceptionally(IOException("offline"))
@@ -100,7 +101,7 @@ class TowerGalleryTest {
     @Test
     fun `先読みの最中に開いて、先読みが失敗したときは続けて取り直さない`() = runTest {
         val server = FakeServer()
-        val g = TowerGallery(listTowers = server::list, getTower = { error("unused") }, scope = this)
+        val g = TowerGallery(listTowers = { server.list() }, getTower = { error("unused") }, scope = this)
         g.prefetch()
         runCurrent()
         g.refresh()
@@ -114,7 +115,7 @@ class TowerGalleryTest {
     @Test
     fun `一覧が出ているときに取り直しに失敗しても、一覧は残る`() = runTest {
         val server = FakeServer()
-        val g = TowerGallery(listTowers = server::list, getTower = { error("unused") }, scope = this)
+        val g = TowerGallery(listTowers = { server.list() }, getTower = { error("unused") }, scope = this)
         g.refresh()
         runCurrent()
         server.responses[0].complete(listOf(summary("a", 1f)))
@@ -167,5 +168,28 @@ class TowerGalleryTest {
         g.loadSketch("ok") // 取れたものは取り直さない
         runCurrent()
         assertEquals(listOf("ok", "bad", "bad"), fetched)
+    }
+
+    @Test
+    fun `遊び方ごとに別の一覧を取り、見ている遊び方の一覧を出す（決定 77）`() = runTest {
+        val asked = mutableListOf<TowerMode>()
+        val g = TowerGallery(
+            listTowers = { mode -> asked += mode; listOf(summary("${mode.wire}-1", 1f)) },
+            getTower = { error("unused") },
+            scope = this,
+        )
+        g.refresh(TowerMode.NORMAL)
+        g.refresh(TowerMode.DAILY)
+        runCurrent()
+        assertEquals(listOf(TowerMode.NORMAL, TowerMode.DAILY), asked)
+        assertEquals(listOf("normal-1"), loaded(g))
+        g.mode = TowerMode.DAILY
+        assertEquals(listOf("daily-1"), loaded(g))
+        g.mode = TowerMode.CHALLENGE
+        assertTrue("まだ取っていない遊び方は読み込み中", g.state is TowerGallery.State.Loading)
+        // 先読みは通常だけ
+        g.prefetch()
+        runCurrent()
+        assertEquals(2, asked.size)
     }
 }

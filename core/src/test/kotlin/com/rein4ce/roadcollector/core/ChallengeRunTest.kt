@@ -122,6 +122,31 @@ class ChallengeRunTest {
         assertEquals(ChallengeRules.ID, run.score!!.rule)
         assertEquals("manual-180-v6", ChallengeRules.ID)
     }
+
+    @Test fun `記録になった回は、止まった塔を「みんな」に送る形で持つ（決定 77）`() {
+        var now = 0L
+        val run = ChallengeRun(5, clock = { now }, wallClock = { 42 })
+        run.resume()
+        assertEquals(null, run.tower)
+        // 3 つ置いてから時間切れまで待つ
+        repeat(3) {
+            run.place()
+            repeat(40) { now += 50_000_000; run.tick() }
+        }
+        now = ChallengeRules.DURATION_NS; run.tick()
+        repeat(200) { now += 50_000_000; run.tick() }
+        val score = run.score!!
+        val tower = run.tower!!
+        assertEquals(com.rein4ce.roadcollector.core.model.TowerMode.CHALLENGE, tower.mode)
+        assertEquals(score.rule, tower.rule)
+        assertEquals(score.height.toFloat(), tower.height)
+        assertEquals(ChallengeRules.PLATFORM_WIDTH_M.toFloat(), tower.platformWidth)
+        assertTrue(tower.placements.isNotEmpty())
+        // パーツは使った形だけ、配置はどれかのパーツを指す
+        val ids = tower.parts.map { it.id }.toSet()
+        assertTrue(tower.placements.all { it.partId in ids })
+        assertTrue(ids.all { id -> ChallengeRules.parts.any { it.id == id } })
+    }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L
         val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
