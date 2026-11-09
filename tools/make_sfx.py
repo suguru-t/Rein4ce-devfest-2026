@@ -9,7 +9,8 @@ BGM（tools/make_bgm.py）と同じ木琴（マリンバ）の音で作り、曲
 - sfx_hop.ogg：題字・画面名の積み木が跳ねたとき。下から上へ跳ねる 2 つの音「ぴょん」。
   積み木ごとに高さを変えて鳴らす（アプリが再生の速さで音の高さを変える。audio/SoundEffects.kt の BlockNotes）ので、
   基準の高さ（G5）で作っておく
-- sfx_land.ogg：最後の積み木が落ちてきて着いたとき。軽い「ことっ」（押したときは、ほかの積み木と同じ「ぴょん」を鳴らしてある）
+- sfx_land.ogg：最後の積み木が落ちてきて着いたとき。軽い木の打音「コ・トッ」（押したときは、ほかの積み木と同じ「ぴょん」を鳴らしてある）。
+  直前の「ぴょん」の響きと重なるので、音階の音（木琴）にはしない（ミ→ドで作ったら、最後の積み木のファと半音でぶつかって濁った）
 - sfx_done.ogg：記録を止めて道を 1 本集めたとき。ド・ミ・ソ・ドと駆け上がる短いごほうび
 
 使い方（リポジトリのいちばん上で）:
@@ -25,7 +26,7 @@ import numpy as np
 import soundfile as sf
 
 sys.dont_write_bytecode = True  # make_bgm を読み込んでも tools/__pycache__ を作らない
-from make_bgm import SR, marimba, midi  # noqa: E402
+from make_bgm import SR, freq, marimba, midi  # noqa: E402
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "app/src/main/res/raw"
 QUALITY = 0.6  # Vorbis の音質（0〜1）。短い音なので、少し上げても数 KB
@@ -69,13 +70,27 @@ def hop() -> np.ndarray:
     return finish(buf, 0.32)
 
 
+def wood(at_hz: float, gain: float) -> np.ndarray:
+    """小さな木の板を叩いた「コッ」。ごく短く響く板の鳴り（十数 ms で消えるので、音の高さはほとんど聞こえない）と、叩いた瞬間の雑音"""
+    n = int(0.06 * SR)
+    t = np.arange(n) / SR
+    # 響きは 4 ms ほどで消す（長く響くと音の高さが聞こえて、直前の「ぴょん」とぶつかる）
+    body = np.sin(2 * np.pi * at_hz * t) * np.exp(-t / 0.004)
+    body += 0.5 * np.sin(2 * np.pi * at_hz * 1.6 * t) * np.exp(-t / 0.0025)
+    tone = body + knock(0.06, 0.5)
+    attack = int(0.001 * SR)
+    tone[:attack] *= np.linspace(0, 1, attack)
+    return tone * gain
+
+
 def land() -> np.ndarray:
-    """最後の積み木が着く：高めの短い 2 つの音を、上から下へ「こ・とっ」。小さな「コツ」を重ね、響きは短く切って軽くする"""
-    buf = np.zeros(int(0.2 * SR))
-    place(buf, 0.0, marimba(midi("E6"), 0.4))
-    place(buf, 0.035, marimba(midi("C6"), 1.0))
-    place(buf, 0.035, knock(0.03, 0.25))
-    return finish(buf, 0.24)
+    """最後の積み木が着く：木の打音を 2 つ「コ・トッ」（1 つ目は小さく高め、2 つ目が着いた音）。音階の音にしないので、どの「ぴょん」と重なっても濁らない"""
+    buf = np.zeros(int(0.12 * SR))
+    # 板の鳴りは、少しだけ残る高さを レ（D7）・ソ（G6）にする。最後の積み木の音（ミチツミはファ、コレクションはラ、みんなのタワーはシ）の
+    # どれとも半音でぶつからない
+    place(buf, 0.0, wood(freq(midi("D7")), 0.35))
+    place(buf, 0.03, wood(freq(midi("G6")), 1.0))
+    return finish(buf, 0.3)
 
 
 def done() -> np.ndarray:
