@@ -53,7 +53,7 @@ import kotlin.math.min
  */
 object Fieldbook {
     /**
-     * いまダークモードか。設定（採集画面の歯車）と端末のダークテーマから、MainActivity が決めて入れる。
+     * いまダークモードか。設定（ホームの歯車）と端末のダークテーマから、MainActivity が決めて入れる。
      * 色はどれもこれを見て値を返すので、読んだ画面の部品や絵は、切り替えると描き直される
      */
     var dark: Boolean by mutableStateOf(false)

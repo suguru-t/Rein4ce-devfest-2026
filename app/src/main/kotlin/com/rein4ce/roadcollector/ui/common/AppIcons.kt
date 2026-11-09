@@ -13,7 +13,8 @@ import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
 
 /**
- * 下のタブのアイコン。Material の標準セットに「足跡」「ノート」「積み木」「トロフィー」が無いので、24×24 で自作。
+ * 下のタブのアイコン。Material の標準セットに「足跡」「ノート」「積み木」「トロフィー」が無いので、24×24 で自作
+ * （タブバーの左の、ホームへ戻るボタンの「家」も、線の太さをそろえるためここで作る）。
  * 選ばれていないタブは「線画」。選ばれたタブの「塗り」は、部品ごとに動かすので ui/TabIcons.kt が下の形（〜Path）から描く
  * （足跡の塗りは、注記の足跡のマーク（WalkNote）にも使う）。
  * 色は呼び出し側（タブバー）が tint で付けるので、ここでは黒で描く。
@@ -298,6 +299,30 @@ object AppIcons {
         close()
     }
 
+
+    // ---- 家（タブバーの左の、ホームへ戻るボタン。ui/TabBar.kt） ----
+
+    /** 家の線画：三角の屋根と、四角い壁、まん中の戸。ほかのタブの線画と同じ太さ */
+    val HomeOutline: ImageVector by lazy {
+        icon("HomeOutline") {
+            outlined {
+                // 屋根（軒を壁より少し外へ出す）
+                moveTo(3.2f, 11.2f)
+                lineTo(12f, 3.8f)
+                lineTo(20.8f, 11.2f)
+                // 壁
+                moveTo(5.8f, 9.4f)
+                lineTo(5.8f, 20.2f)
+                lineTo(18.2f, 20.2f)
+                lineTo(18.2f, 9.4f)
+                // 戸
+                moveTo(10f, 20.2f)
+                lineTo(10f, 14.6f)
+                lineTo(14f, 14.6f)
+                lineTo(14f, 20.2f)
+            }
+        }
+    }
 
     val TrophyOutline: ImageVector by lazy {
         icon("TrophyOutline") {

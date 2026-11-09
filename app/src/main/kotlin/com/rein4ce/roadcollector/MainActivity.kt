@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 字を日本語として描く（#46）。画面の設定が変わると Android が端末の言語に戻すので、画面を作るたびに入れ直す
         JapaneseText.apply()
-        // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐって採集画面に入るように見せる
+        // 起動画面（Android 12 以降）が消えるとき、積み木のアイコンの「門」の穴をくぐってホーム（記録中に開いたときは記録画面）に入るように見せる
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             splashScreen.setOnExitAnimationListener { splash -> enterThroughGate(splash) }
         } else {
@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
         // 効果音は、最初に押したボタンから鳴るように、画面ができる前に読み込みを始めておく
         RoadCollectorApp.from(this).sfx
         setContent {
-            // 画面の明るさ：設定（採集画面の歯車）と、端末のダークテーマから決める
+            // 画面の明るさ：設定（ホームの歯車）と、端末のダークテーマから決める
             val mode by settings.themeMode.collectAsStateWithLifecycle()
             val dark = mode.isDark(isSystemInDarkTheme())
             // 野帳の色は、描く処理（Canvas）の中でも読むので、テーマとは別にここで切り替える。
@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
             }
             RoadCollectorTheme(dark = dark) {
                 Box {
-                    // タイトルを出している間は、下の記録画面を読み上げから外す（読み上げで、見えないボタンを押せないように）
+                    // タイトルを出している間は、下のホームを読み上げから外す（読み上げで、見えないボタンを押せないように）
                     Box(modifier = if (TitleIntroState.done) Modifier else Modifier.clearAndSetSemantics {}) {
                         AppNav()
                     }
@@ -145,7 +145,7 @@ class MainActivity : ComponentActivity() {
     /**
      * 起動画面のアイコン（splash_icon）を、積み木の門の形の穴に向かって大きくしながら、起動画面ごとうすくして消す。
      * 開いたときのタイトルを出すときは、門をくぐらず、アイコンの題字の段の場所をタイトルに渡して、うすくして消す（[handTitleOver]）。
-     * 穴をくぐると採集画面が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
+     * 穴をくぐるとホーム（記録中に開いたときは記録画面）が出てくるように見える。「動きを減らす」設定の人には、端末が動きを止めるのですぐ消える
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private fun enterThroughGate(splash: SplashScreenView) {
@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
             duration = 320
             interpolator = AccelerateInterpolator(2f)
         }
-        // くぐり始めてから、起動画面をうすくして採集画面を見せる
+        // くぐり始めてから、起動画面をうすくして、下の画面を見せる
         val fade = ObjectAnimator.ofFloat(splash, View.ALPHA, 1f, 0f).apply {
             startDelay = 180
             duration = 140

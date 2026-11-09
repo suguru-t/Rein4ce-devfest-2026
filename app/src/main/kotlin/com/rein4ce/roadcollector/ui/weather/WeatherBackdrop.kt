@@ -259,7 +259,7 @@ private class Particles(
         val h = size.height
         nightTint(strong = true)
         val sway = Offset(sin(t * 0.09f) * 6.dp.toPx(), sin(t * 0.07f) * 3.dp.toPx())
-        // 太陽の所（右上）だと、上の電池などの表示や、記録画面の「0 m」・歯車にかかる（ダークの満月だと字が読めない）。
+        // 太陽の所（右上）だと、上の電池などの表示や、記録画面の「0 m」・ホームの歯車にかかる（ダークの満月だと字が読めない）。
         // そのため、上の時計と電池のあいだの空いている所（カメラの穴より右）に置き、下の見出しの行にかからない高さにする。
         // 拡大表示の窓（方眼の無い紙）では、そこは上のまん中の名札の後ろになって隠れるので、窓の右上の角に置く（#90 の A のレビュー）
         val at = if (plainPaper) Offset(w - 40.dp.toPx(), 40.dp.toPx()) else Offset(w * 0.64f, 46.dp.toPx())
@@ -587,7 +587,7 @@ private class Particles(
             radius = radius,
             center = center,
         )
-        // ダークモードでは、太陽の光を全体に弱める。右上の歩いた長さと歯車は明るい字なので、白く飛んだ光の上では読めなくなるため
+        // ダークモードでは、太陽の光を全体に弱める。右上の歩いた長さ（記録画面）と歯車（ホーム）は明るい字なので、白く飛んだ光の上では読めなくなるため
         // （暗い紙が白っぽくかすまないようにもなる）
         val glow = if (Fieldbook.dark) 0.4f else 1f
         bloom(w * 1.0f, SunWarm, 0.3f * pulse * glow) // 空いっぱいに広がる暖かい光

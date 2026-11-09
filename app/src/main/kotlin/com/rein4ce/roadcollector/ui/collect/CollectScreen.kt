@@ -3,7 +3,6 @@ package com.rein4ce.roadcollector.ui.collect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -28,14 +27,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,11 +56,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -103,11 +96,9 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.sample.SampleTracks
-import com.rein4ce.roadcollector.ui.TitleIntroState
 import com.rein4ce.roadcollector.ui.common.FieldbookDropdownMenu
 import com.rein4ce.roadcollector.ui.common.MenuHeading
 import com.rein4ce.roadcollector.ui.common.PressButton
-import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.WalkNote
@@ -123,7 +114,6 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.rememberSfx
 import com.rein4ce.roadcollector.ui.inventory.niceLength
-import com.rein4ce.roadcollector.ui.settings.SettingsDialog
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlinx.coroutines.Job
@@ -171,24 +161,20 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さと設定の歯車。
+        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さ。
         // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
-        // 歯車がはみ出さないよう、長さの字は残りの幅に入れ、入りきらないときだけ小さくする
-        var showSettings by remember { mutableStateOf(false) }
+        // 長さの字は残りの幅に入れ、入りきらないときだけ小さくする
+        // （設定の歯車は、ホームの右上へ移した。決定 52。ui/settings/SettingsGearButton.kt）
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さや歯車の上を通るよう、手前に描く
-            // 開いたときのタイトル（ui/TitleIntro.kt）が、ここに飛んできて収まる。そのために場所を知らせ、
-            // 収まるまでは隠しておく（飛んでくる題字と、ここの題字が二重に見えないように）
+            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さの上を通るよう、手前に描く
+            // （開いたときのタイトルは、ここではなくホームの題字に収まる。ui/HomeScreen.kt）
             TitleBlocks(
                 modifier = Modifier
                     .zIndex(1f)
-                    .padding(start = 4.dp, end = 12.dp)
-                    // タイトルが終わったら、もう知らせない（余計な更新をしない）
-                    .onGloballyPositioned { if (!TitleIntroState.done) TitleIntroState.anchor = it.boundsInRoot() }
-                    .graphicsLayer { alpha = if (TitleIntroState.done) 1f else 0f },
+                    .padding(start = 4.dp, end = 12.dp),
             )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
@@ -238,33 +224,7 @@ fun CollectScreen(
                     )
                 }
             }
-            // 歩いた長さと歯車のあいだを少しあける（くっついて見えないように）
-            Spacer(Modifier.width(10.dp))
-            // 押すと歯車がくるっと半回転して止まってから、設定の窓が開く（窓が歯車の半分にかかるので、先に回して見せる）。
-            // 回っている間に押しても回り足さない（続けて押しても、1 回目の 0.4 秒後に開く。#77 のレビュー）。
-            // 次に押したときは同じ向きへ回り足す（歯車の歯は 8 つなので、半回転で止まっても形は同じ）。
-            // 端末の設定でアニメーションを切っている人には回さず、すぐ開く（Compose が設定に従う）
-            val gearTurn = remember { Animatable(0f) }
-            val gearScope = rememberCoroutineScope()
-            val gearJob = remember { mutableStateOf<Job?>(null) }
-            // 押したときの縮みと振動（#76 の押し心地）に、回転を重ねる
-            PressIconButton(onClick = {
-                if (gearJob.value?.isActive != true) {
-                    gearJob.value = gearScope.launch {
-                        gearTurn.animateTo(gearTurn.targetValue + 180f, tween(durationMillis = 380, easing = FastOutSlowInEasing))
-                        showSettings = true
-                    }
-                }
-            }) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = "設定",
-                    tint = Fieldbook.Ink,
-                    modifier = Modifier.graphicsLayer { rotationZ = gearTurn.value },
-                )
-            }
         }
-        if (showSettings) SettingsDialog(onDismiss = { showSettings = false })
 
         // 状態：記録中・再生中のときだけ、地図の左上に札（丸と文）を重ねる。停止中は何も出さない。
         // 地図の上に重ねるので、出たり消えたりしても地図は動かず、停止中に題字と地図のあいだが空かない
