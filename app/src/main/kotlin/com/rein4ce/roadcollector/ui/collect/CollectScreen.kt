@@ -582,7 +582,7 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         lat = last?.lat ?: idle?.lat,
         lng = last?.lng ?: idle?.lng,
     )
-    // 「今いる場所へ戻る」ボタン（#112・決定 70）。戻す所は、記録中（デモ散歩の再生中も）なら歩いている人、そうでなければ今いる場所（HereButton.kt）
+    // 「今いる場所へ戻る」ボタン（#112・決定 72）。戻す所は、記録中（デモ散歩の再生中も）なら歩いている人、そうでなければ今いる場所（HereButton.kt）
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val here = hereTarget(points, recording, playingDemo, idle?.let { MapSpot(it.lat, it.lng) })

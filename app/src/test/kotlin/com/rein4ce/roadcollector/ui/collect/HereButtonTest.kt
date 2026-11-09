@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** 記録画面の地図の「今いる場所へ戻る」ボタン（#112・決定 70）：どこへ戻すか、どれだけ寄せるか */
+/** 記録画面の地図の「今いる場所へ戻る」ボタン（#112・決定 72）：どこへ戻すか、どれだけ寄せるか */
 class HereButtonTest {
     private val walk = listOf(TrackPoint(35.0, 139.0), TrackPoint(35.001, 139.002))
     private val idle = MapSpot(36.0, 140.0)
