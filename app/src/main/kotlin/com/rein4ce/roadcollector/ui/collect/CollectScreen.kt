@@ -584,8 +584,15 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         position = CameraPosition.fromLatLngZoom(start, 16f)
     }
     val last = points.lastOrNull()
+    // 新しい点へ地図を動かす。なめらかに動かすのは、点が画面の中にあって、次の点まで時間があるときだけ。
+    // - デモ散歩の再生中は、3 秒で道を流しきるので点が数十ミリ秒ごとに来る。なめらかに動かすと、動き出すたびに次の点で
+    //   止められてほとんど進まず、指で地図をずらしていると歩く人が画面の外のままになる。そのため、すぐ移す
+    // - 点が画面の外（指で地図をずらした、記録の最初の点が遠い）なら、すぐ移して、今いる場所をすぐ見せる
     LaunchedEffect(last) {
-        if (last != null) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(last.lat, last.lng)))
+        if (last == null) return@LaunchedEffect
+        val target = CameraUpdateFactory.newLatLng(LatLng(last.lat, last.lng))
+        val onScreen = cameraPositionState.projection?.visibleRegion?.latLngBounds?.contains(LatLng(last.lat, last.lng)) == true
+        if (playingDemo || !onScreen) cameraPositionState.move(target) else cameraPositionState.animate(target)
     }
     // 記録していない間（と、記録を始めて最初の点が届くまで）の今いる場所。デモ散歩の再生中は、本当の場所を混ぜない
     val idleState = rememberIdleFix(enabled = !playingDemo && (!recording || last == null))
