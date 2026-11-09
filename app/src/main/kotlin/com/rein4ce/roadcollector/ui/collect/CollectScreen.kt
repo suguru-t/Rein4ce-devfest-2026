@@ -40,6 +40,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -83,6 +84,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.ComposeMapColorScheme
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.Polyline
@@ -570,13 +572,18 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
     // 記録していない間（と、記録を始めて最初の点が届くまで）の今いる場所。デモ散歩の再生中は、本当の場所を混ぜない
     val idleState = rememberIdleFix(enabled = !playingDemo && (!recording || last == null))
     val idle = idleState.value
-    // 軌跡が無いときは、今いる場所が分かったら 1 回だけそこへ地図を動かす（Google マップと同じく、開くと自分の所が出る）
-    var centeredOnIdle by remember { mutableStateOf(false) }
-    LaunchedEffect(idle != null) {
-        if (idle != null && points.isEmpty() && !centeredOnIdle) {
-            centeredOnIdle = true
-            cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(idle.lat, idle.lng)))
-        }
+    // 軌跡が無いときは、今いる場所へ地図を動かす（Google マップと同じく、開くと自分の所が出る）。
+    // まず、スマホが覚えている最後の位置で動かし（すぐ出る）、位置を聞き始めてから本当の位置が初めて届いたら、もう 1 回だけ動かす
+    // （最後の位置は、電車で移動してきたあとなどは古い場所のことがあり、そのままだと青い点が画面の外に出てしまうため）。
+    // その間に指で地図を動かしていたら、追いかけない。0：まだ、1：最後の位置で動かした、2：本当の位置で動かした（以後は動かさない）
+    var centeredOnIdle by remember { mutableIntStateOf(0) }
+    LaunchedEffect(idle != null, idle?.live) {
+        if (idle == null || points.isNotEmpty()) return@LaunchedEffect
+        val step = if (idle.live) 2 else 1
+        if (centeredOnIdle >= step) return@LaunchedEffect
+        val movedByHand = centeredOnIdle == 1 && cameraPositionState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE
+        centeredOnIdle = step
+        if (!movedByHand) cameraPositionState.animate(CameraUpdateFactory.newLatLng(LatLng(idle.lat, idle.lng)))
     }
     // 向いている方位（扇）。デモ散歩の再生中は、スマホの向きと見本の道は関係がないので出さない
     val showIdleDot = idle != null && !playingDemo && (!recording || last == null)

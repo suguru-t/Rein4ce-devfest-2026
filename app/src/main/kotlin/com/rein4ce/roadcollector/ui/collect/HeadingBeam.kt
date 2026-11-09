@@ -57,8 +57,11 @@ internal val MyDotRadius = 7.dp
 /** 記録していない間に位置を聞く間隔 [ms]。記録（LocationRecordingService）と同じくらいの細かさ */
 private const val IDLE_INTERVAL_MS = 2_000L
 
-/** 記録していない間の、今いる場所 */
-internal data class IdleFix(val lat: Double, val lng: Double, val accuracyM: Float)
+/**
+ * 記録していない間の、今いる場所。
+ * [live] は、位置を聞き始めてから届いた新しい位置か（false は、スマホが覚えている最後の位置。電車で移動してきたあとなどは古い場所のことがある）
+ */
+internal data class IdleFix(val lat: Double, val lng: Double, val accuracyM: Float, val live: Boolean)
 
 /** 記録画面が前に出ているか（RESUMED）。センサーと位置は、出ている間だけ動かす */
 @Composable
@@ -149,12 +152,12 @@ internal fun rememberIdleFix(enabled: Boolean): State<IdleFix?> {
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val l = result.lastLocation ?: return
-                fix.value = IdleFix(l.latitude, l.longitude, l.accuracy)
+                fix.value = IdleFix(l.latitude, l.longitude, l.accuracy, live = true)
             }
         }
         try {
             fused.lastLocation.addOnSuccessListener { l ->
-                if (l != null && fix.value == null) fix.value = IdleFix(l.latitude, l.longitude, l.accuracy)
+                if (l != null && fix.value == null) fix.value = IdleFix(l.latitude, l.longitude, l.accuracy, live = false)
             }
             val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, IDLE_INTERVAL_MS)
                 .setMinUpdateIntervalMillis(IDLE_INTERVAL_MS / 2)
