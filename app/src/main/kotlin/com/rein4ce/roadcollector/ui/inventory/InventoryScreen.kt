@@ -406,8 +406,8 @@ fun InventoryScreen(onGoStack: () -> Unit) {
                     }
                 }
             },
-            face = if (mainEnabled) Pop.OrangeDeep else Fieldbook.GridMajor,
-            text = if (mainEnabled) Pop.Letter else Fieldbook.Muted,
+            face = Pop.OrangeDeep,
+            text = Pop.Letter,
             enabled = mainEnabled,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -490,7 +490,8 @@ private fun CollectionMeter(
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 val total = totalDistance(totalM)
-                contentDescription = if (isLoaded) "コレクション。これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "コレクション。読み込み中"
+                // 画面名は、すぐ上の積み木（BlockWord）が見出しとして読むので、ここでは言わない（2 回続かないように。#90 の A のレビュー）
+                contentDescription = if (isLoaded) "これまでに集めた道 $walks 本、合計 ${total.number} ${total.unit.spoken}。見本 $samples" else "読み込み中"
             },
     ) {
         Spacer(Modifier.height(4.dp))

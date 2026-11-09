@@ -76,7 +76,9 @@ fun WeatherLayer(screen: BackdropScreen, modifier: Modifier = Modifier) {
     }
     // 晴れの夜に満月を出すかを決める時刻：今の天気なら今、大きく見ているパーツならそのパーツを歩いた時刻
     val walkedAt = shownId?.let { id -> parts.firstOrNull { it.id == id }?.walkedAt }
-    SettingsBackdrop(weather, walkedAt, modifier)
+    // 大きく見ている間は、同じ天気を窓の紙（ZoomWeather）で動かしている。背景は窓とまわりの暗い幕にほとんど隠れるので、
+    // 止まった絵にして、同じ天気を 2 か所で描き直さない（#90 の A のレビュー）。閉じると、止めたところから続けて動く
+    SettingsBackdrop(weather, walkedAt, modifier, still = shownId != null)
 }
 
 /**
@@ -99,6 +101,7 @@ fun ZoomWeather(weather: WalkWeather?, walkedAt: Long, modifier: Modifier = Modi
  * 「デモの天気」で満月を選んでいれば、どの画面の月も満月にする
  *
  * @param walkedAt 晴れの夜に満月かを決める時刻。null か 0 なら今
+ * @param still 設定によらず止まった絵にする（コレクションで大きく見ている間の背景）
  */
 @Composable
 private fun SettingsBackdrop(
@@ -107,6 +110,7 @@ private fun SettingsBackdrop(
     modifier: Modifier,
     sceneHeight: Dp? = null,
     plainPaper: Boolean = false,
+    still: Boolean = false,
 ) {
     val settings = RoadCollectorApp.from(LocalContext.current).settings
     val recording by TrackRecorder.isRecording.collectAsStateWithLifecycle()
@@ -116,7 +120,7 @@ private fun SettingsBackdrop(
         weather = if (motion == WeatherMotion.OFF) null else weather,
         moonTimeMs = if (demo.fullMoon) DemoSky.FULL_MOON_TIME_MS else walkedAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
         modifier = modifier,
-        still = recording || motion == WeatherMotion.STILL,
+        still = still || recording || motion == WeatherMotion.STILL,
         smooth = motion == WeatherMotion.SMOOTH,
         sceneHeight = sceneHeight,
         plainPaper = plainPaper,

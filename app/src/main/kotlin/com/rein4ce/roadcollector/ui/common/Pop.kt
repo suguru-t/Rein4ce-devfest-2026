@@ -137,9 +137,10 @@ internal fun Modifier.popBlock(face: Color, corner: Dp = 12.dp, depth: Dp = 4.dp
 /**
  * ブロックのボタン。押すとほかのボタンと同じ押し心地（ui/common/PressFeel）で縮む。押せる高さは 48dp 以上
  *
- * @param face   面の色
- * @param text   字の色
- * @param edge   縁取り（白い面に色の縁の、二番手のボタン）
+ * @param face    面の色（押せるとき）
+ * @param text    字の色（押せるとき）
+ * @param edge    縁取り（白い面に色の縁の、二番手のボタン）
+ * @param enabled false なら押せない。面は灰色・字は薄い色・縁なしにする（押せないボタンの見た目を、使う所ごとに書かないように）
  */
 @Composable
 internal fun PopButton(
@@ -159,11 +160,18 @@ internal fun PopButton(
         modifier = modifier
             .pressFeel(source)
             .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .popBlock(face = face, corner = corner, edge = edge)
+            .popBlock(face = if (enabled) face else Fieldbook.GridMajor, corner = corner, edge = if (enabled) edge else null)
             .heightIn(min = 48.dp)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fontSize, color = text, maxLines = 2)
+        Text(
+            label,
+            fontFamily = Pop.Rounded,
+            fontWeight = FontWeight.Black,
+            fontSize = fontSize,
+            color = if (enabled) text else Fieldbook.Muted,
+            maxLines = 2,
+        )
     }
 }
 

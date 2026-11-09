@@ -186,8 +186,8 @@ fun PartPickerSheet(initial: List<String>, onDismiss: () -> Unit, onStart: (List
                     val picked = valid
                     scope.launch { sheetState.hide() }.invokeOnCompletion { onStart(picked) }
                 },
-                face = if (valid.isNotEmpty()) Pop.OrangeDeep else Fieldbook.GridMajor,
-                text = if (valid.isNotEmpty()) Pop.Letter else Fieldbook.Muted,
+                face = Pop.OrangeDeep,
+                text = Pop.Letter,
                 enabled = valid.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
