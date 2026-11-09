@@ -11,7 +11,7 @@ class ChallengeRunTest {
         physics.world.setGravity(0.0, 0.0)
         val run = ChallengeRun(1, clock = { now }, world = physics)
         run.resume(); val first = run.current.id; run.place()
-        physics.world.bodies.last().angularVelocity = 1.0
+        physics.world.bodies.last().apply { angularDamping = 0.0; angularVelocity = 1.0 } // 回り続ける塔（減衰を外す。決定 63 でふだんは 3.0）
         repeat(121) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRun.Phase.AIMING, run.phase)
         assertNotEquals(first, run.current.id)
@@ -24,7 +24,7 @@ class ChallengeRunTest {
         physics.world.setGravity(0.0, 0.0)
         val run = ChallengeRun(1, clock = { now }, world = physics)
         run.resume(); run.place()
-        physics.world.bodies.last().angularVelocity = 1.0
+        physics.world.bodies.last().apply { angularDamping = 0.0; angularVelocity = 1.0 } // 回り続ける塔（減衰を外す。決定 63 でふだんは 3.0）
         now = ChallengeRules.DURATION_NS; run.tick()
         run.pause(); now += 100_000_000_000; run.resume()
         repeat(5) { now += 1_000_000_000; run.tick() }
@@ -78,7 +78,7 @@ class ChallengeRunTest {
         physics.world.setGravity(0.0, 0.0)
         val run = ChallengeRun(1, clock = { now }, world = physics)
         run.resume(); val first = run.current.id; run.place()
-        physics.world.bodies.last().angularVelocity = 1.0
+        physics.world.bodies.last().apply { angularDamping = 0.0; angularVelocity = 1.0 } // 回り続ける塔（減衰を外す。決定 63 でふだんは 3.0）
         repeat(58) { now += 50_000_000; run.tick() } // 2.9 秒
         assertEquals(ChallengeRun.Phase.FALLING, run.phase)
         repeat(3) { now += 50_000_000; run.tick() } // 3.05 秒
@@ -120,7 +120,7 @@ class ChallengeRunTest {
         run.resume(); now = ChallengeRules.DURATION_NS; run.tick()
         repeat(20) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRules.ID, run.score!!.rule)
-        assertEquals("manual-180-v3", ChallengeRules.ID)
+        assertEquals("manual-180-v4", ChallengeRules.ID)
     }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L
@@ -128,7 +128,7 @@ class ChallengeRunTest {
         physics.world.setGravity(0.0, 0.0)
         val run = ChallengeRun(1, clock = { now }, world = physics)
         run.resume(); run.place()
-        physics.world.bodies.last().angularVelocity = 1.0
+        physics.world.bodies.last().apply { angularDamping = 0.0; angularVelocity = 1.0 } // 回り続ける塔（減衰を外す。決定 63 でふだんは 3.0）
         now = ChallengeRules.DURATION_NS; run.tick()
         repeat(125) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRun.Phase.UNRESOLVED, run.phase)

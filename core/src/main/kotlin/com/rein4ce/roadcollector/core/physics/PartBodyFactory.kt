@@ -14,11 +14,19 @@ import org.dyn4j.geometry.Vector2
  */
 object PartBodyFactory {
 
+    /**
+     * @property restitution 反発。0（跳ね返らない）
+     * @property angularDamping 回転の減衰。着地したときに角から当たって、回りながら跳ねるのを抑える（#110。決定 63）。
+     *   反発はもとから 0 で、跳ねて見えていたのは、角から当たったときの回転だった。0.3 から 3.0 にすると、見本のパーツを台と塔に
+     *   いろいろな向きで落としたときの、着いてからの跳ね上がりが平均 3.6 cm → 2.4 cm、いちばん大きいときで 16 cm → 9 cm になった。
+     *   4.0 にするともっと小さくなるが、塔から倒れるときの回り方が重く見えるので、3.0 にした。
+     *   すべりやすさ（摩擦。歩いた日の天気）と、まっすぐ落ちる速さには効かない
+     */
     data class Material(
         val density: Double = 1.0,
         val friction: Double = 0.7,
         val restitution: Double = 0.0,
-        val angularDamping: Double = 0.3,
+        val angularDamping: Double = 3.0,
         val linearDamping: Double = 0.05,
     )
 

@@ -231,4 +231,38 @@ class StackWorldTest {
         assertTrue("置いたパーツよりずっと上", !world.overlaps(bar, 0.0, 3.0, 0.0))
         assertEquals("問い合わせではパーツは増えない", 1, world.placedParts.size)
     }
+
+    /**
+     * 着地したときに、回りながら跳ねすぎない（#110・決定 63）。見本のパーツを、いろいろな向きで台の上 1.5 m から落とし、
+     * 着いてから重心が跳ね上がった高さを測る。回転の減衰が 0.3 のときは、平均 3.6 cm・いちばん大きいときで 16 cm だった
+     */
+    @Test
+    fun `着地で回りながら跳ねすぎない`() {
+        var sum = 0.0
+        var most = 0.0
+        var n = 0
+        for (part in SampleParts.all) for (angle in listOf(0.0, 30.0, 75.0, 120.0)) {
+            val world = StackWorld()
+            val body = world.place(part, 0.0, 1.5, Math.toRadians(angle), PartSize.of(part.distanceM))
+            var touched = false
+            var lowest = Double.MAX_VALUE
+            var rebound = 0.0
+            var t = 0.0
+            while (t < 4.0) {
+                world.step(1.0 / 60)
+                t += 1.0 / 60
+                // 落ちる速さが落ちたら、着いたことにする
+                if (!touched && t > 0.2 && body.linearVelocity.y > -0.5) touched = true
+                if (touched) {
+                    lowest = minOf(lowest, body.worldCenter.y)
+                    rebound = maxOf(rebound, body.worldCenter.y - lowest)
+                }
+            }
+            sum += rebound
+            most = maxOf(most, rebound)
+            n++
+        }
+        assertTrue("跳ね上がりの平均（${sum / n} m）", sum / n < 0.03)
+        assertTrue("いちばん大きい跳ね上がり（$most m）", most < 0.12)
+    }
 }
