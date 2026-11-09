@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -267,18 +269,46 @@ fun StackScreen(
                 ) {
                     when (vm.phase) {
                         StackViewModel.Phase.Placing -> {
-                            Text(
-                                "${vm.current?.displayName ?: ""} ・ ドラッグか◀▶で位置を決める（長押しで連続移動）",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ink,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                                PressButton(onClick = { vm.place(grip) }) { Text("置く") }
-                                PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
+                            // 案内は 1 行に収める。パーツの名前が長ければ名前のほうを「…」で切る（長押しで続けて動くことは、
+                            // ◀▶ の読み上げの長押しの説明にまかせる。#88 のレビュー）
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    vm.current?.displayName ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                Text(" ・ ドラッグか ◀▶ で位置を決める", style = MaterialTheme.typography.bodySmall, color = ink, maxLines = 1)
                             }
-                            MoveButtons(enabled = vm.phase == StackViewModel.Phase.Placing, sessionKey = vm.runId, onMove = vm::dragBy)
+                            Spacer(Modifier.height(8.dp))
+                            // ◀ ⟲ 15° 置く ⟳ 15° ▶ を 1 行に並べる（◀▶ を別の行にすると、操作の段が高くなってキャンバスが縮むため。
+                            // #88 のレビュー）。◀▶ は指で押せる最小の幅、ほかの 3 つは残りの幅を分け合う。
+                            // ◀▶ は狙っている間（この分岐）だけ出す。落下中・完成後は出さず、VM の dragBy も動かさない
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                MoveButton(MoveDirection.LEFT, sessionKey = vm.runId, onMove = vm::dragBy)
+                                PressOutlinedButton(
+                                    onClick = { vm.rotate(+15f) },
+                                    modifier = Modifier.weight(ROTATE_WEIGHT),
+                                    contentPadding = CompactButtonPadding,
+                                ) { Text("⟲ 15°") }
+                                PressButton(
+                                    onClick = { vm.place(grip) },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = CompactButtonPadding,
+                                ) { Text("置く") }
+                                PressOutlinedButton(
+                                    onClick = { vm.rotate(-15f) },
+                                    modifier = Modifier.weight(ROTATE_WEIGHT),
+                                    contentPadding = CompactButtonPadding,
+                                ) { Text("⟳ 15°") }
+                                MoveButton(MoveDirection.RIGHT, sessionKey = vm.runId, onMove = vm::dragBy)
+                            }
                             // コレクションに戻らずに、その場で積むパーツを選び直せる（B の PartPickerSheet）
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 PressTextButton(onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) }) { Text("やり直す") }
@@ -584,6 +614,15 @@ internal fun walkedLines(walked: WalkDistance): List<String> = when {
 
 /** 目盛の縦の線の位置（キャンバスの左端から）[dp]。断面図の標尺の幅と同じ */
 private const val RULER_STAFF_DP = 30f
+
+/**
+ * ◀▶ と同じ行に並べる回転・置くのボタンの中の余白。Material の既定（左右 24dp）だと 360dp 幅の画面で 1 行に入らないので狭くする。
+ * それでも入らない（文字をとても大きくした）ときは、ボタンの中で折り返す
+ */
+private val CompactButtonPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+
+/** 回転のボタンの幅の割合（「置く」を 1 として）。「⟲ 15°」は「置く」より字が多い */
+private const val ROTATE_WEIGHT = 1.2f
 
 /** 操作の段の高さの上限（画面の高さに対する割合）。超える中身はスクロールさせる */
 private const val CONTROLS_MAX_FRACTION = 0.45f
