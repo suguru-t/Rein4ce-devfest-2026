@@ -19,7 +19,7 @@ import kotlin.math.min
  * - v2：途中の揺れ待ちは 6 秒まで
  * - v3：途中の揺れ待ちを 3 秒までにした（塔が揺れていても、すぐ次の形を積めるように。#78 のユーザーの依頼）
  * - v4：パーツの回転の減衰を 0.3 から 3.0 にした（着地で跳ねすぎないように。#110・決定 63）。積み方が変わるので、v3 までの記録とは混ぜない
- * - v5：台を通常と同じ 2.8 m にした（[PLATFORM_WIDTH_M]。決定 68）。画面からは自分で落とすを選べなくなった（決まりは core に残す）
+ * - v5：台を通常と同じ 2.8 m にした（[PLATFORM_WIDTH_M]。決定 68）。画面で遊べるのは自分で落とすだけ（自動で落ちるの決まりは core に残す）
  */
 object ChallengeRules {
     const val ID = "manual-180-v5"
@@ -63,7 +63,7 @@ object ChallengeRules {
  * 3分チャレンジの遊び方（#45）。決まりが違うので、記録は [ruleId] で分けて混ぜない
  */
 enum class ChallengeStyle(val ruleId: String) {
-    /** B 案：狙っている間、形は出てきた高さで止まっていて、「置く」で落とす */
+    /** B 案：狙っている間、形は出てきた高さで止まっていて、「置く」（[ChallengeRun.place]。画面では指を離したとき。決定 67）で落とす */
     MANUAL(ChallengeRules.ID),
 
     /**

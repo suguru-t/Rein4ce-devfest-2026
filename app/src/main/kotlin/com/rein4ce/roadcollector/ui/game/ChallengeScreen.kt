@@ -91,7 +91,8 @@ import java.util.Locale
 /**
  * 3分チャレンジの画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
  *
- * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 68）。遊び方は自動で落ちるだけ
+ * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 68）。遊び方は自分で落とすだけ
+ *   （通常のモードと同じく、ドラッグして指を離すと落ちる。自動で落ちるはやめた）
  * - 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回は捨てる。次に開いたときは、その前の段階を引き継がず新しい回から（決定 68）。
  *   アプリが裏に回ったときは、時計と物理を止めて、戻ったら続きから（画面を離れたことにはしない）
  * - 情報の段の「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter）、「次」は右に大きめの形（決定 68）
@@ -325,8 +326,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             cameraY.animateTo(target.cameraY, tween(durationMillis = CAMERA_ANIMATION_MS, easing = FastOutSlowInEasing))
         }
     }
-    // 横にドラッグすると、前の ◀▶ と同じ 10 cm きざみで動く（決定 67）。遊べるのは自動で落ちるだけなので（決定 68）、
-    // 指を離しても落とさない（下がり続けて、塔か台に触れたら落ちる。離すたびに落ちると、つかみ直して位置を直せないため）
+    // 横にドラッグすると、前の ◀▶ と同じ 10 cm きざみで動く（決定 67）。遊べるのは自分で落とすだけなので（決定 68）、
+    // 指を離すとその位置で落ちる（通常のモードと同じ）。落とすのは狙っている間だけ（core の place が見る）
     val steps = remember(vm.generation) { DragSteps(MOVE_STEP_CHALLENGE_M) }
     Canvas(
         modifier
@@ -338,15 +339,19 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
                     val n = steps.add(viewport.dragToMeters(dx).toDouble())
                     if (n != 0) vm.move(n * MOVE_STEP_CHALLENGE_M)
                 },
-                onRelease = { steps.reset() },
+                onRelease = {
+                    steps.reset()
+                    vm.place()
+                },
             )
             .semantics {
                 contentDescription = "塔。模型の高さ %.2f メートル".format(Locale.JAPAN, frame.towerHeight)
-                // 読み上げ（TalkBack）ではドラッグできないので、キャンバスの操作で左右に動かせるようにする（前の ◀▶ の代わり）
+                // 読み上げ（TalkBack）ではドラッグできないので、キャンバスの操作で左右に動かし、落とせるようにする（前の ◀▶ と「置く」の代わり）
                 if (frame.phase == ChallengeRun.Phase.AIMING) {
                     customActions = listOf(
                         CustomAccessibilityAction("左へ 10 cm") { vm.move(-MOVE_STEP_CHALLENGE_M); true },
                         CustomAccessibilityAction("右へ 10 cm") { vm.move(MOVE_STEP_CHALLENGE_M); true },
+                        CustomAccessibilityAction("ここで落とす") { vm.place(); true },
                     )
                 }
             },
@@ -371,7 +376,7 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             }
         }
         if (frame.phase == ChallengeRun.Phase.AIMING) {
-            // 狙っている形の高さは、自動で落ちるときは毎コマ下がるので、描画の中だけで読む（vm.ghostY）
+            // 狙っている形の高さ（vm.ghostY）は描画の中だけで読む。自分で落とすときは出てくる高さのまま
             drawPart(frame.current, at(frame.x, vm.ghostY.toDouble()), viewport.scale, Math.toRadians(frame.angle).toFloat(), alpha = 0.45f)
         }
     }
@@ -379,8 +384,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
 
 /**
  * 狙う操作：「回す」のボタン 1 つだけ（決定 67。通常のモードと同じ）。位置はキャンバスのドラッグで決め（10 cm きざみ）、
- * 自分で落とすときは指を離すと落ちる（[ChallengeCanvas]）。回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114）。
- * 行の高さは [AIM_ROW_HEIGHT]（落下中の「落下中…」と同じ。下の「やり直す」「中断」が動かないように）
+ * 指を離すと落ちる（[ChallengeCanvas]）。回すのは時計回りだけで、押し続けると 15° ずつ回り続ける（#114）。
+ * 行の高さは [AIM_ROW_HEIGHT]（落下中の「落下中…」と同じ。下の「やり直す」が動かないように）
  */
 @Composable
 private fun AimControls(vm: ChallengeViewModel) {
@@ -399,14 +404,14 @@ private fun AimControls(vm: ChallengeViewModel) {
 }
 
 /**
- * 狙う操作の上の一言（決定 67）。遊べるのは自動で落ちるだけなので「触れたら落ちる」（決定 68）。
+ * 狙う操作の上の一言（決定 67）。遊べるのは自分で落とすだけなので「指を離すと落ちる」（決定 68）。
  * 落下中も同じ字を見えなくして置き、行の高さをそろえる（[visible] が false）
  */
 @Composable
 private fun AimHint(visible: Boolean = true) {
     // 通常のモードの置き方の一言と同じ字（縁取りの丸ゴシック・薄い墨）
     SkyText(
-        "ドラッグで位置を合わせる（塔か台に触れたら落ちる）",
+        "ドラッグして、指を離すと落ちる",
         color = Fieldbook.Muted,
         fontSize = 13.sp,
         maxLines = 1,
@@ -473,7 +478,7 @@ private fun SaveState(vm: ChallengeViewModel) {
 
 /**
  * この端末の記録（3分チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
- * 遊べるのは自動で落ちるだけなので、その決まりの記録だけを出す（決定 68。前の決まりの記録は消さずに残っている）
+ * 遊べるのは自分で落とすだけなので、その決まりの記録だけを出す（決定 68。ほかの決まりの記録は消さずに残っている）
  */
 @Composable
 private fun Records(ranking: List<ChallengeScore>, highlight: String?) {

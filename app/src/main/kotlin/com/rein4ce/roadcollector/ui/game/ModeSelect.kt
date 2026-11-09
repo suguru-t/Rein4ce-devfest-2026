@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
-import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -120,16 +119,17 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         }
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
-            // 時計と物理は、この画面を離れると止まる（ChallengeScreen のフレームのループ）。戻ってくると続きから
+            // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 68）
             ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
         }
         // 毎日 1 つずつ積むは、まだ選べない（[PlayMode.ready]）
         null, PlayMode.DAILY -> {
             val best by records.normalBest.collectAsStateWithLifecycle()
-            // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）
+            // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
+            // 画面で遊べる遊び方（自分で落とす。決定 68）の記録の最高
             val directory = LocalContext.current.applicationContext.filesDir
             val challengeBest by produceState<Double?>(null, directory) {
-                value = runCatching { ChallengeStorage(directory).ranking(ChallengeRules.AUTO_ID).maxOfOrNull { it.height } }.getOrNull()
+                value = runCatching { ChallengeStorage(directory).ranking(ChallengeViewModel.PLAYABLE_STYLE.ruleId).maxOfOrNull { it.height } }.getOrNull()
             }
             ModeSelectScreen(normalBest = best, challengeBest = challengeBest, onPick = { chosen = it })
         }

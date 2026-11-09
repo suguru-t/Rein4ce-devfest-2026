@@ -71,13 +71,13 @@ class ChallengeViewModel(
         private set
 
     /**
-     * 遊び方。画面で遊べるのは自動で落ちるだけ（決定 68）。記録の一覧もこの決まりの ID で読む。
-     * 自分で落とす（[ChallengeStyle.MANUAL]）は core に残っているが、画面からは選べない（前は始める前の画面で選んでいた。決定 65）
+     * 遊び方（[PLAYABLE_STYLE]）。記録の一覧もこの決まりの ID で読む
      */
-    val style = ChallengeStyle.AUTO
+    val style = PLAYABLE_STYLE
 
     /**
-     * いま狙っている形の高さ [m]。自動で落ちるときは毎コマ下がるので、フレーム（[frame]）には入れず、キャンバスの描画の中だけで読む
+     * いま狙っている形の高さ [m]。自分で落とすときは出てくる高さのまま。自動で落ちる（core に残している）ときは毎コマ下がるので、
+     * フレーム（[frame]）には入れず、キャンバスの描画の中だけで読む
      */
     var ghostY by mutableFloatStateOf(0f)
         private set
@@ -240,5 +240,11 @@ class ChallengeViewModel(
 
         /** 始める前の残り時間の表示 [秒]（3:00） */
         val FULL_SECONDS = (ChallengeRules.DURATION_NS / NS_PER_SECOND).toInt()
+
+        /**
+         * 画面で遊べる遊び方。自分で落とす（ドラッグして、指を離すと落ちる）だけ（決定 68）。遊び方を選ぶ画面のカードの最高も、この決まりの記録。
+         * 自動で落ちる（[ChallengeStyle.AUTO]）は core に残っているが、画面からは選べない（前は始める前の画面で選んでいた。決定 65）
+         */
+        val PLAYABLE_STYLE = ChallengeStyle.MANUAL
     }
 }

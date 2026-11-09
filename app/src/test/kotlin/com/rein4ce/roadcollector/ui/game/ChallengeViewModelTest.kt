@@ -165,7 +165,7 @@ class ChallengeViewModelTest {
         assertEquals(1, vm.ranking.size)
     }
 
-    @Test fun `自動で落ちるだけで遊び、その決まりの記録を読む（決定 68）`() = runTest {
+    @Test fun `自分で落とすだけで遊び、その決まりの記録を読む（決定 68）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val asked = mutableListOf<String>()
@@ -176,15 +176,19 @@ class ChallengeViewModelTest {
             loadRecords = { rule -> asked += rule; emptyList() },
         )
         runCurrent()
-        assertEquals(ChallengeStyle.AUTO, vm.style)
-        assertEquals(listOf(ChallengeRules.AUTO_ID), asked)
+        assertEquals(ChallengeStyle.MANUAL, vm.style)
+        assertEquals(listOf(ChallengeRules.ID), asked)
         vm.start(); vm.resume()
-        assertEquals(listOf(ChallengeStyle.AUTO), styles)
-        // 自動で落ちる形は、狙っている間も下がる（フレームではなく ghostY で知らせる）
+        assertEquals(listOf(ChallengeStyle.MANUAL), styles)
+        // 自分で落とす形は、狙っている間は下がらない（指を離すまで、出てくる高さで待つ）
         val start = vm.ghostY
         val frame = vm.frame
-        repeat(5) { now += 50_000_000; vm.tick() }
-        assertTrue(vm.ghostY < start)
-        assertEquals("下がるだけでは、フレームは変わらない", frame, vm.frame)
+        repeat(20) { now += 50_000_000; vm.tick() }
+        assertEquals(start, vm.ghostY)
+        assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
+        assertEquals("何もしなければ、フレームは変わらない", frame, vm.frame)
+        // 指を離す（place）と落ちる
+        vm.place()
+        assertEquals(ChallengeRun.Phase.FALLING, vm.frame!!.phase)
     }
 }
