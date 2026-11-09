@@ -112,7 +112,7 @@ class AppSettingsTest {
             setBgmOn(false)
             setBgmVolume(8)
             setSfxOn(false)
-            setBgmTrack(BgmTrack.NIGHT)
+            setBgmTrack(BgmTrack.MUSIC_BOX)
         }
         val again = AppSettings(store)
         assertEquals(WeatherMotion.STILL, again.weatherMotion.value)
@@ -125,7 +125,7 @@ class AppSettingsTest {
         assertEquals(8, again.bgmVolume.value)
         // 効果音は BGM と別に覚えている
         assertFalse(again.sfxOn.value)
-        assertEquals(BgmTrack.NIGHT, again.bgmTrack.value)
+        assertEquals(BgmTrack.MUSIC_BOX, again.bgmTrack.value)
     }
 
     @Test

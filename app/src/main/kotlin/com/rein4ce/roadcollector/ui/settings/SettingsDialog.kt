@@ -15,11 +15,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
@@ -60,6 +65,7 @@ import com.rein4ce.roadcollector.data.DemoSky
 import com.rein4ce.roadcollector.data.ThemeMode
 import com.rein4ce.roadcollector.data.WeatherMotion
 import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.PressIconButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -72,7 +78,7 @@ import kotlin.math.roundToInt
  * 選ぶ画面に切り替わる（枠の下の丸いボタンが「＜」になり、それか戻る・枠の外で一覧に戻る。一覧では「×」で設定を閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
- * - BGM：オン・オフのスイッチと、曲（いつもの・軽やか・夜）、音量のスライダー（10 段階）。オフのときは曲と音量を選べない。初期設定に戻すボタン
+ * - BGM：オン・オフのスイッチと、曲（いつもの・ピコピコ・オルゴールを「‹ ›」で切り替える）、音量のスライダー（10 段階）。オフのときは曲と音量を選べない。初期設定に戻すボタン
  * - 効果音：オン・オフのスイッチ（ボタン・積み木・道を 1 本集めたときの木琴の音。BGM とは別に切り替えられる）
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
@@ -340,7 +346,7 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
 }
 
 /**
- * BGM の画面：いちばん上にオン・オフのスイッチ、その下に曲（いつもの・軽やか・夜）と音量のスライダー（1〜10）。
+ * BGM の画面：いちばん上にオン・オフのスイッチ、その下に曲（「‹ いつもの ›」で切り替える）と音量のスライダー（1〜10）。
  * オフのときは、曲と音量をうすくして選べない。説明、いちばん下に「初期設定に戻す」（オン・いつもの・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。
  * 選ぶ・動かすとすぐに音が変わる（曲は、新しい曲の頭から流れる）
  */
@@ -356,12 +362,7 @@ private fun BgmPage(
 ) {
     Toggle(label = if (on) "オン" else "オフ", note = null, checked = on, onChange = onOnChange)
     Column(modifier = Modifier.padding(top = 8.dp).alpha(if (on) 1f else 0.45f)) {
-        Text("曲", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.semantics { heading() })
-        Column(modifier = Modifier.selectableGroup()) {
-            for (t in BgmTrack.entries) {
-                Choice(label = t.label, note = t.note, selected = t == track, enabled = on, onSelect = { onTrackChange(t) })
-            }
-        }
+        TrackPicker(track = track, enabled = on, onChange = onTrackChange)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("音量", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
@@ -408,6 +409,44 @@ private fun BgmPage(
         Text("初期設定に戻す", color = if (isDefault) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
     }
 }
+
+/**
+ * BGM の曲を「‹ 曲の名前 ›」で切り替える行。端まで行ったら反対の端へ回る。押すとすぐに新しい曲の頭から流れる。
+ * 曲の説明は出さない（名前と、流れる曲そのもので分かる。B が決めた）。
+ * 読み上げでは、名前の所は「曲 いつもの、3 曲の 1 曲目」、ボタンは「前の曲」「次の曲」。切り替えると名前を読み直す
+ */
+@Composable
+private fun TrackPicker(track: BgmTrack, enabled: Boolean, onChange: (BgmTrack) -> Unit) {
+    val all = BgmTrack.entries
+    val index = all.indexOf(track)
+    fun step(by: Int) = onChange(all[Math.floorMod(index + by, all.size)])
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text("曲", fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.weight(1f))
+        PressIconButton(onClick = { step(-1) }, enabled = enabled) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "前の曲", tint = Fieldbook.Survey)
+        }
+        Text(
+            track.label,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Fieldbook.Survey,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier
+                .widthIn(min = TrackNameWidth)
+                .semantics {
+                    contentDescription = "曲 ${track.label}、${all.size} 曲の ${index + 1} 曲目"
+                    liveRegion = LiveRegionMode.Polite
+                },
+        )
+        PressIconButton(onClick = { step(1) }, enabled = enabled) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "次の曲", tint = Fieldbook.Survey)
+        }
+    }
+}
+
+/** 曲の名前の幅（いちばん長い「オルゴール」が入る幅にそろえ、切り替えても「‹」「›」の場所が動かないように） */
+private val TrackNameWidth = 104.dp
 
 /** スライダーの段階の名前の左右の余白 */
 private val LabelPadding = 2.dp
@@ -458,18 +497,17 @@ private fun ItemDivider() {
 
 /** 1 つだけ選ぶ項目の 1 行（行ごと押せる） */
 @Composable
-private fun Choice(label: String, note: String?, selected: Boolean, onSelect: () -> Unit, enabled: Boolean = true) {
+private fun Choice(label: String, note: String?, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .selectable(selected = selected, onClick = onSelect, enabled = enabled, role = Role.RadioButton),
+            .selectable(selected = selected, onClick = onSelect, role = Role.RadioButton),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(
             selected = selected,
             onClick = null, // 行ごと押せる（selectable）
-            enabled = enabled,
             colors = RadioButtonDefaults.colors(selectedColor = Fieldbook.Survey, unselectedColor = Fieldbook.Muted),
         )
         Spacer(Modifier.width(8.dp))

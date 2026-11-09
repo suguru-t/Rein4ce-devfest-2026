@@ -10,7 +10,7 @@ import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.data.BgmTrack
 
 /**
- * アプリの BGM（res/raw/bgm・bgm_light・bgm_night。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
+ * アプリの BGM（res/raw/bgm・bgm_chip・bgm_musicbox。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
  * 曲は設定で選ぶ（[setTrack]。決定 48）。
  *
  * 流すか止めるかの決まりは [BgmControl]（アプリが前に出ていて、設定でオンのときだけ。ほかのアプリの音楽を止めない、など）。
@@ -119,8 +119,8 @@ class BgmPlayer(context: Context) {
     private val BgmTrack.res: Int
         get() = when (this) {
             BgmTrack.USUAL -> R.raw.bgm
-            BgmTrack.LIGHT -> R.raw.bgm_light
-            BgmTrack.NIGHT -> R.raw.bgm_night
+            BgmTrack.CHIP -> R.raw.bgm_chip
+            BgmTrack.MUSIC_BOX -> R.raw.bgm_musicbox
         }
 
     private companion object {

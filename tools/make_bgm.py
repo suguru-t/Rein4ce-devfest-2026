@@ -3,11 +3,11 @@
 アプリの BGM（app/src/main/res/raw/bgm*.ogg）を作る。設定で選べる 3 曲（決定 48）：
 
 - bgm.ogg「いつもの」：歩く速さくらい（88 BPM）のゆったりした曲。はじめからある曲で、音は前と同じ
-- bgm_light.ogg「軽やか」：速め（112 BPM）。低い音が 1・3 拍、和音が 2・4 拍で弾み、旋律も細かく動く
-- bgm_night.ogg「夜」：ゆっくり（66 BPM）。イ短調の響き（ハ長調と同じ音だけ）で、和音を小さく分散して鳴らし、響きを多めに
+- bgm_chip.ogg「ピコピコ」：昔のゲーム機のような音（矩形波・三角波・雑音の太鼓）。140 BPM で、速い分散和音と太鼓で走る、冒険に出るような曲
+- bgm_musicbox.ogg「オルゴール」：金属の歯をはじいたキラキラした音。3 拍子・84 BPM のワルツで、眠る前のような曲
 
-どれも積み木らしい木琴（マリンバ）の音で 16 小節ぶん鳴らし、最後から最初へつなぎ目なく戻る 1 つのループにする
-（響きの尾も、曲の頭に回して重ねる）。3 曲とも効果音（tools/make_sfx.py）と同じハ長調の音だけを使うので、重なっても濁らない。
+どれも 16 小節ぶん鳴らし、最後から最初へつなぎ目なく戻る 1 つのループにする（響きの尾も、曲の頭に回して重ねる）。
+3 曲とも効果音（tools/make_sfx.py）と同じハ長調の音だけを使うので、重なっても濁らない。ほかの 2 曲の大きさは「いつもの」にそろえる。
 音はこのスクリプトの中で作る（音の素材を使わないので、ライセンスの心配がない）。
 
 使い方（リポジトリのいちばん上で）:
@@ -20,7 +20,7 @@ OGG（Vorbis）にするのは、ファイルを小さくするため（WAV だ�
 Vorbis は長さを 1 点単位で覚えているので、MP3・AAC と違って頭と終わりに無音が足されず、ループのつなぎ目がずれない。
 
 チームで用意した曲に差し替えるときは、res/raw/bgm*.ogg を消して、同じ名前（bgm.ogg・bgm.mp3 など、
-Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_light・bgm_night）でしか見ていない。
+Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_chip・bgm_musicbox）でしか見ていない。
 曲の規約（リポジトリが公開なので、ファイルを置いてよいか・クレジットの書き方）は確かめてから入れる。
 """
 
@@ -137,107 +137,220 @@ def nearest_at_or_above(letter: str, low: int) -> int:
     return m
 
 
-# ---- 「軽やか」（112 BPM） ----
+# ---- 楽器 ----
+# どの楽器も (MIDI 番号, 強さ, 長さ [s]) → 音。木琴（marimba）は長さを使わず、自然に消える
 
-# よく聞く明るい進行（ド・ソ・ラ・ファ）。最後の小節は前半 F・後半 G で、頭の C へ戻る
-LIGHT_HARMONY = [
-    ["C"], ["G"], ["Am"], ["F"], ["C"], ["G"], ["F"], ["G"],
-    ["Am"], ["Em"], ["F"], ["C"], ["Dm"], ["G"], ["C"], ["F", "G"],
+
+def marimba_voice(m: int, velocity: float, length: float) -> np.ndarray:
+    return marimba(m, velocity)
+
+
+def square(m: int, velocity: float, length: float, duty: float = 0.5) -> np.ndarray:
+    """昔のゲーム機の「ピコッ」とした音（矩形波）。耳に痛い折り返しが出ないよう、倍音を足して作る（足すのは聞こえる高さまで）"""
+    f = freq(m)
+    n = int((length + 0.03) * SR)
+    t = np.arange(n) / SR
+    tone = np.zeros(n)
+    k = 1
+    while k * f < 0.45 * SR and k <= 40:
+        a = np.sin(np.pi * k * duty) / k
+        if abs(a) > 1e-6:
+            tone += a * np.sin(2 * np.pi * k * f * t)
+        k += 1
+    return tone * chip_envelope(n, length) * velocity
+
+
+def triangle(m: int, velocity: float, length: float) -> np.ndarray:
+    """ゲーム機の低い音（三角波。やわらかい）"""
+    f = freq(m)
+    n = int((length + 0.03) * SR)
+    t = np.arange(n) / SR
+    tone = np.zeros(n)
+    for i, k in enumerate(range(1, 30, 2)):
+        if k * f >= 0.45 * SR:
+            break
+        tone += ((-1) ** i) / (k * k) * np.sin(2 * np.pi * k * f * t)
+    return tone * chip_envelope(n, length) * velocity
+
+
+def chip_envelope(n: int, length: float) -> np.ndarray:
+    """ゲーム機の音の大きさの形：すぐ立ち上がり、少し下がって続き、長さのところで 30 ms かけて消える"""
+    t = np.arange(n) / SR
+    env = 0.7 + 0.3 * np.exp(-t / 0.05)
+    env[: int(0.003 * SR)] *= np.linspace(0, 1, int(0.003 * SR))
+    release = t > length
+    env[release] *= np.exp(-(t[release] - length) / 0.01)
+    return env
+
+
+KICK, SNARE, HAT = -1, -2, -3  # 太鼓は MIDI 番号の代わりにこれで選ぶ
+
+
+def drum(kind: int, velocity: float, length: float) -> np.ndarray:
+    """ゲーム機の太鼓：低い「ドン」（下がっていく音）、雑音の「タン」、短く高い雑音の「チッ」"""
+    if kind == KICK:
+        n = int(0.15 * SR)
+        t = np.arange(n) / SR
+        pitch = 50 + 110 * np.exp(-t / 0.03)
+        tone = np.sin(2 * np.pi * np.cumsum(pitch) / SR) * np.exp(-t / 0.06)
+    elif kind == SNARE:
+        n = int(0.15 * SR)
+        t = np.arange(n) / SR
+        tone = rng.standard_normal(n) * np.exp(-t / 0.045) * 0.6 + np.sin(2 * np.pi * 190 * t) * np.exp(-t / 0.03) * 0.4
+    else:
+        n = int(0.04 * SR)
+        t = np.arange(n) / SR
+        noise = rng.standard_normal(n)
+        noise -= np.convolve(noise, np.ones(4) / 4, mode="same")  # 低いところを削って、高い「チッ」だけにする
+        tone = noise * np.exp(-t / 0.01) * 0.5
+    return tone * velocity
+
+
+def music_box(m: int, velocity: float, length: float) -> np.ndarray:
+    """オルゴール：金属の歯をはじいたキラキラした音。すぐ消える高い響きと、1 オクターブ上の響きを少し足す。高い音ほど早く消える"""
+    f = freq(m)
+    tau = 1.3 * (523.3 / f) ** 0.5  # 響きの長さ [s]（C5 で 1.3 秒）
+    n = int(min(5 * tau, 4.0) * SR)
+    t = np.arange(n) / SR
+    tone = np.sin(2 * np.pi * f * t) * np.exp(-t / tau)
+    for ratio, amp, life in ((2.0, 0.3, 0.45), (5.4, 0.12, 0.06)):
+        if ratio * f < 0.45 * SR:
+            tone += amp * np.sin(2 * np.pi * ratio * f * t) * np.exp(-t / (tau * life))
+    attack = int(0.001 * SR)
+    tone[:attack] *= np.linspace(0, 1, attack)
+    return tone * velocity
+
+
+# ---- 「いつもの」の並べ方（はじめからの曲。音を変えないよう、前と同じ順に並べる） ----
+
+
+def arrange_usual(song) -> list:
+    out = []
+    beat = song.beat
+    for bar in range(BARS):
+        bar_start = bar * 4 * beat
+        chords = USUAL_HARMONY[bar]
+        span = 4 / len(chords)
+        for k, name in enumerate(chords):
+            root, third, fifth = CHORDS[name]
+            beat0 = k * span
+            # ベース（低い音）：和音の始めに根音、2 拍あとに 5 度（歩く足どりのように）
+            r = nearest_at_or_above(root, midi("E2"))
+            out.append((bar_start + beat0 * beat, r, 0.42, marimba_voice, 0.0))
+            if span >= 4:
+                out.append((bar_start + (beat0 + 2) * beat, nearest_at_or_above(fifth, r + 1), 0.30, marimba_voice, 0.0))
+            # 裏拍に、3 度と 5 度の重なりを小さく（軽く跳ねる感じ）
+            for off in np.arange(0.5, span, 1.0):
+                for letter in (third, fifth):
+                    out.append((bar_start + (beat0 + off) * beat, nearest_at_or_above(letter, midi("E4")), 0.13, marimba_voice, 0.0))
+        for b, note in USUAL_MELODY[bar]:
+            out.append((bar_start + b * beat, midi(note), 0.50, marimba_voice, 0.0))
+    return out
+
+
+# ---- 「ピコピコ」（140 BPM）：昔のゲーム機のような音。速い分散和音と太鼓で、冒険に出るような曲 ----
+
+CHIP_HARMONY = [
+    ["C"], ["Am"], ["F"], ["G"], ["C"], ["Am"], ["F"], ["G"],
+    ["F"], ["G"], ["Em"], ["Am"], ["Dm"], ["G"], ["C"], ["F", "G"],
 ]
 
-# 8 分音符で弾む旋律（高め）
-LIGHT_MELODY = [
-    [(0, "E5"), (0.5, "G5"), (1, "C6"), (2, "G5"), (2.5, "E5"), (3, "G5")],
-    [(0, "D5"), (0.5, "G5"), (1, "B5"), (2, "D6"), (3, "B5")],
-    [(0, "C6"), (0.5, "B5"), (1, "A5"), (2, "E5"), (3, "A5")],
-    [(0, "A5"), (0.5, "G5"), (1, "F5"), (2, "C5"), (3, "F5"), (3.5, "G5")],
-    [(0, "E5"), (0.5, "G5"), (1, "C6"), (2, "E6"), (2.5, "D6"), (3, "C6")],
-    [(0, "B5"), (1, "G5"), (1.5, "A5"), (2, "B5"), (3, "D6")],
-    [(0, "C6"), (0.5, "A5"), (1, "F5"), (2, "A5"), (3, "C6")],
-    [(0, "B5"), (1, "A5"), (2, "G5"), (3, "D5")],
-    [(0, "E5"), (0.5, "A5"), (1, "C6"), (2, "B5"), (3, "A5")],
-    [(0, "G5"), (0.5, "B5"), (1, "E6"), (2, "D6"), (3, "B5")],
-    [(0, "A5"), (0.5, "C6"), (1, "F6"), (2, "E6"), (3, "C6")],
-    [(0, "G5"), (1, "E5"), (1.5, "G5"), (2, "C6")],
-    [(0, "D6"), (0.5, "C6"), (1, "A5"), (2, "F5"), (3, "A5")],
-    [(0, "B5"), (0.5, "D6"), (1, "G5"), (2, "B5"), (3, "D6")],
+CHIP_MELODY = [
+    [(0, "E5"), (0.5, "G5"), (1, "C6"), (2, "E6"), (3, "D6"), (3.5, "C6")],
+    [(0, "A5"), (1, "E5"), (1.5, "A5"), (2, "C6"), (3, "B5")],
+    [(0, "C6"), (0.5, "A5"), (1, "F5"), (2, "A5"), (2.5, "C6"), (3, "F6")],
+    [(0, "D6"), (1, "B5"), (2, "G5"), (3, "A5"), (3.5, "B5")],
+    [(0, "C6"), (0.5, "E6"), (1, "G6"), (2, "E6"), (3, "C6")],
+    [(0, "A5"), (0.5, "C6"), (1, "E6"), (2, "D6"), (3, "C6"), (3.5, "B5")],
+    [(0, "A5"), (1, "C6"), (2, "F6"), (3, "E6")],
+    [(0, "D6"), (0.5, "C6"), (1, "B5"), (2, "G5"), (3, "D6")],
+    [(0, "F5"), (0.5, "A5"), (1, "C6"), (1.5, "A5"), (2, "F6"), (3, "C6")],
+    [(0, "G5"), (0.5, "B5"), (1, "D6"), (1.5, "B5"), (2, "G6"), (3, "D6")],
+    [(0, "E6"), (1, "B5"), (2, "G5"), (3, "B5")],
+    [(0, "C6"), (1, "A5"), (2, "E5"), (2.5, "A5"), (3, "C6")],
+    [(0, "D6"), (0.5, "F6"), (1, "A6"), (2, "F6"), (3, "D6")],
+    [(0, "B5"), (0.5, "D6"), (1, "G6"), (2, "F6"), (3, "D6"), (3.5, "B5")],
     [(0, "C6"), (1, "G5"), (2, "E5"), (3, "G5")],
-    [(0, "A5"), (1, "F5"), (2, "G5"), (2.5, "B5"), (3, "D6")],
-]
-
-# ---- 「夜」（66 BPM） ----
-
-# イ短調の響き（ハ長調と同じ音だけ。効果音と重なっても濁らない）。最後の小節は前半 Dm・後半 Em で、頭の Am へ戻る
-NIGHT_HARMONY = [
-    ["Am"], ["F"], ["C"], ["G"], ["Am"], ["F"], ["Dm"], ["Em"],
-    ["F"], ["C"], ["Dm"], ["Am"], ["F"], ["G"], ["Am"], ["Dm", "Em"],
-]
-
-# 音の少ない、長くのばす旋律（中くらいの高さ）
-NIGHT_MELODY = [
-    [(0, "E5"), (2, "A5")],
-    [(0, "A5"), (1.5, "G5"), (2, "F5")],
-    [(0, "E5"), (2, "G5")],
-    [(0, "D5"), (2, "G5")],
-    [(0, "C6"), (2, "B5"), (3, "A5")],
-    [(0, "A5"), (2, "C6")],
-    [(0, "F5"), (1.5, "E5"), (2, "D5")],
-    [(0, "E5"), (2, "G5"), (3, "B5")],
-    [(0, "A5"), (2, "F5")],
-    [(0, "G5"), (1.5, "E5"), (2, "C5")],
-    [(0, "D5"), (2, "F5"), (3, "A5")],
-    [(0, "E5"), (2, "C5")],
-    [(0, "C6"), (1.5, "A5"), (2, "F5")],
-    [(0, "G5"), (2, "D5")],
-    [(0, "C5"), (1, "E5"), (2, "A5")],
-    [(0, "F5"), (1, "D5"), (2, "E5")],
+    [(0, "A5"), (1, "C6"), (2, "B5"), (2.5, "D6"), (3, "G6")],
 ]
 
 
-def walk_accompaniment(out, bar_start, beat, chords):
-    """「いつもの」の伴奏：低い音が歩く足どりのように、和音の始めに根音・2 拍あとに 5 度。裏拍に 3 度と 5 度を小さく"""
-    span = 4 / len(chords)
-    for k, name in enumerate(chords):
-        root, third, fifth = CHORDS[name]
-        beat0 = k * span
-        r = nearest_at_or_above(root, midi("E2"))
-        out.append((bar_start + beat0 * beat, r, 0.42))
-        if span >= 4:
-            out.append((bar_start + (beat0 + 2) * beat, nearest_at_or_above(fifth, r + 1), 0.30))
-        for off in np.arange(0.5, span, 1.0):
+def arrange_chip(song) -> list:
+    out = []
+    beat = song.beat
+    for bar in range(BARS):
+        bar_start = bar * 4 * beat
+        chords = CHIP_HARMONY[bar]
+        span = 4 / len(chords)
+        for k, name in enumerate(chords):
+            root, third, fifth = CHORDS[name]
+            beat0 = k * span
+            r = nearest_at_or_above(root, midi("C3"))
+            # 低い音：8 分音符で根音と 1 オクターブ上を行き来する（ドンドンと走る）
+            for i in range(int(span * 2)):
+                out.append((bar_start + (beat0 + 0.5 * i) * beat, r + (12 if i % 2 else 0), 0.55, triangle, 0.45 * beat))
+            # 16 分音符の速い分散和音（ピロピロ）。小さく、細い音で
+            arp = [nearest_at_or_above(x, midi("C5")) for x in (root, third, fifth)]
+            arp.append(arp[0] + 12)
+            for i in range(int(span * 4)):
+                out.append((bar_start + (beat0 + 0.25 * i) * beat, arp[i % 4], 0.10, lambda m, v, d: square(m, v, d, duty=0.25), 0.2 * beat))
+        # 太鼓：1・3 拍に「ドン」、2・4 拍に「タン」、8 分音符で「チッ」
+        for b in (0, 2, 2.5):
+            out.append((bar_start + b * beat, KICK, 0.9, drum, 0.0))
+        for b in (1, 3):
+            out.append((bar_start + b * beat, SNARE, 0.5, drum, 0.0))
+        for i in range(8):
+            out.append((bar_start + 0.5 * i * beat, HAT, 0.25, drum, 0.0))
+        # 旋律：次の音の手前まで伸ばす
+        notes = CHIP_MELODY[bar]
+        for i, (b, note) in enumerate(notes):
+            end = notes[i + 1][0] if i + 1 < len(notes) else 4
+            out.append((bar_start + b * beat, midi(note), 0.28, square, (end - b) * beat * 0.85))
+    return out
+
+
+# ---- 「オルゴール」（3 拍子・84 BPM）：キラキラした高い音で、眠る前のような曲 ----
+
+MUSIC_BOX_HARMONY = [
+    ["C"], ["Am"], ["F"], ["G"], ["C"], ["Am"], ["Dm"], ["G"],
+    ["F"], ["G"], ["Em"], ["Am"], ["F"], ["G"], ["C"], ["G"],
+]
+
+# 拍は小節の頭から 0〜3
+MUSIC_BOX_MELODY = [
+    [(0, "E6"), (1, "G6"), (2, "E6")],
+    [(0, "C6"), (2, "A5")],
+    [(0, "A5"), (1, "C6"), (2, "F6")],
+    [(0, "D6")],
+    [(0, "E6"), (1, "G6"), (2, "C7")],
+    [(0, "B6"), (1, "A6"), (2, "E6")],
+    [(0, "F6"), (1, "E6"), (2, "D6")],
+    [(0, "B5"), (2, "D6")],
+    [(0, "C6"), (1, "A5"), (2, "C6")],
+    [(0, "D6"), (1, "B5"), (2, "D6")],
+    [(0, "E6"), (1, "G6"), (2, "B6")],
+    [(0, "A6"), (2, "E6")],
+    [(0, "F6"), (1, "E6"), (2, "C6")],
+    [(0, "D6"), (1, "B5"), (2, "G5")],
+    [(0, "C6")],
+    [(0, "B5"), (1, "D6"), (2, "F6")],
+]
+
+
+def arrange_music_box(song) -> list:
+    out = []
+    beat = song.beat
+    for bar in range(BARS):
+        bar_start = bar * 3 * beat
+        root, third, fifth = CHORDS[MUSIC_BOX_HARMONY[bar][0]]
+        # ワルツの伴奏：1 拍目に低めの根音、2・3 拍目に 3 度と 5 度を小さく
+        out.append((bar_start, nearest_at_or_above(root, midi("C4")), 0.32, music_box, 0.0))
+        for b in (1, 2):
             for letter in (third, fifth):
-                out.append((bar_start + (beat0 + off) * beat, nearest_at_or_above(letter, midi("E4")), 0.13))
-
-
-def bounce_accompaniment(out, bar_start, beat, chords):
-    """「軽やか」の伴奏：低い音が 1・3 拍（根音と 5 度）、和音（3 つの音）が 2・4 拍で弾む"""
-    span = 4 / len(chords)
-    for k, name in enumerate(chords):
-        root, third, fifth = CHORDS[name]
-        beat0 = k * span
-        r = nearest_at_or_above(root, midi("E2"))
-        out.append((bar_start + beat0 * beat, r, 0.40))
-        if span >= 4:
-            out.append((bar_start + (beat0 + 2) * beat, nearest_at_or_above(fifth, r + 1), 0.32))
-        for off in np.arange(1.0, span, 2.0):
-            for letter in (root, third, fifth):
-                out.append((bar_start + (beat0 + off) * beat, nearest_at_or_above(letter, midi("E4")), 0.12))
-
-
-def arpeggio_accompaniment(out, bar_start, beat, chords):
-    """「夜」の伴奏：和音の始めに低い根音、そのあと 8 分音符で 5 度・3 度・根音を上下に小さく分散する"""
-    span = 4 / len(chords)
-    for k, name in enumerate(chords):
-        root, third, fifth = CHORDS[name]
-        beat0 = k * span
-        r = nearest_at_or_above(root, midi("E2"))
-        out.append((bar_start + beat0 * beat, r, 0.32))
-        f = nearest_at_or_above(fifth, r + 1)
-        t = nearest_at_or_above(third, f + 1)
-        top = nearest_at_or_above(root, t + 1)
-        pattern = [f, t, top, t, f, t, top, t]
-        for i, note in enumerate(pattern[: int(span * 2) - 1]):
-            out.append((bar_start + (beat0 + 0.5 * (i + 1)) * beat, note, 0.12))
+                out.append((bar_start + b * beat, nearest_at_or_above(letter, midi("E5")), 0.13, music_box, 0.0))
+        for b, note in MUSIC_BOX_MELODY[bar]:
+            out.append((bar_start + b * beat, midi(note), 0.6, music_box, 0.0))
+    return out
 
 
 @dataclass
@@ -245,11 +358,10 @@ class Song:
     """1 曲ぶんの決まり"""
     file: str  # res/raw に置く名前
     bpm: float
-    harmony: list
-    melody: list
-    accompaniment: Callable
-    melody_velocity: float
+    beats_per_bar: int
+    arrange: Callable  # (Song) → [(時刻 [s], MIDI 番号, 強さ, 楽器, 長さ [s])]
     seed: int
+    jitter_s: float = 0.004  # 手で叩いたような時刻のばらつき（ゲーム機の音は 0）
     room_s: float = 0.35  # 部屋の響きが消える速さ [s]
     wet: float = 0.22  # 響きの量
 
@@ -259,35 +371,24 @@ class Song:
 
     @property
     def loop_samples(self) -> int:
-        return round(BARS * 4 * self.beat * SR)
+        return round(BARS * self.beats_per_bar * self.beat * SR)
 
 
 SONGS = [
-    Song("bgm.ogg", 88, USUAL_HARMONY, USUAL_MELODY, walk_accompaniment, 0.50, seed=20261108),
-    Song("bgm_light.ogg", 112, LIGHT_HARMONY, LIGHT_MELODY, bounce_accompaniment, 0.45, seed=20261109),
-    Song("bgm_night.ogg", 66, NIGHT_HARMONY, NIGHT_MELODY, arpeggio_accompaniment, 0.38, seed=20261110, room_s=0.5, wet=0.32),
+    Song("bgm.ogg", 88, 4, arrange_usual, seed=20261108),
+    Song("bgm_chip.ogg", 140, 4, arrange_chip, seed=20261109, jitter_s=0.0, room_s=0.2, wet=0.06),
+    Song("bgm_musicbox.ogg", 84, 3, arrange_music_box, seed=20261110, room_s=0.6, wet=0.35),
 ]
-
-
-def events(song: Song):
-    """（鳴らす時刻 [s], MIDI 番号, 強さ）の並び"""
-    out = []
-    for bar in range(BARS):
-        bar_start = bar * 4 * song.beat
-        song.accompaniment(out, bar_start, song.beat, song.harmony[bar])
-        for beat, note in song.melody[bar]:
-            out.append((bar_start + beat * song.beat, midi(note), song.melody_velocity))
-    return out
 
 
 def render(song: Song) -> np.ndarray:
     tail = 5 * SR
     buf = np.zeros(song.loop_samples + tail)
-    for t, m, vel in events(song):
-        # 手で叩いたように、時刻と強さを少しだけばらつかせる
-        start = int(round((t + rng.normal(0, 0.004)) * SR))
+    for t, m, vel, voice, length in song.arrange(song):
+        # 手で叩いたように、時刻と強さを少しだけばらつかせる（ゲーム機の音は時刻をずらさない）
+        start = int(round((t + (rng.normal(0, song.jitter_s) if song.jitter_s > 0 else 0.0)) * SR))
         start = max(start, 0)
-        tone = marimba(m, vel * rng.uniform(0.92, 1.05))
+        tone = voice(m, vel * rng.uniform(0.92, 1.05), length)
         buf[start:start + len(tone)] += tone[: len(buf) - start]
     # ループの終わりからはみ出た響きは、頭に重ねる（つなぎ目で響きが切れないように）
     loop = buf[:song.loop_samples].copy()
@@ -309,12 +410,23 @@ def reverb(dry: np.ndarray, room_s: float = 0.35, wet: float = 0.22) -> np.ndarr
     return dry + wet * wet_part
 
 
+PEAK = 0.89  # いちばん大きいところ（-1 dB）
+
+
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    reference_rms = None
     for song in SONGS:
         use_seed(song.seed)
         music = reverb(render(song), song.room_s, song.wet)
-        music *= 0.89 / np.max(np.abs(music))  # いちばん大きいところを -1 dB に
+        if reference_rms is None:
+            # 「いつもの」は、いちばん大きいところを -1 dB に（前と同じ）。この大きさ（RMS）をほかの曲の目安にする
+            music *= PEAK / np.max(np.abs(music))
+            reference_rms = np.sqrt(np.mean(music ** 2))
+        else:
+            # ほかの曲は、「いつもの」と同じくらいの大きさに聞こえるよう RMS をそろえる（-1 dB は超えない）
+            music *= reference_rms / np.sqrt(np.mean(music ** 2))
+            music *= min(1.0, PEAK / np.max(np.abs(music)))
         pcm = np.round(music * 32767).astype("<i2")
         out = OUT_DIR / song.file
         # soundfile の compression_level は「どれだけ削るか」なので、音質の逆
