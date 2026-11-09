@@ -10,7 +10,7 @@ import com.rein4ce.roadcollector.R
 import com.rein4ce.roadcollector.data.BgmTrack
 
 /**
- * アプリの BGM（res/raw/bgm・bgm_chip・bgm_ukulele・bgm_guitar。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
+ * アプリの BGM（res/raw/bgm・bgm_chip・bgm_ukulele。tools/make_bgm.py で作った、つなぎ目なく繰り返す曲）。全部の画面で同じ曲を流す。
  * 曲は設定で選ぶ（[setTrack]。決定 48）。
  *
  * 流すか止めるかの決まりは [BgmControl]（アプリが前に出ていて、設定でオンのときだけ。ほかのアプリの音楽を止めない、など）。
@@ -29,7 +29,7 @@ class BgmPlayer(context: Context) {
     private var player: MediaPlayer? = null
 
     /** 流す曲（設定の「BGM の曲」） */
-    private var track: BgmTrack = BgmTrack.USUAL
+    private var track: BgmTrack = BgmTrack.MARIMBA
 
     /** いま流している大きさ（曲を切り替えたときに、同じ大きさで流し始めるため） */
     private var gain: Float = 1f
@@ -118,10 +118,9 @@ class BgmPlayer(context: Context) {
     /** 曲のファイル（tools/make_bgm.py の SONGS と同じ名前） */
     private val BgmTrack.res: Int
         get() = when (this) {
-            BgmTrack.USUAL -> R.raw.bgm
+            BgmTrack.MARIMBA -> R.raw.bgm
             BgmTrack.CHIP -> R.raw.bgm_chip
             BgmTrack.UKULELE -> R.raw.bgm_ukulele
-            BgmTrack.GUITAR -> R.raw.bgm_guitar
         }
 
     private companion object {

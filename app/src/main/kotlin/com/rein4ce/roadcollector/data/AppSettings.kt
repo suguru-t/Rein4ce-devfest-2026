@@ -24,22 +24,19 @@ enum class ThemeMode(val label: String) {
 }
 
 /**
- * BGM の曲（決定 48）。テーマの違う曲で、どれも tools/make_bgm.py で作る（ファイルは audio/BgmPlayer.kt が選ぶ）。
+ * BGM の曲（決定 48）。テーマの違う 3 曲で、どれも tools/make_bgm.py で作る（ファイルは audio/BgmPlayer.kt が選ぶ）。
  * 3 曲とも効果音と同じハ長調の音だけなので、どの曲でも効果音と重なって濁らない。
- * 設定では「‹ ›」でこの並びの順に切り替える。保存は名前なので、並べ替えても前の設定は読める
+ * 設定では「‹ ›」でこの並びの順に切り替える。保存は名前（MARIMBA など）なので、並べ替えても前の設定は読める
  */
 enum class BgmTrack(val label: String) {
-    /** はじめからある曲。木琴で、歩く速さくらい（88 BPM）のゆったりした曲 */
-    USUAL("いつもの"),
+    /** はじめからある曲。木琴で、歩く速さくらい（88 BPM）のゆったりした曲。はじめは「いつもの」と呼んでいた */
+    MARIMBA("トコトコ"),
 
     /** 昔のゲーム機のような音（140 BPM）。速い分散和音と太鼓で、冒険に出るような曲 */
     CHIP("ピコピコ"),
 
     /** ウクレレの刻みと口笛（112 BPM）。晴れた日に外を歩くような曲 */
     UKULELE("ウクレレ"),
-
-    /** アコースティックギターの指弾きと手拍子（100 BPM）。ハイキングのように前へ進む曲 */
-    GUITAR("ギター"),
 }
 
 /**
@@ -195,9 +192,9 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
         _bgmVolume.value = v
     }
 
-    private val _bgmTrack = MutableStateFlow(readEnum(KEY_BGM_TRACK, BgmTrack.USUAL))
+    private val _bgmTrack = MutableStateFlow(readEnum(KEY_BGM_TRACK, BgmTrack.MARIMBA))
 
-    /** BGM の曲。初めは「いつもの」。選ぶとすぐに切り替わる（流している途中なら、新しい曲の頭から） */
+    /** BGM の曲。初めは「トコトコ」。選ぶとすぐに切り替わる（流している途中なら、新しい曲の頭から） */
     val bgmTrack: StateFlow<BgmTrack> = _bgmTrack
 
     fun setBgmTrack(track: BgmTrack) {

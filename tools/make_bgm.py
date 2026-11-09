@@ -2,14 +2,13 @@
 """
 アプリの BGM（app/src/main/res/raw/bgm*.ogg）を作る。設定で選べる 3 曲（決定 48）：
 
-- bgm.ogg「いつもの」：歩く速さくらい（88 BPM）のゆったりした曲。はじめからある曲で、音は前と同じ
+- bgm.ogg「トコトコ」：木琴で、歩く速さくらい（88 BPM）のゆったりした曲。はじめからある曲（はじめは「いつもの」と呼んでいた）で、音は前と同じ
 - bgm_chip.ogg「ピコピコ」：昔のゲーム機のような音（矩形波・三角波・雑音の太鼓）。140 BPM で、速い分散和音と太鼓で走る、冒険に出るような曲
 - bgm_ukulele.ogg「ウクレレ」：ウクレレをジャカジャカ刻み、口笛が旋律を吹く。112 BPM で、晴れた日に外を歩くような曲
-- bgm_guitar.ogg「ギター」：アコースティックギターの指弾きと手拍子。100 BPM で、ハイキングのように前へ進む曲
-  （3 曲目はウクレレとギターのどちらかにする。B が聞き比べて決める。オルゴールは「歯医者で流れていそう」でやめた）
+  （3 曲目は、オルゴールを「歯医者で流れていそう」でやめ、ウクレレとアコースティックギターを聞き比べて B がウクレレに決めた）
 
 どれも 16 小節ぶん鳴らし、最後から最初へつなぎ目なく戻る 1 つのループにする（響きの尾も、曲の頭に回して重ねる）。
-3 曲とも効果音（tools/make_sfx.py）と同じハ長調の音だけを使うので、重なっても濁らない。ほかの 2 曲の大きさは「いつもの」にそろえる。
+3 曲とも効果音（tools/make_sfx.py）と同じハ長調の音だけを使うので、重なっても濁らない。ほかの 2 曲の大きさは「トコトコ」にそろえる。
 音はこのスクリプトの中で作る（音の素材を使わないので、ライセンスの心配がない）。
 
 使い方（リポジトリのいちばん上で）:
@@ -22,7 +21,7 @@ OGG（Vorbis）にするのは、ファイルを小さくするため（WAV だ�
 Vorbis は長さを 1 点単位で覚えているので、MP3・AAC と違って頭と終わりに無音が足されず、ループのつなぎ目がずれない。
 
 チームで用意した曲に差し替えるときは、res/raw/bgm*.ogg を消して、同じ名前（bgm.ogg・bgm.mp3 など、
-Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_chip・bgm_ukulele・bgm_guitar）でしか見ていない。
+Android の MediaPlayer が読める形式）で置けばよい。アプリはファイルの名前（R.raw.bgm・bgm_chip・bgm_ukulele）でしか見ていない。
 曲の規約（リポジトリが公開なので、ファイルを置いてよいか・クレジットの書き方）は確かめてから入れる。
 """
 
@@ -102,7 +101,7 @@ CHORDS = {
     "Em": ("E", "G", "B"),
 }
 
-# ---- 「いつもの」（88 BPM） ----
+# ---- 「トコトコ」（88 BPM）：木琴。はじめからある曲 ----
 
 # 1 小節ずつの和音（最後の小節は前半 F・後半 G で、頭の C へ戻る）
 USUAL_HARMONY = [
@@ -266,11 +265,11 @@ def upright_bass(m: int, velocity: float, length: float) -> np.ndarray:
     return tone * velocity
 
 
-SHAKER, CLAP, THUMP = -4, -5, -6  # 小さな打楽器は MIDI 番号の代わりにこれで選ぶ
+SHAKER, CLAP = -4, -5  # 小さな打楽器は MIDI 番号の代わりにこれで選ぶ
 
 
 def hand_percussion(kind: int, velocity: float, length: float) -> np.ndarray:
-    """シェイカー（シャッ）・手拍子（パン）・低くやわらかい「トン」"""
+    """シェイカー（シャッ）・手拍子（パン）"""
     if kind == SHAKER:
         n = int(0.06 * SR)
         t = np.arange(n) / SR
@@ -278,24 +277,19 @@ def hand_percussion(kind: int, velocity: float, length: float) -> np.ndarray:
         noise -= np.convolve(noise, np.ones(3) / 3, mode="same")
         env = np.minimum(t / 0.01, 1) * np.exp(-t / 0.02)
         return noise * env * 0.5 * velocity
-    if kind == CLAP:
-        # 手拍子は、何人かの手が少しずつずれて鳴る（10 ms ずつ 3 回）
-        n = int(0.15 * SR)
-        t = np.arange(n) / SR
-        noise = rng.standard_normal(n)
-        noise = noise - np.convolve(noise, np.ones(6) / 6, mode="same")
-        env = np.zeros(n)
-        for k, d in enumerate((0.0, 0.01, 0.02)):
-            on = t >= d
-            env[on] += np.exp(-(t[on] - d) / (0.012 if k < 2 else 0.04))
-        return noise * env * 0.35 * velocity
-    n = int(0.2 * SR)
+    # 手拍子は、何人かの手が少しずつずれて鳴る（10 ms ずつ 3 回）
+    n = int(0.15 * SR)
     t = np.arange(n) / SR
-    pitch = 55 + 45 * np.exp(-t / 0.04)
-    return np.sin(2 * np.pi * np.cumsum(pitch) / SR) * np.exp(-t / 0.09) * velocity
+    noise = rng.standard_normal(n)
+    noise = noise - np.convolve(noise, np.ones(6) / 6, mode="same")
+    env = np.zeros(n)
+    for k, d in enumerate((0.0, 0.01, 0.02)):
+        on = t >= d
+        env[on] += np.exp(-(t[on] - d) / (0.012 if k < 2 else 0.04))
+    return noise * env * 0.35 * velocity
 
 
-# ---- 「いつもの」の並べ方（はじめからの曲。音を変えないよう、前と同じ順に並べる） ----
+# ---- 「トコトコ」の並べ方（はじめからの曲。音を変えないよう、前と同じ順に並べる） ----
 
 
 def arrange_usual(song) -> list:
@@ -461,60 +455,6 @@ def arrange_ukulele(song) -> list:
     return out
 
 
-# ---- 「ギター」（100 BPM）：アコースティックギターの弾き語りのような指弾きと手拍子。山道や公園を歩くハイキングのように、前へ進む曲 ----
-
-GUITAR_HARMONY = [
-    ["C"], ["G"], ["Am"], ["F"], ["C"], ["G"], ["F"], ["G"],
-    ["Am"], ["Em"], ["F"], ["C"], ["F"], ["G"], ["C"], ["G"],
-]
-
-GUITAR_MELODY = [
-    [(0, "E5"), (1, "G5"), (2, "G5"), (3, "A5")],
-    [(0, "G5"), (2, "D5")],
-    [(0, "C5"), (1, "E5"), (2, "A5"), (3, "G5")],
-    [(0, "F5"), (2, "C5")],
-    [(0, "E5"), (1, "G5"), (2, "C6"), (3, "B5")],
-    [(0, "B5"), (1, "A5"), (2, "G5")],
-    [(0, "A5"), (1, "G5"), (2, "F5"), (3, "E5")],
-    [(0, "D5"), (2, "G5")],
-    [(0, "A5"), (1, "B5"), (2, "C6"), (3, "A5")],
-    [(0, "G5"), (1, "E5"), (2, "B4"), (3, "E5")],
-    [(0, "F5"), (1, "A5"), (2, "C6"), (3, "A5")],
-    [(0, "G5"), (2, "E5")],
-    [(0, "A5"), (1, "C6"), (2, "A5"), (3, "F5")],
-    [(0, "G5"), (1, "B5"), (2, "D6"), (3, "B5")],
-    [(0, "C6"), (2, "G5")],
-    [(0, "B5"), (1, "A5"), (2, "G5"), (3, "D5")],
-]
-
-
-def arrange_guitar(song) -> list:
-    out = []
-    beat = song.beat
-    guitar = lambda m, v, d: pluck(m, v, d, decay_s=1.2, softness=1)  # noqa: E731（鉄の弦のような明るい音）
-    for bar in range(BARS):
-        bar_start = bar * 4 * beat
-        root, third, fifth = CHORDS[GUITAR_HARMONY[bar][0]]
-        r = nearest_at_or_above(root, midi("E2"))
-        f = nearest_at_or_above(fifth, r + 1)
-        highs = [nearest_at_or_above(third, midi("G3")), nearest_at_or_above(fifth, midi("C4")), nearest_at_or_above(root, midi("E4"))]
-        # 指弾き（親指が 1 拍ごとに根音と 5 度を交互に、ほかの指が裏拍で上の弦をはじく）
-        for i in range(8):
-            if i % 2 == 0:
-                out.append((bar_start + 0.5 * i * beat, r if i % 4 == 0 else f, 0.42, guitar, 0.0))
-            else:
-                out.append((bar_start + 0.5 * i * beat, highs[(i // 2) % 3], 0.24, guitar, 0.0))
-        # 1・3 拍に低い「トン」、2・4 拍に手拍子で、前へ進む足どりにする
-        for b in (0, 2):
-            out.append((bar_start + b * beat, THUMP, 0.55, hand_percussion, 0.0))
-        for b in (1, 3):
-            out.append((bar_start + b * beat, CLAP, 0.5, hand_percussion, 0.0))
-        # 旋律もギターで（少し強く、高めの弦で）
-        for b, note in GUITAR_MELODY[bar]:
-            out.append((bar_start + b * beat, midi(note), 0.42, guitar, 0.0))
-    return out
-
-
 @dataclass
 class Song:
     """1 曲ぶんの決まり"""
@@ -540,7 +480,6 @@ SONGS = [
     Song("bgm.ogg", 88, 4, arrange_usual, seed=20261108),
     Song("bgm_chip.ogg", 140, 4, arrange_chip, seed=20261109, jitter_s=0.0, room_s=0.2, wet=0.06),
     Song("bgm_ukulele.ogg", 112, 4, arrange_ukulele, seed=20261111, jitter_s=0.003, room_s=0.3, wet=0.15),
-    Song("bgm_guitar.ogg", 100, 4, arrange_guitar, seed=20261112, jitter_s=0.004, room_s=0.4, wet=0.2),
 ]
 
 
@@ -583,11 +522,11 @@ def main():
         use_seed(song.seed)
         music = reverb(render(song), song.room_s, song.wet)
         if reference_rms is None:
-            # 「いつもの」は、いちばん大きいところを -1 dB に（前と同じ）。この大きさ（RMS）をほかの曲の目安にする
+            # 「トコトコ」は、いちばん大きいところを -1 dB に（前と同じ）。この大きさ（RMS）をほかの曲の目安にする
             music *= PEAK / np.max(np.abs(music))
             reference_rms = np.sqrt(np.mean(music ** 2))
         else:
-            # ほかの曲は、「いつもの」と同じくらいの大きさに聞こえるよう RMS をそろえる。
+            # ほかの曲は、「トコトコ」と同じくらいの大きさに聞こえるよう RMS をそろえる。
             # 弦をはじいた瞬間のような鋭い山があると、-1 dB に収めるために全体が小さくなってしまうので、
             # 大きいところだけを丸く抑えて（tanh。小さい音はそのまま）から、-1 dB に収める
             music *= reference_rms / np.sqrt(np.mean(music ** 2))

@@ -78,7 +78,7 @@ import kotlin.math.roundToInt
  * 選ぶ画面に切り替わる（枠の下の丸いボタンが「＜」になり、それか戻る・枠の外で一覧に戻る。一覧では「×」で設定を閉じる）。
  * - 画面の明るさ：端末に合わせる・ライト・ダーク
  * - 背景の天気の動き：スライダーで 4 段階（出さない・止める・ふつう・なめらか）。選んでいる段階の説明を下に出す
- * - BGM：オン・オフのスイッチと、曲（いつもの・ピコピコ・ウクレレ・ギターを「‹ ›」で切り替える）、音量のスライダー（10 段階）。オフのときは曲と音量を選べない。初期設定に戻すボタン
+ * - BGM：オン・オフのスイッチと、曲（トコトコ・ピコピコ・ウクレレを「‹ ›」で切り替える）、音量のスライダー（10 段階）。オフのときは曲と音量を選べない。初期設定に戻すボタン
  * - 効果音：オン・オフのスイッチ（ボタン・積み木・道を 1 本集めたときの木琴の音。BGM とは別に切り替えられる）
  * - 記録：記録中は画面を消さない、AI に名前を考えてもらう（オン・オフと、その説明）
  * - みんなのタワー：ニックネーム（作者名。入力の窓で付ける）
@@ -182,7 +182,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 onVolumeChange = settings::setBgmVolume,
                 onReset = {
                     settings.setBgmOn(true)
-                    settings.setBgmTrack(BgmTrack.USUAL)
+                    settings.setBgmTrack(BgmTrack.MARIMBA)
                     settings.setBgmVolume(AppSettings.DEFAULT_BGM_VOLUME)
                 },
             )
@@ -346,8 +346,8 @@ private fun MotionSlider(motion: WeatherMotion, onChange: (WeatherMotion) -> Uni
 }
 
 /**
- * BGM の画面：いちばん上にオン・オフのスイッチ、その下に曲（「‹ いつもの ›」で切り替える）と音量のスライダー（1〜10）。
- * オフのときは、曲と音量をうすくして選べない。説明、いちばん下に「初期設定に戻す」（オン・いつもの・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。
+ * BGM の画面：いちばん上にオン・オフのスイッチ、その下に曲（「‹ トコトコ ›」で切り替える）と音量のスライダー（1〜10）。
+ * オフのときは、曲と音量をうすくして選べない。説明、いちばん下に「初期設定に戻す」（オン・トコトコ・音量 [AppSettings.DEFAULT_BGM_VOLUME]）。
  * 選ぶ・動かすとすぐに音が変わる（曲は、新しい曲の頭から流れる）
  */
 @Composable
@@ -403,8 +403,8 @@ private fun BgmPage(
         color = Fieldbook.Ink,
         modifier = Modifier.padding(top = 10.dp),
     )
-    // 初期設定（オン・いつもの・音量 まん中）に戻す。すでに初期設定なら押せない
-    val isDefault = on && track == BgmTrack.USUAL && volume == AppSettings.DEFAULT_BGM_VOLUME
+    // 初期設定（オン・トコトコ・音量 まん中）に戻す。すでに初期設定なら押せない
+    val isDefault = on && track == BgmTrack.MARIMBA && volume == AppSettings.DEFAULT_BGM_VOLUME
     PressTextButton(onClick = onReset, enabled = !isDefault, modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
         Text("初期設定に戻す", color = if (isDefault) Fieldbook.Mark else Fieldbook.Survey, fontWeight = FontWeight.Bold)
     }
@@ -413,7 +413,7 @@ private fun BgmPage(
 /**
  * BGM の曲を「‹ 曲の名前 ›」で切り替える行。端まで行ったら反対の端へ回る。押すとすぐに新しい曲の頭から流れる。
  * 曲の説明は出さない（名前と、流れる曲そのもので分かる。B が決めた）。
- * 読み上げでは、名前の所は「曲 いつもの、3 曲の 1 曲目」、ボタンは「前の曲」「次の曲」。切り替えると名前を読み直す
+ * 読み上げでは、名前の所は「曲 トコトコ、3 曲の 1 曲目」、ボタンは「前の曲」「次の曲」。切り替えると名前を読み直す
  */
 @Composable
 private fun TrackPicker(track: BgmTrack, enabled: Boolean, onChange: (BgmTrack) -> Unit) {
