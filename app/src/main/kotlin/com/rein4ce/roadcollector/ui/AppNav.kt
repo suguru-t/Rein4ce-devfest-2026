@@ -150,6 +150,7 @@ fun AppNav(collectRequests: Int = 0) {
                 null, HOME_ROUTE -> BackdropScreen.HOME
                 Dest.Collect.route -> BackdropScreen.COLLECT
                 Dest.Inventory.route -> BackdropScreen.COLLECTION
+                Dest.Stack.route -> BackdropScreen.STACK
                 Dest.Gallery.route -> BackdropScreen.GALLERY
                 else -> BackdropScreen.OTHER
             }

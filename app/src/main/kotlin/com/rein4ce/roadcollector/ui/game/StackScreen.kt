@@ -182,7 +182,8 @@ fun StackScreen(
 
     // 上から「情報」「キャンバス」「操作」の 3 段に分ける。ボタンや完成カードがキャンバスに重ならないので、
     // 台と塔の下の方がボタンの裏に隠れない（#42）。キャンバスは残りの高さを全部使う
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // 地は塗らない。ほかの画面と同じく、アプリ全体の方眼の紙と今の天気（AppNav・ui/weather）が透けて見える（決定 59）
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         // 操作の段は画面の高さの [CONTROLS_MAX_FRACTION] まで。それより高くなる中身（小さい画面で文字を大きくしたときの
         // 完成カードなど）はスクロールさせ、キャンバスが潰れて塔が見えなくならないようにする
         val controlsMaxHeight = maxHeight * CONTROLS_MAX_FRACTION
