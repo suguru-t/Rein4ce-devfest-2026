@@ -31,4 +31,35 @@ class ChallengeRecordsTest {
     @Test(expected = IllegalArgumentException::class) fun `nonfinite heights are rejected`() {
         ChallengeRecords({ null }, {}).add(score("a", Double.NaN))
     }
+
+    @Test fun `壊れたファイルは退避して空から始め、新しい記録を保存できる`() {
+        // 前は読めないまま毎回失敗して、結果の画面から先に進めなかった（#78 のレビュー）
+        var disk: String? = "{ broken"
+        var quarantined = 0
+        val records = ChallengeRecords({ disk }, { disk = it }, quarantine = { quarantined++; disk = null })
+        assertEquals(1, quarantined)
+        assertTrue(records.ranking("manual-180-v1").isEmpty())
+        assertEquals(1, records.add(score("a", 1.5)).size)
+        assertEquals(listOf(score("a", 1.5)), ChallengeRecords({ disk }, { disk = it }).ranking("manual-180-v1"))
+    }
+
+    @Test fun `決まりの ID を書いていない前の形式は、今の決まりに混ぜずに退避する`() {
+        // 前は rule が既定値だったので書き出されず、読むと今の決まりに化けていた
+        var quarantined = 0
+        val old = """[{"runId":"old","seed":1,"height":9.0,"createdAt":1}]"""
+        val records = ChallengeRecords({ old }, {}, quarantine = { quarantined++ })
+        assertEquals(1, quarantined)
+        assertTrue(records.ranking(com.rein4ce.roadcollector.core.challenge.ChallengeRules.ID).isEmpty())
+    }
+
+    @Test fun `保存するときは決まりの ID も書き出す`() {
+        var disk: String? = null
+        ChallengeRecords({ disk }, { disk = it }).add(score("a", 1.0, "manual-180-v3"))
+        assertTrue(disk!!.contains("\"rule\":\"manual-180-v3\""))
+    }
+
+    @Test fun `同じ高さは同じ順位`() {
+        val ranking = listOf(score("a", 3.0), score("b", 2.0), score("c", 2.0))
+        assertEquals(listOf(1, 2, 2), ranking.map { rankOf(it.height, ranking) })
+    }
 }

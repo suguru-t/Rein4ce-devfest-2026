@@ -38,19 +38,82 @@ class ChallengeViewModelTest {
         vm.start(); assertFalse(vm.frame!!.terminal)
     }
 
-    @Test fun `save failure remains retryable and blocks discarding the result`() = runTest {
+    @Test fun `保存に失敗しても再試行でき、次の回にも進める`() = runTest {
+        // 前は保存できるまで「もう一度」が押せず、ファイルが壊れていると先に進めなかった（#78 のレビュー）
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         var broken = true
+        var writes = 0
         val vm = ChallengeViewModel(updateRecords = { score ->
-            if (score == null) emptyList() else { if (broken) error("disk full"); listOf(score) }
+            if (score == null) emptyList() else { writes++; if (broken) error("disk full"); listOf(score) }
         }, newRun = { ChallengeRun(1, clock = { now }) })
         vm.start(); vm.resume(); now = ChallengeRules.DURATION_NS; vm.tick()
         repeat(20) { now += 50_000_000; vm.tick() }
-        assertTrue(vm.saveError); assertFalse(vm.canStart)
+        assertTrue(vm.saveError); assertTrue(vm.resultUnsaved); assertTrue(vm.canStart)
+        // 失敗した回は、自動では保存し直さない（毎コマ書きに行かない）
+        repeat(5) { now += 50_000_000; vm.tick() }
+        assertEquals(1, writes)
         broken = false; vm.refreshRecords()
-        assertFalse(vm.saveError); assertTrue(vm.canStart)
+        assertFalse(vm.saveError); assertFalse(vm.resultUnsaved); assertTrue(vm.canStart)
         assertEquals(1, vm.ranking.size)
+    }
+
+    @Test fun `開いたときの読み込みに失敗しても、新しい結果は自動で保存する`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val vm = ChallengeViewModel(updateRecords = { score ->
+            if (score == null) error("cannot read") else listOf(score)
+        }, newRun = { ChallengeRun(1, clock = { now }) })
+        runCurrent()
+        assertTrue(vm.saveError)
+        vm.start(); vm.resume(); now = ChallengeRules.DURATION_NS; vm.tick()
+        repeat(20) { now += 50_000_000; vm.tick() }
+        runCurrent()
+        assertEquals(listOf(vm.frame!!.score), vm.ranking)
+        assertFalse(vm.saveError)
+    }
+
+    @Test fun `やり直すと中断は、その回を記録に残さない`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        var writes = 0
+        var runs = 0
+        val vm = ChallengeViewModel(updateRecords = { score -> if (score != null) writes++; listOfNotNull(score) }, newRun = {
+            runs++
+            ChallengeRun(runs.toLong(), clock = { now })
+        })
+        vm.start(); vm.resume(); now += 30_000_000_000; vm.tick()
+        assertEquals(150, vm.remainingSeconds)
+        val generation = vm.generation
+        vm.restart()
+        assertEquals(2, runs)
+        assertTrue(vm.generation > generation)
+        assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
+        assertEquals(180, vm.remainingSeconds)
+
+        vm.abandon()
+        assertNull(vm.frame)
+        assertTrue(vm.shapes.isEmpty())
+        assertEquals(180, vm.remainingSeconds)
+        runCurrent()
+        assertEquals(0, writes)
+        assertTrue(vm.canStart)
+    }
+
+    @Test fun `何も起きないコマではフレームを変えず、残り時間は秒が変わったときだけ変える`() = runTest {
+        // 毎コマ新しいフレームにすると、画面全体を毎コマ組み立て直すことになる（#78 のレビュー）
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { ChallengeRun(1, clock = { now }) })
+        vm.start(); vm.resume()
+        val frame = vm.frame
+        repeat(10) { now += 16_000_000; vm.tick() }
+        assertSame(frame, vm.frame)
+        assertEquals(180, vm.remainingSeconds)
+        now += 1_000_000_000; vm.tick()
+        assertEquals(179, vm.remainingSeconds)
+        vm.move(0.1)
+        assertNotEquals(frame, vm.frame)
     }
 
     @Test fun `late initial load cannot replace newly saved ranking`() = runTest {

@@ -50,11 +50,49 @@ class ChallengeRunTest {
     @Test fun `camera bounds remain stable while aiming and falling`() {
         var now = 0L
         val run = ChallengeRun(1, clock = { now })
-        run.resume(); val bounds = run.bounds
+        run.resume(); val top = run.cameraTop
         run.move(1.0); run.rotate(45.0)
-        assertEquals(bounds, run.bounds)
+        assertEquals(top, run.cameraTop, 0.0)
         run.place(); now += 50_000_000; run.tick()
-        assertEquals(bounds, run.bounds)
+        assertEquals(top, run.cameraTop, 0.0)
+    }
+
+    @Test fun `見せたい上は、次の形が出る高さと回しても入る半径で、塔が高くなると上がる`() {
+        var now = 0L
+        val run = ChallengeRun(123, clock = { now })
+        run.resume()
+        assertEquals(run.spawnY + ChallengeRun.reachOf(run.current), run.cameraTop, 1e-9)
+        // 積み続けて塔が高くなると、次の形が出る高さと一緒に、見せたい上も上がる（縮尺は画面の側で変えない）
+        repeat(600) {
+            run.place()
+            now += 50_000_000; run.tick()
+        }
+        assertTrue(run.towerHeight > 0.0)
+        assertEquals(run.towerHeight + ChallengeRun.SPAWN_ABOVE_M, run.spawnY, 1e-9)
+        assertEquals(run.spawnY + ChallengeRun.reachOf(run.current), run.cameraTop, 1e-9)
+    }
+
+    @Test fun `途中の揺れ待ちは 3 秒までで、揺れていても次の形へ進む`() {
+        var now = 0L
+        val physics = com.rein4ce.roadcollector.core.physics.StackWorld()
+        physics.world.setGravity(0.0, 0.0)
+        val run = ChallengeRun(1, clock = { now }, world = physics)
+        run.resume(); val first = run.current.id; run.place()
+        physics.world.bodies.last().angularVelocity = 1.0
+        repeat(58) { now += 50_000_000; run.tick() } // 2.9 秒
+        assertEquals(ChallengeRun.Phase.FALLING, run.phase)
+        repeat(3) { now += 50_000_000; run.tick() } // 3.05 秒
+        assertEquals(ChallengeRun.Phase.AIMING, run.phase)
+        assertNotEquals(first, run.current.id)
+    }
+
+    @Test fun `記録にはいまの決まりの ID を入れる`() {
+        var now = 0L
+        val run = ChallengeRun(5, clock = { now }, wallClock = { 42 })
+        run.resume(); now = ChallengeRules.DURATION_NS; run.tick()
+        repeat(20) { now += 50_000_000; run.tick() }
+        assertEquals(ChallengeRules.ID, run.score!!.rule)
+        assertEquals("manual-180-v3", ChallengeRules.ID)
     }
     @Test fun `moving tower times out without a ranked airborne height`() {
         var now = 0L

@@ -3,14 +3,17 @@ package com.rein4ce.roadcollector.data
 import android.util.AtomicFile
 import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
-import java.io.File
-import java.io.FileNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileNotFoundException
 
-/** A committed result must finish saving even if the screen or its ViewModel is removed. */
-class ChallengeStorage(directory: File) {
+/**
+ * 3分チャレンジの記録のファイル（filesDir/challenge_records.json）。AtomicFile で書くので、書いている途中で落ちても壊れない。
+ * 確定した結果の保存は、画面や ViewModel が無くなっても最後まで終える（NonCancellable）
+ */
+class ChallengeStorage(private val directory: File) {
     private val file = AtomicFile(File(directory, "challenge_records.json"))
 
     suspend fun update(score: ChallengeScore?): List<ChallengeScore> =
@@ -21,7 +24,7 @@ class ChallengeStorage(directory: File) {
                         try {
                             file.openRead().bufferedReader().use { it.readText() }
                         } catch (e: FileNotFoundException) {
-                            // Missing is empty; an existing unreadable file must not be overwritten.
+                            // 無ければ空。あるのに開けないファイルは上書きしない
                             if (file.baseFile.exists()) throw e
                             null
                         }
@@ -36,10 +39,17 @@ class ChallengeStorage(directory: File) {
                             throw e
                         }
                     },
+                    // 読めない中身は消さずに別の名前で残し（あとで中を見られるように）、空から始める
+                    quarantine = {
+                        val broken = File(directory, "challenge_records.broken-${System.currentTimeMillis()}.json")
+                        if (!file.baseFile.renameTo(broken)) file.delete()
+                    },
                 )
                 if (score == null) records.ranking(ChallengeRules.ID) else records.add(score)
             }
         }
 
-    private companion object { val fileLock = Any() }
+    private companion object {
+        val fileLock = Any()
+    }
 }
