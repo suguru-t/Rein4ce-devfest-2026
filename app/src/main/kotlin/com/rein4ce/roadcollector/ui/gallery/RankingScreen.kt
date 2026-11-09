@@ -123,7 +123,7 @@ internal fun RankingScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, tiltDeg = -2f, onClick = onBack)
+        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
@@ -195,7 +195,7 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEachIndexed { i, s ->
+        options.forEach { s ->
             val selected = s == sort
             val source = remember { MutableInteractionSource() }
             Box(
@@ -220,8 +220,6 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     color = if (selected) Pop.Letter else sortInk(s),
                     maxLines = 1,
                     modifier = Modifier
-                        // 選んでいる札だけ少し傾けて、積み木を置いたように
-                        .graphicsLayer { rotationZ = if (selected) (if (i % 2 == 0) -2f else 2f) else 0f }
                         .popBlock(
                             face = if (selected) sortFace(s) else Fieldbook.Card,
                             corner = 50.dp,
