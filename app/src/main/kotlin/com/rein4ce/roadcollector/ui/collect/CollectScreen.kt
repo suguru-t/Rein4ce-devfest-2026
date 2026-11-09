@@ -651,10 +651,16 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
         if (last != null) {
             if (recording) {
                 // 記録中：今いる場所に黄色の人（記録していない間と同じ印）。地図は旗・道・人だけにする（見やすさのため）。
-                // 位置は、点から点へ飛ばさず、なめらかに動かす
+                // 位置は、点から点へ飛ばさず、なめらかに動かす。
+                // ただしデモ散歩の再生中は、地図と同じく、すぐ新しい点へ移す（点が数十ミリ秒ごとに来るので、なめらかに動かすと
+                // 動き出すたびに次の点で止められて十数点ぶん遅れ、地図を拡大していると人が画面の外に置いていかれる）
                 val target = LatLng(last.lat, last.lng)
                 var shown by remember { mutableStateOf(target) }
                 LaunchedEffect(target) {
+                    if (playingDemo) {
+                        shown = target
+                        return@LaunchedEffect
+                    }
                     val from = shown
                     animate(0f, 1f, animationSpec = tween(WALK_GLIDE_MS, easing = LinearEasing)) { t, _ ->
                         shown = LatLng(from.latitude + (target.latitude - from.latitude) * t, from.longitude + (target.longitude - from.longitude) * t)
