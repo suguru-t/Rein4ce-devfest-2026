@@ -1,7 +1,6 @@
 package com.rein4ce.roadcollector.ui.game
 
-import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.data.GameSession
+import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -27,12 +26,13 @@ class RotateButtonsTest {
 
     @Test
     fun `回し続けても 15° きざみのまま（離したあとにそろえ直さない）`() {
-        val part = SampleParts.all.first()
-        val vm = StackViewModel()
-        vm.updateInventory(listOf(part), true, GameSession.StartRequest(1, listOf(part.id)))
-        repeat(7) { vm.rotate(RotateDirection.RIGHT.sign * ROTATE_STEP_DEG) }
-        assertEquals(255f, vm.ghostAngleDeg, 0.0001f)
-        assertEquals(0f, vm.ghostAngleDeg % ROTATE_STEP_DEG, 0.0001f)
+        // 3 分チャレンジの回し方で確かめる（積む画面の進め方（StackViewModel）の作り直し（#119）に左右されないように）
+        var now = 0L
+        val run = ChallengeRun(1, clock = { now })
+        run.resume()
+        repeat(7) { run.rotate((RotateDirection.RIGHT.sign * ROTATE_STEP_DEG).toDouble()) }
+        assertEquals(255.0, run.angle, 0.0001)
+        assertEquals(0.0, run.angle % ROTATE_STEP_DEG, 0.0001)
     }
 
     @Test
