@@ -12,6 +12,8 @@ import kotlinx.serialization.Serializable
  * @property lat   形の中心の緯度
  * @property lng   形の中心の経度
  * @property sizeM 形の長辺の長さ [m]（パーツの点列の 1.0 にあたる）
+ * @property startedAt 歩き始めた時刻（最初の点の時刻 [ms]）。パーツの天気は、この時刻の天気にする（決定 55）。
+ *   これを足す前に採集したパーツには無い（null。そのときは歩き終えた時刻 [Part.walkedAt] の天気）
  */
 @Serializable
-data class PartPlace(val lat: Double, val lng: Double, val sizeM: Double)
+data class PartPlace(val lat: Double, val lng: Double, val sizeM: Double, val startedAt: Long? = null)
