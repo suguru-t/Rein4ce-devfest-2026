@@ -1,11 +1,11 @@
 # 同梱しているフォント
 
-採集画面とホームの題字「ミチツミ」と、「みんな」の画面（みんなのタワー・ランキング・あなたのタワー）とコレクションの画面（一覧・拡大表示・積む画面の「パーツを選ぶ」の窓）、ホームのボタンに使う太い丸ゴシック。
+ホームの題字「ミチツミ」と、「みんな」の画面（みんなのタワー・ランキング・あなたのタワー）とコレクションの画面（一覧・拡大表示・積む画面の「パーツを選ぶ」の窓）、記録画面の画面名「みちのきろく」、ホームのボタンに使う太い丸ゴシック。
 Google Fonts の M PLUS Rounded 1c Black（Coji Morishita、SIL Open Font License 1.1）を、使う字だけに切り出して `app/src/main/res/font/` に置いている（元は 3.6 MB）。
 
 | ファイル | 使う所 | 元のフォント | ライセンス |
 |---|---|---|---|
-| `res/font/mplus_rounded_michitsumi.ttf`（2 KB） | 題字「ミチツミ」（`ui/collect/TitleBlocks.kt`。採集画面の見出しとホーム） | [M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) Black | `OFL-MPLUSRounded1c.txt`（著作権表示と OFL 1.1 の本文） |
+| `res/font/mplus_rounded_michitsumi.ttf`（2 KB） | 題字「ミチツミ」（`ui/collect/TitleBlocks.kt`。ホームと、開いたときのタイトル） | [M PLUS Rounded 1c](https://fonts.google.com/specimen/M+PLUS+Rounded+1c) Black | `OFL-MPLUSRounded1c.txt`（著作権表示と OFL 1.1 の本文） |
 | `res/font/mplus_rounded_ui.ttf`（84 KB） | 「みんな」・コレクション・ホームの画面の字（`ui/common/Pop.kt` の `Pop.Rounded`） | 同上 | 同上 |
 
 切り出し方（fonttools）：

@@ -107,6 +107,7 @@ import com.rein4ce.roadcollector.ui.common.walkDate
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.FramedDialog
+import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.drawPart
@@ -161,20 +162,22 @@ fun CollectScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 見出し：左に題字「ミチツミ」（道積。積み木のブロックを積んでいる途中の絵）、右に歩いた長さ。
-        // 題字はロゴなので文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
+        // 見出し：左に画面名「みちのきろく」（ほかの画面の名前と同じ積み木。ui/common/Pop.kt の BlockWord）、右に歩いた長さ。
+        // 画面名の積み木は文字の大きさの設定では大きくしない（dp で決める）。長さの字は折り返さない。
         // 長さの字は残りの幅に入れ、入りきらないときだけ小さくする
         // （設定の歯車は、ホームの右上へ移した。決定 52。ui/settings/SettingsGearButton.kt）
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 題字は押すと動く（TitleBlocks.kt）。落ちてくる「ミ」が歩いた長さの上を通るよう、手前に描く
+            // 画面名は押すと動く（BlockWord）。落ちてくる最後の積み木が歩いた長さの上を通るよう、手前に描く
             // （開いたときのタイトルは、ここではなくホームの題字に収まる。ui/HomeScreen.kt）
-            TitleBlocks(
+            BlockWord(
+                "みちのきろく",
                 modifier = Modifier
                     .zIndex(1f)
-                    .padding(start = 4.dp, end = 12.dp),
+                    // 左の端は、ほかの画面の名前と同じ所にそろえる
+                    .padding(end = 12.dp),
             )
             // 歩いた長さ：「L=」の代わりに、下のタブの「採集」と同じ足跡のマーク
             val walkedM = distance.toInt()
