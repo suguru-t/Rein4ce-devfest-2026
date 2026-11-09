@@ -66,7 +66,6 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PressButton
-import com.rein4ce.roadcollector.ui.common.PressOutlinedButton
 import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -175,10 +174,16 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                             )
                             SkyText(" ・ 横にドラッグして位置を決める", color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            PressOutlinedButton(onClick = { vm.rotate(+15f) }) { Text("⟲ 15°") }
-                            PressButton(onClick = vm::place) { Text("置く") }
-                            PressOutlinedButton(onClick = { vm.rotate(-15f) }) { Text("⟳ 15°") }
+                        // 回転は、ほかのモードと同じく押し続けると 15° ずつ回り続ける（#114・決定 64。ui/game/RotateButtons.kt）
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val session = part?.id ?: ""
+                            RotateButton(RotateDirection.LEFT, sessionKey = session, onRotate = vm::rotate, modifier = Modifier.weight(1.2f))
+                            PressButton(onClick = vm::place, modifier = Modifier.weight(1f)) { Text("置く") }
+                            RotateButton(RotateDirection.RIGHT, sessionKey = session, onRotate = vm::rotate, modifier = Modifier.weight(1.2f))
                         }
                         PressTextButton(onClick = vm::cancelChoice) { Text("選び直す") }
                     }
