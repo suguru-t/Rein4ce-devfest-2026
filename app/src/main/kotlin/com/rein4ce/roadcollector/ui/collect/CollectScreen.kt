@@ -40,6 +40,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -595,10 +596,16 @@ private fun TrackMap(points: List<TrackPoint>, recording: Boolean, playingDemo: 
             Polyline(points = latLngs, color = Fieldbook.RoadCasing, width = 16f, zIndex = 1f)
             Polyline(points = latLngs, color = Fieldbook.Road, width = 10f, zIndex = 2f)
         }
-        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く
+        // スタート（最初の点）：赤い旗。止めたあと、ゴールが歩き始めの近くなら、2 本が重なって見えないよう左右に開く。
+        // 近いかどうかは、今の地図の拡大で旗の幅が何 m になるかと比べる（拡大を変えると開いたり閉じたりする）。
+        // 地図を動かすたびに中身を組み立て直さないよう、開くかどうかが変わったときだけ読み直す
         val firstPt = points.firstOrNull()
-        val spread = !recording && firstPt != null && last != null && points.size >= 2 &&
-            roughMeters(firstPt, last) < FLAG_SPREAD_METERS
+        val spread by remember(recording, firstPt, last, points.size) {
+            derivedStateOf {
+                !recording && firstPt != null && last != null && points.size >= 2 &&
+                    roughMeters(firstPt, last) < flagWidthMeters(firstPt.lat, cameraPositionState.position.zoom)
+            }
+        }
         if (firstPt != null) {
             val startState = rememberMarkerState()
             startState.position = LatLng(firstPt.lat, firstPt.lng)

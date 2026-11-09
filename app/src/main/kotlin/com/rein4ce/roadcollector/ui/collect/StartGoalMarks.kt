@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.model.TrackPoint
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /*
@@ -39,8 +40,17 @@ internal val GoalFlagColor: Color get() = Fieldbook.Survey
 /** スタートとゴールの旗を左右に開くときの傾き [度] */
 internal const val FLAG_SPREAD_DEGREES = 14f
 
-/** 地図で、スタートとゴールがこれより近ければ旗を左右に開く [m] */
-internal const val FLAG_SPREAD_METERS = 30.0
+/**
+ * 地図の今の拡大 [zoom] で、旗の幅（[FlagWidth]）が地面で何 m になるか（緯度 [lat] の所）。
+ * 地図で、スタートとゴールがこれより近ければ、旗が重なって見えるので左右に開く。
+ * 地図なし（TrackCanvas）が画面の上の距離で比べるのと同じく、どの拡大でもそろう
+ * （北緯 35.75° では、拡大 15 で約 85 m、16 で約 43 m、17 で約 21 m）
+ */
+internal fun flagWidthMeters(lat: Double, zoom: Float): Double =
+    METERS_PER_DP_AT_ZOOM_0 * cos(Math.toRadians(lat)) / 2.0.pow(zoom.toDouble()) * FlagWidth.value
+
+/** Google の地図で、拡大 0 のときの赤道での 1dp あたりの長さ [m]（地球の周 ÷ 256） */
+private const val METERS_PER_DP_AT_ZOOM_0 = 156_543.03392
 
 /**
  * 旗。[at] に竿の根もとを立て、上の右に [color] の三角の旗。
