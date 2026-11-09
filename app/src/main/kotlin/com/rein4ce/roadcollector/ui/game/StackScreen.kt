@@ -489,8 +489,8 @@ private fun ResultCard(
             )
         }
         val reason = when {
-            unresolved -> "塔が止まらず、高さを確定できないので、送信できません。もう一度試してください。"
-            result.remainingCount == 0 -> "台にパーツが残っていないので、送信できません。"
+            unresolved -> "塔が止まらず、高さを確定できないので、保存できません。もう一度試してください。"
+            result.remainingCount == 0 -> "台にパーツが残っていないので、保存できません。"
             else -> null
         }
         reason?.let {
@@ -508,19 +508,21 @@ private fun ResultCard(
                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                 PopButton(
                     when {
-                        vm.uploading -> "送信中…"
-                        vm.uploaded -> "送信済み"
-                        else -> "サーバに送信"
+                        vm.uploading -> "保存中…"
+                        vm.uploaded -> "保存済み"
+                        // 「みんな」のランキングに並べる。前は「サーバに送信」で、何をするのか分かりにくかった（B の希望）
+                        else -> "保存"
                     },
                     onClick = { vm.upload() },
                     face = Fieldbook.Card,
                     text = Pop.TealLine,
                     edge = Pop.TealLine,
                     enabled = !vm.uploading && !vm.uploaded,
-                    reserveLabels = listOf("サーバに送信", "送信中…", "送信済み"),
+                    reserveLabels = listOf("保存", "保存中…", "保存済み"),
                 )
             }
-            PopButton("みんな", onClick = onGoGallery, face = Fieldbook.Card, text = galleryInk(), edge = galleryInk())
+            // 「みんなのタワー」（ランキングと、あなたの最高と一番高い塔の断面図）へ。前は「みんな」で、何のボタンか分かりにくかった（B の希望）
+            PopButton("ランキング", onClick = onGoGallery, face = Fieldbook.Card, text = galleryInk(), edge = galleryInk())
         }
         vm.uploadMessage?.let {
             Spacer(Modifier.height(8.dp))
@@ -958,7 +960,7 @@ private val CHANGE_BUTTON_DROP = 24.dp
 private val FALLEN_RED = Color(0xFFD64545)
 
 /**
- * 終わりのカードの「みんな」の字と縁の色（「みんな」のタブの紺）。ダークモードでは紺が暗い紙に沈むので、明るい紺にする
+ * 終わりのカードの「ランキング」の字と縁の色（「みんな」のタブの紺）。ダークモードでは紺が暗い紙に沈むので、明るい紺にする
  * （モードを選ぶ画面の台の色と同じ考え。「サーバに送信」の青緑の縁の札（`Pop.TealLine`）と同じく、明るさだけ変える）
  */
 private fun galleryInk(): Color = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy

@@ -101,7 +101,7 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
   --format='yaml(timestamp,resource.labels.revision_name,severity,textPayload,jsonPayload.message,httpRequest.status)'
 ```
 
-そのあと**アプリから**：デモ散歩 → パーツに名前が付く → 積む → サーバに送信 → 「みんな」に出る。
+そのあと**アプリから**：デモ散歩 → パーツに名前が付く → 積む → 終わりのカードの「保存」 → 「みんな」に出る。
 
 送信したタワーの ID（送信結果の `id`、または共有 URL の末尾）で、共有ページと画像をサーバから取れることを確かめてから LINE / X に貼る。プレビューが出ないとき、サーバ側か SNS 側かを切り分けるため：
 

@@ -414,12 +414,12 @@ class StackViewModel(
                 val response = postTower(tower)
                 if (runId == uploadingRunId) {
                     uploadedRunId = uploadingRunId
-                    uploadMessage = "送信しました：${response.url}"
+                    uploadMessage = "保存しました：${response.url}"
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (runId == uploadingRunId) uploadMessage = "送信できませんでした（${serverUrl()}）：${e.message}"
+                if (runId == uploadingRunId) uploadMessage = "保存できませんでした（${serverUrl()}）：${e.message}"
             } finally {
                 if (runId == uploadingRunId) uploading = false
             }
