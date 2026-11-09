@@ -123,7 +123,7 @@ internal fun RankingScreen(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, tiltDeg = -2f, onClick = onBack)
+        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
