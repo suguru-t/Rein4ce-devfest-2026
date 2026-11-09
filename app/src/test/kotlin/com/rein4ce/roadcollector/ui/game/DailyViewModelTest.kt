@@ -118,4 +118,28 @@ class DailyViewModelTest {
         val kept = vm.tower.blocks.single { it.part.id == "yesterday" }
         assertEquals(yesterday, kept.placement)
     }
+
+    @Test fun `今日のパーツが台に残ったら、塔を自動で「みんな」に送り、送れた日を残す（決定 73）`() {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<com.rein4ce.roadcollector.core.model.Tower>()
+        val text = AppJson.encodeToString(DailyTower.serializer(), DailyTower())
+        val store = DailyTowerStore(read = { text }, write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) }, quarantine = {})
+        val vm = DailyViewModel(store, today = { day }, sendTower = { tower ->
+            sent += tower
+            com.rein4ce.roadcollector.core.model.TowerCreated("d1", "https://example.test/towers/d1")
+        })
+        waitUntil { vm.phase != DailyViewModel.Phase.Loading }
+        assertTrue("まだ積んでいなければ送らない", sent.isEmpty())
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.place() // 台のまん中に落とす
+        vm.runUntilStill()
+        assertTrue(vm.placedToday)
+        waitUntil { vm.sendState == DailyViewModel.SendState.SENT }
+        val tower = sent.single()
+        assertEquals(com.rein4ce.roadcollector.core.model.TowerMode.DAILY, tower.mode)
+        assertEquals(1, tower.streakDays)
+        assertEquals(day, tower.lastDay)
+        assertEquals(StackViewModel.PLATFORM_WIDTH_M.toFloat(), tower.platformWidth)
+        waitUntil { saved?.sentDay == day }
+        assertFalse(vm.tower.needsSend)
+    }
 }

@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.daily.DailyTower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -103,6 +104,8 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
+    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 73）
+    val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     when (mode) {
         PlayMode.NORMAL -> {
@@ -122,11 +125,16 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
         PlayMode.CHALLENGE -> {
             BackHandler { chosen = null }
             // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
-            ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading -> ChallengeScreen(leading = leading) }
+            // 結果のカードの「ランキング」は、「みんな」を 3 分チャレンジのランキングにしてから開く（決定 73）
+            ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading ->
+                ChallengeScreen(leading = leading, onGoRanking = { gallery.mode = TowerMode.CHALLENGE; onGoGallery() })
+            }
         }
         PlayMode.DAILY -> {
             BackHandler { chosen = null }
-            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading -> DailyScreen(leading = leading) }
+            ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading ->
+                DailyScreen(leading = leading, onGoRanking = { gallery.mode = TowerMode.DAILY; onGoGallery() })
+            }
         }
         null -> {
             val best by records.normalBest.collectAsStateWithLifecycle()

@@ -12,6 +12,8 @@ import com.rein4ce.roadcollector.core.challenge.ChallengeRun
 import com.rein4ce.roadcollector.core.challenge.ChallengeScore
 import com.rein4ce.roadcollector.core.challenge.ChallengeStyle
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -51,7 +53,22 @@ class ChallengeViewModel(
     private val newRun: (ChallengeStyle) -> ChallengeRun = { ChallengeRun(Random.nextLong(), style = it) },
     /** [ChallengeStyle] ごとの記録を読む（決まりの ID）。渡さなければ、自分で落とすの記録（テスト） */
     private val loadRecords: suspend (String) -> List<ChallengeScore> = { updateRecords(null) },
+    /**
+     * 記録になった回の塔を「みんな」の 3 分チャレンジのランキングに送る（決定 73。画面からは ApiClient.postChallengeTower）。
+     * 結果が出たら自動で 1 回送る。null なら送らない（テスト）
+     */
+    private val sendTower: (suspend (Tower) -> TowerCreated)? = null,
 ) : ViewModel() {
+    /** 「みんな」に送ったようす（決定 73） */
+    enum class SendState { IDLE, SENDING, SENT, FAILED }
+
+    /** 今の回の塔を「みんな」に送ったようす。新しい回を始めたら IDLE に戻る */
+    var sendState by mutableStateOf(SendState.IDLE)
+        private set
+    private var sentRunId: String? = null
+    private var sendingRunId: String? = null
+    private var sendFailedRunId: String? = null
+
     private var run: ChallengeRun? = null
 
     /** 新しい回を始めた・やめたときに増える（画面のフレームのループを始め直す目印） */
@@ -187,6 +204,49 @@ class ChallengeViewModel(
         frame = ChallengeFrame(r.phase, r.current, r.next, r.x, r.angle, r.spawnY, r.cameraTop, r.towerHeight, r.score)
         val score = r.score
         if (score != null && score.runId != savedRunId && score.runId != pendingRunId && score.runId != failedRunId) save(score)
+        // 記録になった回の塔は、自動で「みんな」に送る（1 回だけ。送れなかったら「もう一度送る」で）
+        val tower = r.tower
+        if (score != null && tower != null && score.runId != sentRunId && score.runId != sendingRunId && score.runId != sendFailedRunId) {
+            send(score.runId, tower)
+        }
+        sendState = when (score?.runId) {
+            null -> SendState.IDLE
+            sentRunId -> SendState.SENT
+            sendingRunId -> SendState.SENDING
+            sendFailedRunId -> SendState.FAILED
+            else -> SendState.IDLE
+        }
+    }
+
+    /** 「もう一度送る」：今の回の塔を送れなかったら、送り直す */
+    fun resend() {
+        val r = run ?: return
+        val score = r.score ?: return
+        val tower = r.tower ?: return
+        if (score.runId != sendFailedRunId) return
+        sendFailedRunId = null
+        // 先に「送っています」にする（送るのがすぐ終わったときに、終わったあとの「出しました」を上書きしないように）
+        sendState = SendState.SENDING
+        send(score.runId, tower)
+    }
+
+    private fun send(runId: String, tower: Tower) {
+        val upload = sendTower ?: return
+        sendingRunId = runId
+        // 画面を離れても送り終える（記録の保存と同じ。離れた回の塔でも、結果が出ていれば送る）
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val ok = try {
+                upload(tower)
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            if (sendingRunId == runId) sendingRunId = null
+            if (ok) sentRunId = runId else sendFailedRunId = runId
+            if (run?.score?.runId == runId) sendState = if (ok) SendState.SENT else SendState.FAILED
+        }
     }
 
     /** 「再試行」：今の結果を保存できていなければ保存し直し、ランキングを読み直す */

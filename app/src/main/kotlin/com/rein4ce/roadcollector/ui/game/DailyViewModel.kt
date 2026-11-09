@@ -10,6 +10,8 @@ import com.rein4ce.roadcollector.core.daily.DailyBlock
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Placement
+import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.PartSize
@@ -18,6 +20,7 @@ import com.rein4ce.roadcollector.data.DailyTowerStore
 import java.time.LocalDate
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -37,7 +40,19 @@ import kotlinx.coroutines.launch
 class DailyViewModel(
     private val store: DailyTowerStore,
     private val today: () -> String = { LocalDate.now().toString() },
+    /**
+     * 塔を「みんな」の毎日 1 つずつ積むのランキングに送る（決定 73。画面からは ApiClient.putDailyTower。サーバは持ち主ごとに 1 基を新しくする）。
+     * 積んで止まったら自動で送る。前に送れなかった形があれば、開いたときにも送る。null なら送らない（テスト）
+     */
+    private val sendTower: (suspend (Tower) -> TowerCreated)? = null,
+    private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
+
+    /** 「みんな」に送ったようす（決定 73） */
+    enum class SendState { IDLE, SENDING, SENT, FAILED }
+
+    var sendState by mutableStateOf(SendState.IDLE)
+        private set
 
     enum class Phase { Loading, Viewing, Aiming, Settling }
 
@@ -97,6 +112,38 @@ class DailyViewModel(
             tower = store.load()
             rebuild()
             phase = Phase.Viewing
+            // 前に送れなかった形（送る前にアプリを閉じた・つながらなかった）があれば送る
+            sendIfNeeded()
+        }
+    }
+
+    /**
+     * まだ「みんな」に送っていない形があれば送る（決定 73）。送れたら、送った日（[DailyTower.sentDay]）を塔と一緒に保存する。
+     * 送れなかったら [SendState.FAILED]（画面の「もう一度送る」か、次に開いたときに送り直す）
+     */
+    fun sendIfNeeded() {
+        val upload = sendTower ?: return
+        val current = tower
+        if (!current.needsSend || sendState == SendState.SENDING) return
+        val day = current.lastDay ?: return
+        sendState = SendState.SENDING
+        viewModelScope.launch {
+            val ok = try {
+                upload(current.toTower(platformWidth = StackViewModel.PLATFORM_WIDTH_M, createdAt = now()))
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            if (ok) {
+                // 送っている間に塔が変わっていても、送れた日だけを書き足す（次に積んだ形は、その日がまた違うので送り直す）
+                val sent = tower.copy(sentDay = day)
+                tower = sent
+                runCatching { store.save(sent) }
+            }
+            sendState = if (ok) SendState.SENT else SendState.FAILED
+            if (ok && tower.needsSend) sendIfNeeded()
         }
     }
 
@@ -209,6 +256,8 @@ class DailyViewModel(
         }
         viewModelScope.launch {
             saveFailed = runCatching { store.save(next) }.isFailure
+            // 今日のパーツが残ったら、新しい形を「みんな」に送る（決定 73）
+            if (!lastFell) sendIfNeeded()
         }
     }
 

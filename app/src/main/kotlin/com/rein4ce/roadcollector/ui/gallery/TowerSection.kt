@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -61,6 +62,10 @@ internal data class SectionSlot(
  * @param selected 紙片を開いているタワーの id（破線で囲む）
  * @param progress 開いたときの演出（0 で何も立っていない → 1 で全部立つ）。動かさないなら 1。描くときに読む（組み立て直しを減らすため）
  * @param onTap    タワーを押した
+ * @param topWindow 高すぎる塔は頂上のあたりだけを映すか（3 分チャレンジ・毎日 1 つずつ積む。決定 73）。
+ *   全部を同じ縮尺で入れると読めないほど細くなるとき（[WINDOW_BELOW]）、縮尺を枠の幅で決まる大きさに保ち、
+ *   それぞれの塔の頂上を枠の上にそろえて映す。映らない下のほうは波線で切り、「下の ○ m は省略」と書く。
+ *   目盛りは塔ごとに本当の高さで振る（共通の標尺は描かない）。押すと画面いっぱいに全体（GalleryScreen の TowerFullView）
  */
 @Composable
 internal fun TowerSection(
@@ -71,6 +76,7 @@ internal fun TowerSection(
     progress: () -> Float,
     onTap: (TowerSummary) -> Unit,
     modifier: Modifier = Modifier,
+    topWindow: Boolean = false,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -122,8 +128,26 @@ internal fun TowerSection(
         val baseY = h - bottomPad
         // 縮尺：いちばん高いもの（記録線も）が上の余白に収まる、と幅の上限の、小さいほう
         val tallest = max(record, slots.maxOfOrNull { it.tower?.height ?: 0f } ?: 0f).coerceAtLeast(1f)
-        val pxPerM = min((baseY - topPad) / (tallest + 0.3f), widthBound)
+        val fitPxPerM = min((baseY - topPad) / (tallest + 0.3f), widthBound)
+        // 頂上だけを映す：全部入れると幅で決まる大きさの [WINDOW_BELOW] より小さくなるとき（決定 73）
+        val window = topWindow && fitPxPerM < widthBound * WINDOW_BELOW
+        // 頂上だけを映すときの縮尺：枠の幅で決まる大きさ。ただし、あと少しで全部入る塔（その塔だけなら [NEARLY_FIT] 以上の大きさで入る）は、
+        // 少し小さくして全部を映す（0.3 m だけ省く、のような半端な切り方をしない）
+        val nearlyFit = slots.mapNotNull { it.tower?.height }
+            .map { (baseY - topPad) / (it + PART_REACH) }
+            .filter { it >= widthBound * NEARLY_FIT && it < widthBound }
+        val pxPerM = if (window) min(widthBound, nearlyFit.minOrNull() ?: widthBound) else fitPxPerM
+        // 映る高さ [m]（頂上だけを映すとき）
+        val windowM = (baseY - topPad) / pxPerM
         fun y(m: Float) = baseY - m * pxPerM
+        if (window) {
+            drawWindowedSection(
+                slots, sketches, selected, progressNow, measurer, caption, tick, note,
+                staffW = staffW, topPad = topPad, slotW = slotW, baseY = baseY, plateH = plateH, plateDepth = plateDepth,
+                pxPerM = pxPerM, windowM = windowM,
+            )
+            return@Canvas
+        }
 
         // 標尺：目盛りと、右へ伸びる薄い点線（演出中は下から伸びる）。
         // 刻みは、目盛りの間が 16dp 以上空く 1・2・5・10 m… から選ぶ（変に高いタワーが来ても数字が重ならない）
@@ -204,6 +228,133 @@ internal fun TowerSection(
         }
     }
 }
+
+/**
+ * 頂上だけを映す断面図（決定 73）。縮尺は [pxPerM]（枠の幅で決まる大きさ）のまま、それぞれの塔の頂上を枠の上にそろえる。
+ * * 塔が [windowM] より低ければ、台から全部をそのまま描く。高ければ、下の映らない所を波線で切り、波線と地面のあいだに「下の ○ m は省略」。
+ * 目盛りは塔ごとに、その塔の本当の高さで振る（塔ごとに映る高さが違うので、共通の標尺は描かない）。右上に「押すと全体」
+ */
+private fun DrawScope.drawWindowedSection(
+    slots: List<SectionSlot>,
+    sketches: Map<String, Tower>,
+    selected: String?,
+    progressNow: Float,
+    measurer: androidx.compose.ui.text.TextMeasurer,
+    caption: TextStyle,
+    tick: TextStyle,
+    note: TextStyle,
+    staffW: Float,
+    topPad: Float,
+    slotW: Float,
+    baseY: Float,
+    plateH: Float,
+    plateDepth: Float,
+    pxPerM: Float,
+    windowM: Float,
+) {
+    val w = size.width
+    val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx()))
+    val step = tickStepM(pxPerM, minGapPx = 16.dp.toPx())
+    // 地面（墨の太い線）
+    drawLine(Fieldbook.Ink, Offset(staffW, baseY), Offset(w, baseY), 2.dp.toPx())
+    slots.forEachIndexed { i, s ->
+        val cx = staffW + slotW * (i + 0.5f)
+        val left = cx - slotW / 2
+        val t = s.tower
+        val label = measurer.measure(s.caption, caption.copy(color = if (t == null) Fieldbook.Muted else Pop.Letter))
+        val platformWidth = t?.let { sketches[it.id]?.platformWidth } ?: PLATFORM_WIDTH
+        val plateW = max(platformWidth * pxPerM, label.size.width + 18.dp.toPx()).coerceAtMost(slotW - 8.dp.toPx())
+        val plate = Rect(Offset(cx - plateW / 2, baseY), Size(plateW, plateH))
+        if (t == null) {
+            drawRoundRect(Fieldbook.Mark, plate.topLeft, plate.size, CornerRadius(PLATE_CORNER_DP.dp.toPx()), style = Stroke(width = 1.dp.toPx(), pathEffect = dash))
+        } else {
+            drawPlate(plate, face = if (s.mine) Pop.OrangeDeep else Pop.Navy, depth = plateDepth)
+        }
+        drawText(label, topLeft = Offset(cx - label.size.width / 2, plate.top + (plateH - label.size.height) / 2))
+        if (t == null) {
+            s.emptyNote?.let {
+                val n = measurer.measure(it, note)
+                drawText(n, topLeft = Offset(cx - n.size.width / 2, baseY - n.size.height - 6.dp.toPx()))
+            }
+            return@forEachIndexed
+        }
+        // この塔で映さない下の高さ [m]。頂上（いちばん上のパーツが届く所）を枠の上にそろえる
+        val skipped = max(0f, t.height + PART_REACH - windowM)
+        fun sy(m: Float) = baseY - (m - skipped) * pxPerM
+        // 波線で切る所（省いたときだけ）。波線と地面のあいだに「下の ○ m は省略」を書くので、その字の高さぶん上で切る
+        // （前は波線の上、塔の絵に重ねて書いていて、パーツと重なって読みにくかった）
+        val skippedLabel = measurer.measure("下の ${"%.1f".format(Locale.US, skipped)} m は省略", note)
+        val amp = 2.5.dp.toPx()
+        val cutY = baseY - skippedLabel.size.height - amp - 4.dp.toPx()
+        val bottom = if (skipped > 0f) cutY else baseY + 1f
+
+        // 塔ごとの目盛り（本当の高さ）。スロットの左の端に字、右へ薄い点線
+        val first = (ceil(skipped / step) * step).toInt().coerceAtLeast(step)
+        var m = first
+        while (m <= t.height + PART_REACH) {
+            val yy = sy(m.toFloat())
+            if (yy < topPad) break
+            if (yy < bottom - 4.dp.toPx()) {
+                drawLine(Fieldbook.GridMajor, Offset(left + 2.dp.toPx(), yy), Offset(left + slotW - 2.dp.toPx(), yy), 1.dp.toPx(), pathEffect = dash)
+                val tl = measurer.measure("${m}m", tick)
+                drawText(tl, topLeft = Offset(left + 3.dp.toPx(), yy - tl.size.height - 1.dp.toPx()))
+            }
+            m += step
+        }
+
+        val sketch = sketches[t.id]
+        val revealTop = bottom - (bottom - sy(t.height + PART_REACH)) * progressNow
+        clipRect(left = left, top = revealTop.coerceAtLeast(0f), right = left + slotW, bottom = bottom) {
+            if (sketch == null) {
+                drawRoundRect(
+                    color = Fieldbook.Mark,
+                    topLeft = Offset(cx - PLATFORM_WIDTH / 2 * pxPerM, sy(t.height)),
+                    size = Size(PLATFORM_WIDTH * pxPerM, (t.height - skipped).coerceAtLeast(0f) * pxPerM + (baseY - bottom)),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = dash),
+                )
+            } else {
+                drawTowerParts(sketch, at = { x, yy -> Offset(cx + x * pxPerM, sy(yy)) }, pxPerM = pxPerM)
+            }
+        }
+        if (skipped > 0f) {
+            // 波線（省いた印）と、その下（地面とのあいだ）に「下の ○ m は省略」
+            val path = Path()
+            val waveW = 6.dp.toPx()
+            var x = left + 4.dp.toPx()
+            path.moveTo(x, cutY)
+            var up = true
+            while (x < left + slotW - 4.dp.toPx()) {
+                x += waveW
+                path.lineTo(x, cutY + if (up) -amp else amp)
+                up = !up
+            }
+            drawPath(path, Fieldbook.Ink, style = Stroke(width = 1.5.dp.toPx()))
+            drawText(skippedLabel, topLeft = Offset(cx - skippedLabel.size.width / 2, cutY + amp + 1.dp.toPx()))
+        }
+        if (t.id == selected) {
+            drawRoundRect(
+                color = Pop.TealLine,
+                topLeft = Offset(left + 2.dp.toPx(), topPad),
+                size = Size(slotW - 4.dp.toPx(), baseY - topPad + plateH + plateDepth + 3.dp.toPx()),
+                cornerRadius = CornerRadius(10.dp.toPx()),
+                style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
+            )
+        }
+    }
+    // 押すと全体が見られることを、右上に一言
+    val hint = measurer.measure("押すと全体", note)
+    drawText(hint, topLeft = Offset(w - hint.size.width - 6.dp.toPx(), 2.dp.toPx()))
+}
+
+/**
+ * 頂上だけを映すようにする境目（決定 73）。全部を同じ縮尺で入れたときの大きさが、枠の幅で決まる大きさのこれより小さいとき。
+ * 通常の塔（4 m くらいまで）は全部入る。3 分チャレンジや毎日 1 つずつ積むで高くなった塔（7〜8 m より上）から、頂上だけを映す
+ */
+private const val WINDOW_BELOW = 0.55f
+
+/** 頂上だけを映すときも、この大きさ（枠の幅で決まる大きさに対する割合）以上で全部入る塔は、縮尺を少し下げて全部を映す */
+private const val NEARLY_FIT = 0.7f
 
 /**
  * 名札の台を、画面のほかのブロック（ui/common/Pop.kt の popBlock）と同じ形で描く：角の丸い面の下に [depth] だけ濃い側面がのぞく。

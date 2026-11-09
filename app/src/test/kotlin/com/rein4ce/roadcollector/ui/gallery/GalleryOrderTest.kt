@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -116,5 +117,32 @@ class GalleryOrderTest {
         assertEquals(1, slotAt(x = 60f, width = 100f, count = 2, staffWidthPx = 10f))
         assertEquals(1, slotAt(x = 99f, width = 100f, count = 2, staffWidthPx = 10f))
         assertEquals(-1, slotAt(x = 50f, width = 100f, count = 0))
+    }
+
+    @Test
+    fun `連続日数は、最後に積んだ日が今日か昨日のときだけ数える（決定 73）`() {
+        val today = java.time.LocalDate.parse("2026-11-10")
+        fun daily(last: String?, streak: Int) = tower("d", 1f).copy(mode = TowerMode.DAILY, lastDay = last, streakDays = streak)
+        assertEquals(4, daily("2026-11-10", 4).currentStreak(today))
+        assertEquals(4, daily("2026-11-09", 4).currentStreak(today))
+        assertEquals("2 日あいたら 0", 0, daily("2026-11-08", 4).currentStreak(today))
+        assertEquals(0, daily(null, 4).currentStreak(today))
+        assertEquals(0, daily("きのう", 4).currentStreak(today))
+    }
+
+    @Test
+    fun `遊び方ごとの物差し：通常と 3 分チャレンジは高い順・多い順、毎日は高い順・連続日数順（決定 73）`() {
+        assertEquals(listOf(TowerSort.HEIGHT, TowerSort.PARTS), TowerSort.comparableFor(TowerMode.NORMAL))
+        assertEquals(listOf(TowerSort.HEIGHT, TowerSort.PARTS), TowerSort.comparableFor(TowerMode.CHALLENGE))
+        assertEquals(listOf(TowerSort.HEIGHT, TowerSort.STREAK), TowerSort.comparableFor(TowerMode.DAILY))
+        // 連続日数順：今も続いている日数で並べ、途切れた塔は高くても下
+        val today = java.time.LocalDate.now()
+        val towers = listOf(
+            tower("tall-broken", 9f).copy(mode = TowerMode.DAILY, lastDay = today.minusDays(5).toString(), streakDays = 9),
+            tower("short-going", 1f).copy(mode = TowerMode.DAILY, lastDay = today.toString(), streakDays = 3),
+            tower("mid-going", 2f).copy(mode = TowerMode.DAILY, lastDay = today.minusDays(1).toString(), streakDays = 2),
+        )
+        assertEquals(listOf("short-going", "mid-going", "tall-broken"), sortTowers(towers, TowerSort.STREAK).map { it.id })
+        assertEquals("3", TowerSort.STREAK.format(TowerSort.STREAK.valueOf(towers[1])))
     }
 }

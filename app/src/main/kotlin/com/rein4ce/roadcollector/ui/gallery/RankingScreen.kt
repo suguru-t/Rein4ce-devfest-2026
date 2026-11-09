@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.text.style.TextAlign
+import com.rein4ce.roadcollector.core.model.TowerMode
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -133,7 +135,8 @@ internal fun RankingScreen(
             Spacer(Modifier.weight(1f))
             // 天気の雲の上に直接書くので、紙の色の縁取りを付ける（ダークのくもりで沈まないように）
             SkyText(
-                if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
+                // どの遊び方のランキングか（決定 73）
+                "${gallery.mode.shortLabel}・" + if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(end = 4.dp),
@@ -142,8 +145,9 @@ internal fun RankingScreen(
         }
         // 読み込み中・つながらない・取り直せなかった、のときの知らせ（最初の画面と同じ）
         GalleryStatusRow(gallery)
-        // 「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
-        SortTabs(sort = sort, options = if (mineOnly) TowerSort.entries else TowerSort.COMPARABLE, onSelect = { onSort(it); page = 0 })
+        // 物差しは遊び方ごと（決定 73）。「あなたのタワー」では新しい順も選べる（自分の記録を追う画面なので）
+        val comparable = TowerSort.comparableFor(gallery.mode)
+        SortTabs(sort = sort, options = if (mineOnly) comparable + TowerSort.NEWEST else comparable, onSelect = { onSort(it); page = 0 })
         if (mineOnly && listed.isEmpty()) {
             // まだ送っていない（送ったタワーの印は、サーバの持ち主の印か、この端末の記録）
             Column(
@@ -154,7 +158,7 @@ internal fun RankingScreen(
                     .padding(14.dp),
             ) {
                 Text("まだ送っていません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("積んで「保存」すると、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("${howToSend(gallery.mode)}、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
             }
         }
         LazyColumn(
@@ -231,6 +235,59 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                             edge = if (selected) null else sortInk(s),
                         )
                         .padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 遊び方の切り替え（決定 73）。「みんな」の見出しの下に、みちをつむの 3 つのモードと同じ並び・同じ色（通常はオレンジ、
+ * 3 分チャレンジは青緑、毎日 1 つずつ積むは紺。モードを選ぶ画面のアイコンの色）で、同じ幅の積み木を 3 つ並べる。
+ * 選んでいる積み木はその色で塗って白い字・下に側面がのぞく。選んでいない積み木は白い面に色の縁。読み上げではラジオボタンの組
+ */
+@Composable
+internal fun ModeTabs(mode: TowerMode, onSelect: (TowerMode) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TowerMode.entries.forEach { m ->
+            val selected = m == mode
+            val source = remember { MutableInteractionSource() }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .pressFeel(source)
+                    .selectable(
+                        selected = selected,
+                        interactionSource = source,
+                        indication = null,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(m) },
+                    )
+                    .semantics { contentDescription = "${m.fullLabel}のランキング" },
+            ) {
+                Text(
+                    m.shortLabel,
+                    fontFamily = Pop.Rounded,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    color = if (selected) Pop.Letter else modeInk(m),
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .popBlock(
+                            face = if (selected) modeFace(m) else Fieldbook.Card,
+                            corner = 12.dp,
+                            depth = if (selected) 4.dp else 2.dp,
+                            edge = if (selected) null else modeInk(m),
+                        )
+                        .padding(vertical = 8.dp),
                 )
             }
         }

@@ -59,6 +59,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.daily.DailyTower
+import com.rein4ce.roadcollector.net.ApiClient
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartSize
@@ -91,9 +92,9 @@ import kotlinx.coroutines.launch
  * @param leading 上の行の左に置くもの（遊び方を選ぶ画面の ModePlayPage から「‹ 戻る」と札が来る）
  */
 @Composable
-internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
+internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, onGoRanking: () -> Unit = {}) {
     val app = RoadCollectorApp.from(LocalContext.current)
-    val vm: DailyViewModel = viewModel(factory = remember { viewModelFactory { initializer { DailyViewModel(app.dailyTower) } } })
+    val vm: DailyViewModel = viewModel(factory = remember { viewModelFactory { initializer { DailyViewModel(app.dailyTower, sendTower = { ApiClient.putDailyTower(it) }) } } })
     val repository = app.partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
@@ -148,7 +149,11 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                 when (vm.phase) {
                     DailyViewModel.Phase.Loading -> Unit
                     DailyViewModel.Phase.Viewing -> when {
-                        vm.placedToday -> Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
+                        vm.placedToday -> {
+                            Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
+                            // 積んで止まったら、自動で「みんな」に送る（決定 73）。送ったようすと「ランキング」
+                            DailySendRow(vm, onGoRanking)
+                        }
                         !vm.canPlaceToday -> Note(
                             // 文の切れ目で改行する（そのままだと「あ／したまた」のように語の途中で折り返していた）
                             "今日の道は ${DailyTower.MAX_RETRIES} 回置き直しても、台に残りませんでした。\nあしたまた、その日に歩いた道を 1 つ積めます",
@@ -201,6 +206,24 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}) {
                 if (vm.saveFailed) Note("塔を保存できませんでした。もう一度積むと、保存し直します")
             }
         }
+    }
+}
+
+/**
+ * 「みんな」に送ったようす（送っています・ランキングに出しました・送れませんでした）と、毎日 1 つずつ積むのランキングへのボタン（決定 73）。
+ * 送れなかったときは「もう一度送る」
+ */
+@Composable
+private fun DailySendRow(vm: DailyViewModel, onGoRanking: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        when (vm.sendState) {
+            DailyViewModel.SendState.IDLE -> Unit
+            DailyViewModel.SendState.SENDING -> SkyText("ランキングに送っています…", color = Fieldbook.Muted, fontSize = 13.sp)
+            DailyViewModel.SendState.SENT -> SkyText("ランキングに出しました", color = Pop.TealLine, fontSize = 13.sp)
+            DailyViewModel.SendState.FAILED ->
+                PopChip("もう一度送る", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::sendIfNeeded)
+        }
+        PopChip("ランキング", face = Fieldbook.Card, text = Pop.Navy, edge = Pop.Navy, onClick = onGoRanking)
     }
 }
 
