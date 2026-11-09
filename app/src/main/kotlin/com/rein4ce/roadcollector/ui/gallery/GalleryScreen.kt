@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rein4ce.roadcollector.RoadCollectorApp
-import com.rein4ce.roadcollector.core.challenge.ChallengeRules
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
@@ -79,7 +78,6 @@ import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
-import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
@@ -99,18 +97,29 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     val context = LocalContext.current
     val app = RoadCollectorApp.from(context)
     val state = gallery.state
-    // いま見ている遊び方（上の切り替え。決定 73）。3 分チャレンジは、今の決まりの記録だけを並べる（決まりが違う記録は混ぜない）
+    // いま見ている遊び方（ホームで選んだランキング。決定 73）。3 分チャレンジは、今の決まりの記録だけを並べる（決まりが違う記録は混ぜない）
     val mode = gallery.mode
-    val towers = (state as? TowerGallery.State.Loaded)?.towers.orEmpty()
-        .filter { mode != TowerMode.CHALLENGE || it.rule == ChallengeRules.ID }
+    val towers = rankedTowers(state, mode)
     // 自分のタワー：サーバの答え（持ち主の印が同じ）か、この端末から送った記録（data/MyTowers）のどちらか
     val local by app.myTowers.ids.collectAsStateWithLifecycle()
     val isMine: (TowerSummary) -> Boolean = { it.mine || it.id in local }
     val nickname by app.settings.nickname.collectAsStateWithLifecycle()
 
-    // 画面を開くたび（タブを切り替えて戻ったときも）と、遊び方を切り替えたときに一覧を取り直す。起動時の先読み（TowerGallery.prefetch）が
+    // ほかのタブ（記録・コレクション・積む）に移って戻ってきたときは、ホーム（どのランキングを見に行くか）から。
+    // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、ホームに戻る）。
+    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から来たときだけ、その遊び方のランキングから（TowerGallery.open）
+    var page by remember { mutableStateOf(if (gallery.consumeOpenRequest()) GalleryPage.OVERVIEW else GalleryPage.HOME) }
+    BackHandler(enabled = page != GalleryPage.HOME) {
+        page = if (page == GalleryPage.OVERVIEW) GalleryPage.HOME else GalleryPage.OVERVIEW
+    }
+
+    // 画面を開くたび（タブを切り替えて戻ったときも）・ホームに戻ったとき・遊び方を選んだときに一覧を取り直す。
+    // ホームでは、行にそれぞれのランキングのようすを出すので 3 つとも。起動時の先読み（TowerGallery.prefetch）が
     // まだ走っていれば止めずに待ち、その結果を先に出す
-    LaunchedEffect(mode) { gallery.refresh(mode) }
+    val atHome = page == GalleryPage.HOME
+    LaunchedEffect(atHome, mode) {
+        if (atHome) TowerMode.entries.forEach { gallery.refresh(it) } else gallery.refresh(mode)
+    }
 
     // 物差しと、どの画面を開いているか（最初の画面・ランキング・あなたのタワー）。タブを行き来しても、画面を回しても残す。
     // 物差しは遊び方ごとに持つ（毎日 1 つずつ積むだけ連続日数順がある。決定 73）
@@ -133,10 +142,6 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     // その遊び方に無い物差し（3 分チャレンジでの連続日数順など）になっていたら、新しい順で見せる
     var mineSortChosen by rememberSaveable { mutableStateOf(TowerSort.NEWEST) }
     val mineSort = mineSortChosen.takeIf { it == TowerSort.NEWEST || it in TowerSort.comparableFor(mode) } ?: TowerSort.NEWEST
-    // ほかのタブ（記録・コレクション・積む）に移って戻ってきたときは、ランキングや「あなたのタワー」ではなく最初の画面から。
-    // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、最初の画面に戻る）
-    var page by remember { mutableStateOf(GalleryPage.OVERVIEW) }
-    BackHandler(enabled = page != GalleryPage.OVERVIEW) { page = GalleryPage.OVERVIEW }
 
     // 紙片を開いているタワーと、ニックネームの窓。
     // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、紙片ではなく画面いっぱいに塔の全体を出す（決定 73）
@@ -144,12 +149,20 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     var showNickname by remember { mutableStateOf(false) }
 
     when (page) {
+        GalleryPage.HOME -> GalleryHome(
+            stateOf = gallery::stateOf,
+            isMine = isMine,
+            onPick = {
+                gallery.mode = it
+                page = GalleryPage.OVERVIEW
+            },
+        )
         GalleryPage.OVERVIEW -> Overview(
             gallery = gallery,
             towers = towers,
             isMine = isMine,
             mode = mode,
-            onMode = { gallery.mode = it },
+            onBack = { page = GalleryPage.HOME },
             sort = sort,
             onSort = setSort,
             openedId = opened?.id,
@@ -199,8 +212,11 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     }
 }
 
-/** 「みんな」の中の画面。最初の画面（断面図）から、ランキングと「あなたのタワー」へ行き、戻るで帰る */
-private enum class GalleryPage { OVERVIEW, RANKING, MINE }
+/**
+ * 「みんな」の中の画面。ホーム（どのランキングを見に行くか。決定 73）から遊び方の最初の画面（断面図）へ、
+ * そこからランキングと「あなたのタワー」へ行き、戻るで帰る
+ */
+private enum class GalleryPage { HOME, OVERVIEW, RANKING, MINE }
 
 /** 「みんな」の最初の画面：見出し、物差しの切り替え、断面図（1 番と自分）、2 基の行、「ランキングを見る」「あなたのタワー」 */
 @Composable
@@ -209,7 +225,7 @@ private fun Overview(
     towers: List<TowerSummary>,
     isMine: (TowerSummary) -> Boolean,
     mode: TowerMode,
-    onMode: (TowerMode) -> Unit,
+    onBack: () -> Unit,
     sort: TowerSort,
     onSort: (TowerSort) -> Unit,
     openedId: String?,
@@ -243,14 +259,13 @@ private fun Overview(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 画面名（題字と同じ積み木）と、右にリロードのブロック
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BlockWord("みんなのタワー")
+        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 73）、右にリロードのブロック
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
+            PopTag("${mode.fullLabel}のランキング", face = modeFace(mode), fontSize = 12.sp, tiltDeg = 2f)
             Spacer(Modifier.weight(1f))
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
-        // 遊び方の切り替え（みちをつむの 3 つのモードと同じ。決定 73）。遊び方ごとに別のランキング
-        ModeTabs(mode = mode, onSelect = onMode)
 
         GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, reduceMotion = reduceMotion)
 

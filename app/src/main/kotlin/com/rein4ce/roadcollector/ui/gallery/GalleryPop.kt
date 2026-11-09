@@ -35,13 +35,6 @@ internal fun modeFace(mode: TowerMode): Color = when (mode) {
     TowerMode.DAILY -> Pop.Navy
 }
 
-/** 遊び方の色の字（紙の上に直接書く）。ダークモードでは明るい色にする（[sortInk] と同じ考え） */
-internal fun modeInk(mode: TowerMode): Color = if (!Fieldbook.dark) modeFace(mode) else when (mode) {
-    TowerMode.NORMAL -> Pop.Orange
-    TowerMode.CHALLENGE -> Pop.Teal
-    TowerMode.DAILY -> Color(0xFFB9BCD0)
-}
-
 /** 物差しの色の字（紙の上に直接書く）。ダークモードでは濃い色が紙に沈むので、明るい色にする */
 internal fun sortInk(sort: TowerSort): Color = if (!Fieldbook.dark) sortFace(sort) else when (sort) {
     TowerSort.HEIGHT -> Pop.Orange

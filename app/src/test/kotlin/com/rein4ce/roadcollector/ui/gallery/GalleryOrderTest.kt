@@ -145,4 +145,25 @@ class GalleryOrderTest {
         assertEquals(listOf("short-going", "mid-going", "tall-broken"), sortTowers(towers, TowerSort.STREAK).map { it.id })
         assertEquals("3", TowerSort.STREAK.format(TowerSort.STREAK.valueOf(towers[1])))
     }
+
+    @Test
+    fun `ホームの行のようす：自分のがあれば最高と順位、無ければ 1 番、3 分チャレンジは今の決まりだけ（決定 73）`() {
+        val loaded = TowerGallery.State.Loaded(listOf(tower("a", 3f), tower("b", 2f), tower("c", 1f)))
+        assertEquals("あなたの最高 2.00 m・2 位", homeRecord(loaded, TowerMode.NORMAL) { it.id == "b" })
+        assertEquals("1 位 3.00 m・全部で 3 個", homeRecord(loaded, TowerMode.NORMAL) { false })
+        assertEquals("まだタワーがありません", homeRecord(TowerGallery.State.Loaded(emptyList()), TowerMode.NORMAL) { false })
+        assertEquals("読み込み中…", homeRecord(TowerGallery.State.Loading, TowerMode.DAILY) { false })
+        // 3 分チャレンジ：前の決まりの記録は数えない
+        val challenge = TowerGallery.State.Loaded(
+            listOf(
+                tower("old", 9f).copy(mode = TowerMode.CHALLENGE, rule = "manual-180-v5"),
+                tower("now", 4f).copy(mode = TowerMode.CHALLENGE, rule = com.rein4ce.roadcollector.core.challenge.ChallengeRules.ID),
+            ),
+        )
+        assertEquals("1 位 4.00 m・全部で 1 個", homeRecord(challenge, TowerMode.CHALLENGE) { false })
+        // 毎日：自分の塔と今も続いている日数
+        val today = java.time.LocalDate.now().toString()
+        val daily = TowerGallery.State.Loaded(listOf(tower("d", 1.5f).copy(mode = TowerMode.DAILY, lastDay = today, streakDays = 4)))
+        assertEquals("あなたの塔 1.50 m・連続 4 日", homeRecord(daily, TowerMode.DAILY) { true })
+    }
 }

@@ -127,13 +127,13 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
             // この画面を離れると、その回は捨てる。次に開いたときは新しい回から（ChallengeScreen。決定 69）
             // 結果のカードの「ランキング」は、「みんな」を 3 分チャレンジのランキングにしてから開く（決定 73）
             ModePlayPage(PlayMode.CHALLENGE, onBack = { chosen = null }) { leading ->
-                ChallengeScreen(leading = leading, onGoRanking = { gallery.mode = TowerMode.CHALLENGE; onGoGallery() })
+                ChallengeScreen(leading = leading, onGoRanking = { gallery.open(TowerMode.CHALLENGE); onGoGallery() })
             }
         }
         PlayMode.DAILY -> {
             BackHandler { chosen = null }
             ModePlayPage(PlayMode.DAILY, onBack = { chosen = null }) { leading ->
-                DailyScreen(leading = leading, onGoRanking = { gallery.mode = TowerMode.DAILY; onGoGallery() })
+                DailyScreen(leading = leading, onGoRanking = { gallery.open(TowerMode.DAILY); onGoGallery() })
             }
         }
         null -> {
@@ -261,10 +261,11 @@ private fun dailyRecord(tower: DailyTower?): String =
 /**
  * モードの行 1 つ。左に色の積み木（モードのアイコン）、右に紙のカード（名前・一言・記録・›）。
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
- * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）
+ * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
+ * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 73。一言だけ [note] で替える）
  */
 @Composable
-private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
+internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
     val look = lookOf(mode)
     val source = remember { MutableInteractionSource() }
     val action = if (mode.ready) {
@@ -275,7 +276,7 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
         Modifier
             .alpha(NOT_READY_ALPHA)
             .clearAndSetSemantics {
-                contentDescription = "${mode.label}、準備中。${mode.note}"
+                contentDescription = "${mode.label}、準備中。$note"
                 disabled()
             }
     }
@@ -319,7 +320,7 @@ private fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit) {
                     style = noteStyle,
                 )
                 Text(
-                    notes(mode.note),
+                    notes(note),
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
                     fontSize = 12.sp,

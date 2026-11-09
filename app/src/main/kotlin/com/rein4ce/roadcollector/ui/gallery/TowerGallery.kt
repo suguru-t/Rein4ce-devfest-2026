@@ -49,6 +49,21 @@ class TowerGallery(
      */
     var mode: TowerMode by mutableStateOf(TowerMode.NORMAL)
 
+    /** 次に「みんな」を開いたとき、ホームではなく [mode] のランキングから見せるか（[open]） */
+    private var openRequested = false
+
+    /**
+     * 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から呼ぶ（決定 73）。次に「みんな」を開いたとき、ホーム（どのランキングを見に行くか）を
+     * 飛ばして、[mode] のランキングから見せる
+     */
+    fun open(mode: TowerMode) {
+        this.mode = mode
+        openRequested = true
+    }
+
+    /** [open] で頼まれていたら true を返し、頼みを消す（「みんな」の画面を作るときに 1 回だけ見る） */
+    fun consumeOpenRequest(): Boolean = openRequested.also { openRequested = false }
+
     /** 遊び方 1 つぶんの一覧と、取り直しのようす */
     private inner class ModeList(val mode: TowerMode) {
         var state: State by mutableStateOf(State.Loading)
