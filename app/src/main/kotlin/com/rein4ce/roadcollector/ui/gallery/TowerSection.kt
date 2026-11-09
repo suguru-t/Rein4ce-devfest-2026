@@ -29,6 +29,8 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
  * 断面図の 1 枠：タワー（無ければ空の台）と、台の下に書く呼び名（「最長」「あなた」など）。
@@ -201,7 +203,7 @@ internal fun TowerSection(
 }
 
 /**
- * 名札の台を、画面のほかのブロック（Pop.kt の popBlock）と同じ形で描く：角の丸い面の下に [depth] だけ濃い側面がのぞく。
+ * 名札の台を、画面のほかのブロック（ui/common/Pop.kt の popBlock）と同じ形で描く：角の丸い面の下に [depth] だけ濃い側面がのぞく。
  * [face] は紺（ほかの人）かオレンジ（自分）。上に呼び名を白い字で載せる
  */
 private fun DrawScope.drawPlate(r: Rect, face: androidx.compose.ui.graphics.Color, depth: Float) {

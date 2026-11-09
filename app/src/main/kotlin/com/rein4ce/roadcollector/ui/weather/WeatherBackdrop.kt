@@ -13,6 +13,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rein4ce.roadcollector.core.weather.Moon
 import com.rein4ce.roadcollector.core.weather.Sky
@@ -67,6 +69,12 @@ import kotlin.random.Random
  * @param moonTimeMs 晴れの夜に、満月の夜かを決める時刻（記録は今、コレクションは歩いた時刻）
  * @param still true なら動かさない（その時点の絵のまま止め、傾きのセンサーも止める）。記録中に GPS と一緒に電池を使わないため。
  *   false に戻ると、止めたところから続けて動く
+ * @param sceneHeight 画面の一部（コレクションの拡大表示の窓など）に描くときの、画面いっぱいの高さ。
+ *   雨の落ちる速さや雲・太陽の位置は描く範囲の高さから決めているので、小さな範囲にそのまま描くと、雨がゆっくり落ち、雲や太陽も寄ってしまう。
+ *   画面の高さを渡すと、画面いっぱいに描いた天気の上のほうを、この範囲で切り取って見せる（背景の天気と同じ速さ・大きさになる）。
+ *   null なら、描く範囲いっぱいに描く（背景）
+ * @param plainPaper 方眼の線の無い紙（コレクションの拡大表示の窓）に描く。霧は方眼の線を薄めて見せる作りなので、線が無いと見えない。
+ *   雨・雪も方眼紙より目立たないので、雨粒と輪を濃くし、雪の粒のにじみを濃くし、霧は灰色のもやにする
  */
 @Composable
 fun WeatherBackdrop(
@@ -75,6 +83,8 @@ fun WeatherBackdrop(
     still: Boolean = false,
     smooth: Boolean = false,
     moonTimeMs: Long = System.currentTimeMillis(),
+    sceneHeight: Dp? = null,
+    plainPaper: Boolean = false,
 ) {
     val sky = weather?.sky ?: return
     val context = LocalContext.current
@@ -82,8 +92,8 @@ fun WeatherBackdrop(
     val animate = !reduceMotion && !still
     // 月の形は日によって変わるだけなので、時刻は日の単位で見る（毎回作り直さない）
     val moonPhase = remember(moonTimeMs / DAY_MS) { Moon.phase(moonTimeMs) }
-    val particles = remember(sky, weather.precipitationMm, weather.isDay, moonPhase) {
-        Particles(sky, weather.precipitationMm, weather.isDay, moonPhase)
+    val particles = remember(sky, weather.precipitationMm, weather.isDay, moonPhase, plainPaper) {
+        Particles(sky, weather.precipitationMm, weather.isDay, moonPhase, plainPaper)
     }
     // 晴れのときだけ、スマホの傾きで太陽ときらめき（夜は月）を少し動かす（天気アプリと同じ）。止めているときは動かさない
     val tilt = rememberTilt(enabled = sky == Sky.CLEAR && animate)
@@ -105,7 +115,19 @@ fun WeatherBackdrop(
             }
         }
     }
-    Canvas(modifier.graphicsLayer()) { frame.value.let { particles.draw(this, it.time, it.tilt) } }
+    // 切り取って見せるときに、画面いっぱいの大きさで描く入れ物（毎コマ作り直さない）
+    val scene = remember { CanvasDrawScope() }
+    Canvas(modifier.then(if (sceneHeight != null) Modifier.clipToBounds() else Modifier).graphicsLayer()) {
+        val f = frame.value
+        val fullHeight = sceneHeight?.toPx()
+        if (fullHeight == null || fullHeight <= size.height) {
+            particles.draw(this, f.time, f.tilt)
+        } else {
+            drawIntoCanvas { canvas ->
+                scene.draw(this, layoutDirection, canvas, Size(size.width, fullHeight)) { particles.draw(this, f.time, f.tilt) }
+            }
+        }
+    }
 }
 
 /** 1 日 [ミリ秒]（月の形を決め直す単位） */
@@ -166,6 +188,8 @@ private class Particles(
     private val isDay: Boolean = true,
     /** 月の位相（0 新月・0.5 満月。[Moon.phase]） */
     private val moonPhase: Double = 0.5,
+    /** 方眼の線の無い紙に描く（雨・雪を濃くし、霧を灰色のもやにする。[WeatherBackdrop] の plainPaper） */
+    private val plainPaper: Boolean = false,
 ) {
     private val count: Int = when (sky) {
         Sky.RAIN -> (90 + precipitationMm * 25).toInt().coerceIn(90, 200)
@@ -236,8 +260,10 @@ private class Particles(
         nightTint(strong = true)
         val sway = Offset(sin(t * 0.09f) * 6.dp.toPx(), sin(t * 0.07f) * 3.dp.toPx())
         // 太陽の所（右上）だと、上の電池などの表示や、記録画面の「0 m」・歯車にかかる（ダークの満月だと字が読めない）。
-        // そのため、上の時計と電池のあいだの空いている所（カメラの穴より右）に置き、下の見出しの行にかからない高さにする
-        val c = Offset(w * 0.64f, 46.dp.toPx()) + Offset(tilt.x * 18.dp.toPx(), -tilt.y * 10.dp.toPx()) + sway
+        // そのため、上の時計と電池のあいだの空いている所（カメラの穴より右）に置き、下の見出しの行にかからない高さにする。
+        // 拡大表示の窓（方眼の無い紙）では、そこは上のまん中の名札の後ろになって隠れるので、窓の右上の角に置く（#90 の A のレビュー）
+        val at = if (plainPaper) Offset(w - 40.dp.toPx(), 40.dp.toPx()) else Offset(w * 0.64f, 46.dp.toPx())
+        val c = at + Offset(tilt.x * 18.dp.toPx(), -tilt.y * 10.dp.toPx()) + sway
         val r = 32.dp.toPx()
         // 星：上の 4 割に散らし、上ほど多く・明るく。1 つずつ違う速さでゆっくりまたたく。
         // 月の後ろの星は描かない（三日月の欠けた側はうすく透けるので、星が見えてしまう）
@@ -393,7 +419,9 @@ private class Particles(
             val y = (phase[i] * travel + t * speed) % travel // 頭の高さ（0 が上端）
             val x = wrap(x0[i] * w - y * SLANT, w)
             drawLine(
-                color = RainInk.copy(alpha = lerp(0.12f, if (short) 0.28f else 0.4f, d)),
+                color = RainInk.copy(
+                    alpha = if (plainPaper) lerp(0.3f, if (short) 0.6f else 0.8f, d) else lerp(0.12f, if (short) 0.28f else 0.4f, d),
+                ),
                 start = Offset(x, y),
                 end = Offset(x + len * SLANT, y - len),
                 strokeWidth = lerp(0.8f, 1.7f, d).dp.toPx(),
@@ -414,7 +442,7 @@ private class Particles(
             val center = Offset(hash(i, cycle * 2 + 2) * w, hash(i, cycle * 2 + 3) * h)
             val r = lerp(1f, 7f, u).dp.toPx()
             drawOval(
-                color = RainInk.copy(alpha = 0.28f * (1f - u)),
+                color = RainInk.copy(alpha = (if (plainPaper) 0.55f else 0.28f) * (1f - u)),
                 topLeft = Offset(center.x - r, center.y - r * 0.55f),
                 size = androidx.compose.ui.geometry.Size(2 * r, 2 * r * 0.55f),
                 style = Stroke(width = 1.dp.toPx()),
@@ -442,7 +470,7 @@ private class Particles(
             val y = (phase[i] * travel + t * speed) % travel - half
             val sway = sin(t * lerp(0.5f, 1.0f, d) + phase[i] * 6.28f) * lerp(6f, 16f, d).dp.toPx()
             val x = wrap(x0[i] * w + sway, w)
-            val alpha = lerp(0.55f, 1f, d)
+            val alpha = if (plainPaper) lerp(0.8f, 1f, d) else lerp(0.55f, 1f, d)
             // 小数の位置のまま置く（整数の px に丸めると、ゆっくりした横揺れが 1 px ずつの段になり、低い密度の端末ではカクつく）
             val zoom = half * 2 / image.width
             withTransform({
@@ -460,11 +488,15 @@ private class Particles(
     private fun DrawScope.flakeImage(): ImageBitmap {
         val dark = Fieldbook.dark
         val side = FLAKE_IMAGE_PX
-        return flakeCache.get(this, key = dark, sidePx = side) {
+        return flakeCache.get(this, key = dark to plainPaper, sidePx = side) {
             val c = center
             val outer = side / 2f
-            // まわりのうすい青灰色のにじみ（明るい紙の上で、白い粒の形が見えるように。暗い地では白がよく見えるので弱く）
-            val shade = if (dark) 0.12f else 0.42f
+            // まわりのうすい青灰色のにじみ（明るい紙の上で、白い粒の形が見えるように。暗い地では白がよく見えるので弱く）。
+            // 方眼の無い紙（拡大表示の窓）では、白い粒が紙に溶けやすいので濃くする
+            val shade = when {
+                dark -> if (plainPaper) 0.2f else 0.12f
+                else -> if (plainPaper) 0.75f else 0.42f
+            }
             drawCircle(
                 brush = Brush.radialGradient(
                     0f to SnowShade.copy(alpha = shade),
@@ -499,14 +531,17 @@ private class Particles(
     private fun DrawScope.fog(t: Float) {
         val w = size.width
         val h = size.height
-        drawRect(FogPaper.copy(alpha = 0.3f))
+        // 方眼の無い紙では、紙の色のもやは見えないので、灰色のもやを流す
+        val mist = if (plainPaper) FogMist else FogPaper
+        val peak = if (plainPaper) 0.55f else 0.9f
+        drawRect(mist.copy(alpha = if (plainPaper) 0.1f else 0.3f))
         for (i in 0 until count) {
             val bandH = h * lerp(0.10f, 0.2f, depth[i])
             val cy = h * (0.05f + 0.9f * phase[i])
             val cx = wrap(x0[i] * w + t * w * lerp(0.012f, 0.03f, depth[i]), w + bandH * 6) - bandH * 3
             drawOval(
                 brush = Brush.radialGradient(
-                    listOf(FogPaper.copy(alpha = 0.9f), FogPaper.copy(alpha = 0f)),
+                    listOf(mist.copy(alpha = peak), mist.copy(alpha = 0f)),
                     center = Offset(cx, cy),
                     radius = bandH * 2.6f,
                 ),
@@ -825,6 +860,9 @@ private class Particles(
 
         /** 霧のもや（方眼紙の地の色。線を隠す） */
         private val FogPaper: Color get() = Fieldbook.Paper
+
+        /** 方眼の無い紙（拡大表示の窓）の霧のもや。紙より少し暗い灰色（ダークでは少し明るい灰色） */
+        private val FogMist: Color get() = if (Fieldbook.dark) Color(0xFFA9B4AE) else Color(0xFF8E9894)
     }
 }
 
