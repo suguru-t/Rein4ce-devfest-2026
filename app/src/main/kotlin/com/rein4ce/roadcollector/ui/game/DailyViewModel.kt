@@ -22,6 +22,8 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 「毎日 1 つずつ積む」の進行（決定 61・#106）。
@@ -138,9 +140,8 @@ class DailyViewModel(
             }
             if (ok) {
                 // 送っている間に塔が変わっていても、送れた日だけを書き足す（次に積んだ形は、その日がまた違うので送り直す）
-                val sent = tower.copy(sentDay = day)
-                tower = sent
-                runCatching { store.save(sent) }
+                tower = tower.copy(sentDay = day)
+                saveLatest()
             }
             sendState = if (ok) SendState.SENT else SendState.FAILED
             if (ok && tower.needsSend) sendIfNeeded()
@@ -254,10 +255,23 @@ class DailyViewModel(
             phase = Phase.Aiming
             camera = CameraTarget.Follow(top = spawnY() + reachOf(part))
         }
+        // 保存してから、今日のパーツが残ったら新しい形を「みんな」に送る（決定 77）
+        val placed = !lastFell
+        saveLatest(then = { if (placed) sendIfNeeded() })
+    }
+
+    /** 塔の保存を 1 つずつ順に行うための鍵 */
+    private val saveLock = Mutex()
+
+    /**
+     * 今の塔を保存する。保存は 1 つずつ順に行い、書くのは保存するときのいちばん新しい形（[tower]）。
+     * 前は落ちるたびに、その時の形の保存を別々に始めていて、裏のスレッドで並んで走ると書き終わる順が決まらず、
+     * 古い形（落ちた回数が 1 つ少ない）があとから書かれることがあった（CI のテストで見つかった）
+     */
+    private fun saveLatest(then: () -> Unit = {}) {
         viewModelScope.launch {
-            saveFailed = runCatching { store.save(next) }.isFailure
-            // 今日のパーツが残ったら、新しい形を「みんな」に送る（決定 77）
-            if (!lastFell) sendIfNeeded()
+            saveLock.withLock { saveFailed = runCatching { store.save(tower) }.isFailure }
+            then()
         }
     }
 
