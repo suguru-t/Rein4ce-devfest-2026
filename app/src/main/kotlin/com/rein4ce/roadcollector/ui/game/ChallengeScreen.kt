@@ -85,18 +85,24 @@ import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.SkyText
 import kotlinx.coroutines.isActive
+import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 
 
 /**
- * 3分チャレンジの画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
+ * 90 秒チャレンジ（前は 3 分チャレンジ。決定 75）の画面。通常のモードと同じく、上から「情報（残り時間・高さ・次の形）」「キャンバス」「操作」の 3 段。
  *
  * - 開いたらすぐ始まる（始めるボタンと、始める前の説明の画面は無い。決定 69）。遊び方は自分で落とすだけ
  *   （通常のモードと同じく、ドラッグして指を離すと落ちる。自動で落ちるはやめた）
  * - 画面を離れたら（「‹ 戻る」・ほかのタブ）、その回は捨てる。次に開いたときは、その前の段階を引き継がず新しい回から（決定 69）。
  *   アプリが裏に回ったときは、時計と物理を止めて、戻ったら続きから（画面を離れたことにはしない）
- * - 情報の段の「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter）、「次」は右に大きめの形（決定 69）
+ * - 情報の段の「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter）。「次」の形は、キャンバスの右上に重ねる紙の札（決定 75）
+ * - 新しい回は、画面が切り替わってから 1 秒置いて「3・2・1」を数え、数え終えてから時計が動く（決定 76）
  * - キャンバス：縮尺は変えず（通常のモードと同じ 1 m の大きさ）、台はキャンバスの下のほう（上から 78%）。塔が高くなったら、
  *   次の形が出てくる高さが入るところまで、視点を少しずつ（0.4 秒かけて）上げる（StackViewport.follow）。引かない
  * - 毎コマ変わるのは塔の図形（キャンバスの描画の中だけで読む）と、秒が変わったときの残り時間（時計の字だけ）。
@@ -141,6 +147,21 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
     LaunchedEffect(vm.generation, lifecycle, confirming) {
         if (vm.frame == null || confirming) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // 新しい回は、始まる前に「3・2・1」を 1 秒ずつ出してから時計を動かす（決定 76）。数えている途中で裏に回ったら、戻ったときに 3 から数え直す。
+            // 画面が切り替わってすぐに「3」が出ると早すぎるので、一呼吸（[COUNTDOWN_LEAD_MS]）置いてから数え始める（その間も時計と操作は止めたまま）
+            if (vm.needsCountdown) {
+                try {
+                    delay(COUNTDOWN_LEAD_MS)
+                    for (n in COUNTDOWN_FROM downTo 1) {
+                        vm.showCountdown(n)
+                        delay(COUNTDOWN_STEP_MS)
+                    }
+                    vm.finishCountdown()
+                } finally {
+                    // 途中で止められたとき（「やり直す」の確かめの窓・裏に回る・画面を回す）に、数字を残さない（#130 の C のレビュー）
+                    vm.stopCountdown()
+                }
+            }
             vm.resume()
             try {
                 while (isActive && vm.frame?.terminal == false) withFrameNanos { vm.tick() }
@@ -174,19 +195,21 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                 leading(compact)
                 ChallengeClock(vm, compact)
             }
-            // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）、
-            // 右に「次」の形を大きめに（決定 69。前は小さな 1 行の字だった）
+            // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom,
             ) {
                 HeightMeter(frame.towerHeight.toFloat(), compact)
-                if (!frame.terminal) NextPiece(frame.next, compact)
             }
 
-            // 2 段目：キャンバス
-            ChallengeCanvas(vm, frame, Modifier.fillMaxWidth().weight(1f).clipToBounds())
+            // 2 段目：キャンバス。右上に「次」の形の札を重ねる（決定 75。前は情報の段の右端に、背景なしで出していた）
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                ChallengeCanvas(vm, frame, Modifier.fillMaxSize().clipToBounds())
+                if (!frame.terminal) NextPiece(frame.next, compact, Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp))
+                // 始まる前の「3・2・1」（決定 76）
+                if (vm.countdown > 0) CountdownNumber(vm.countdown, Modifier.align(Alignment.Center))
+            }
 
             // 3 段目：操作
             Column(
@@ -249,27 +272,58 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 }
 
 /**
- * 「次」の形（決定 69）。見出しは「模型の高さ」と同じ字、形は大きめ（前は 22dp の小さな絵）、下に形の名前。
- * 名前は墨で 13dp（小さい画面は 12dp）。棒は細い横線 1 本で形からは分かりにくく、名前がいちばんの手がかりになるため
- * （前は 11dp の薄い墨で読みにくかった。#126 のレビュー）。
- * 大きさは dp で決め、文字の大きさの設定では大きくしない（情報の段が伸びて、塔を描く所が狭くならないように。HeightMeter と同じ）
+ * 始まる前の「3・2・1」の数（決定 76）。塔を描く所のまん中に、大きなオレンジの太い丸ゴシックで、紙の色の縁取り（SkyText）を付けて出す。
+ * 数が変わるたびに、少し大きく出てから縮んで収まる（動きを減らす設定なら、動かさない）。読み上げでも数を伝える
  */
 @Composable
-private fun NextPiece(next: Part, compact: Boolean) {
+private fun CountdownNumber(n: Int, modifier: Modifier = Modifier) {
+    val reduceMotion = rememberReduceMotion()
+    val scale = remember(n) { Animatable(if (reduceMotion) 1f else 1.6f) }
+    LaunchedEffect(n) { if (!reduceMotion) scale.animateTo(1f, tween(durationMillis = 300, easing = FastOutSlowInEasing)) }
+    val size = with(LocalDensity.current) { 96.dp.toSp() }
+    SkyText(
+        "$n",
+        color = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep,
+        fontSize = size,
+        modifier = modifier
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+            .semantics { liveRegion = LiveRegionMode.Assertive; contentDescription = "$n" },
+    )
+}
+
+/** 「3・2・1」をいくつから数えるか */
+private const val COUNTDOWN_FROM = 3
+
+/** 「3・2・1」の 1 つの数を出しておく時間 [ms] */
+private const val COUNTDOWN_STEP_MS = 1000L
+
+/** 画面が切り替わってから「3」を出すまでの間 [ms]（前は切り替わってすぐに出ていて早すぎた。B の希望） */
+private const val COUNTDOWN_LEAD_MS = 1000L
+
+/**
+ * 「次」の形の札（決定 69・75）。塔を描く所の右上に重ねる、紙のカード（「みんな」・コレクションのカードと同じ面・縁・側面）に、
+ * 上から「次」の見出し・形の絵（大きめ）・形の名前。背景のカードがあるので、ほかの字や積み木と分かれて「次」だと分かる。
+ * 大きさは dp で決め、文字の大きさの設定では大きくしない（塔を描く所に重ねるので、大きくすると塔が隠れる）
+ */
+@Composable
+private fun NextPiece(next: Part, compact: Boolean, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    val icon = if (compact) 30.dp else 40.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clearAndSetSemantics { contentDescription = "次の形 ${next.name ?: ""}" },
+    // 形が分かるように大きめに（決定 75。前は 40dp・小さい画面で 30dp）
+    val icon = if (compact) 40.dp else 56.dp
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .popBlock(face = Fieldbook.Card, corner = 12.dp, depth = 3.dp, edge = Fieldbook.CardEdge)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .clearAndSetSemantics { contentDescription = "次の形 ${next.name ?: ""}" },
     ) {
-        SkyText("次", color = Fieldbook.Ink, fontSize = fixed(if (compact) 14f else 15f), modifier = Modifier.padding(end = 6.dp))
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(icon)) {
-                drawPart(next, Offset(size.width / 2, size.height / 2), size.width * 0.75f)
-            }
-            SkyText(next.name ?: "", color = Fieldbook.Ink, fontSize = fixed(if (compact) 12f else 13f), maxLines = 1, softWrap = false)
+        Text("次", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fixed(if (compact) 12f else 13f), color = Fieldbook.Muted)
+        Canvas(Modifier.size(icon)) {
+            // 置いたときと同じ向き（決まった形の色）
+            drawPart(next, Offset(size.width / 2, size.height / 2), size.width * 0.75f)
         }
+        Text(next.name ?: "", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = fixed(if (compact) 12f else 13f), color = Fieldbook.Ink, maxLines = 1, softWrap = false)
     }
 }
 
@@ -318,6 +372,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val guide = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.13f)
     val platform = if (dark) Color(0xFF7A7FA6) else Color(0xFF4A4E69)
+    // 模型の高さの目盛（通常のモードと同じ。HeightRuler.kt。決定 75）
+    val ruler = rememberHeightRuler()
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val target = StackViewport.follow(canvasSize.width.toFloat(), canvasSize.height.toFloat(), frame.cameraTop.toFloat())
     val cameraY = remember(vm.generation) { Animatable(0f) }
@@ -340,7 +396,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             .onSizeChanged { canvasSize = it }
             .aimByDrag(
                 key = vm.generation,
-                canAim = { vm.frame?.phase == ChallengeRun.Phase.AIMING },
+                // 「3・2・1」の間は狙えない（決定 76）
+                canAim = { vm.canAim },
                 onDrag = { dx ->
                     val viewport = StackViewport(canvasSize.width.toFloat(), canvasSize.height.toFloat(), zoom = 1f, cameraY = cameraY.value)
                     val n = steps.add(viewport.dragToMeters(dx).toDouble())
@@ -354,7 +411,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
             .semantics {
                 contentDescription = "塔。模型の高さ %.2f メートル".format(Locale.JAPAN, frame.towerHeight)
                 // 読み上げ（TalkBack）ではドラッグできないので、キャンバスの操作で左右に動かし、落とせるようにする（前の ◀▶ と「置く」の代わり）
-                if (frame.phase == ChallengeRun.Phase.AIMING) {
+                // 「3・2・1」の間（とその前）は出さない（押しても何も起きないのに、読み上げで「した」と伝わるため。#130 の C のレビュー）
+                if (vm.canAim) {
                     customActions = listOf(
                         CustomAccessibilityAction("左へ 10 cm") { vm.move(-MOVE_STEP_CHALLENGE_M); true },
                         CustomAccessibilityAction("右へ 10 cm") { vm.move(MOVE_STEP_CHALLENGE_M); true },
@@ -365,6 +423,8 @@ private fun ChallengeCanvas(vm: ChallengeViewModel, frame: ChallengeFrame, modif
     ) {
         val viewport = StackViewport(size.width, size.height, zoom = 1f, cameraY = cameraY.value)
         fun at(x: Double, y: Double) = Offset(viewport.toScreenX(x.toFloat()), viewport.toScreenY(y.toFloat()))
+        // 目盛（塔と同じ変換なので、視点が上がっても塔の高さとずれない）。形の下になるように先に描く
+        drawHeightRuler(viewport, ruler)
         // 落下ライン（通常のモードと同じ。ここより下に落ちた形は消える）
         drawLine(guide, Offset(0f, viewport.toScreenY(-1.5f)), Offset(size.width, viewport.toScreenY(-1.5f)), strokeWidth = 2f)
         for (shape in vm.shapes) {
@@ -510,12 +570,12 @@ private fun SaveState(vm: ChallengeViewModel) {
 }
 
 /**
- * この端末の記録（3分チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
+ * この端末の記録（90 秒チャレンジ）の上位 10 件。「みんな」のランキングと取り違えないよう「この端末の記録」と呼ぶ。
  * 遊べるのは自分で落とすだけなので、その決まりの記録だけを出す（決定 69。ほかの決まりの記録は消さずに残っている）
  */
 @Composable
 private fun Records(ranking: List<ChallengeScore>, highlight: String?) {
-    Text("この端末の記録（3分チャレンジ）", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Fieldbook.Ink)
+    Text("この端末の記録（90 秒チャレンジ）", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Fieldbook.Ink)
     if (ranking.isEmpty()) {
         Text("まだ記録がありません", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
         return

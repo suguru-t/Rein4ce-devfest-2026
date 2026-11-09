@@ -49,7 +49,7 @@ internal fun ChangeButton(enabled: Boolean, left: Int, onClick: () -> Unit, modi
             .pressFeel(source)
             .clickable(interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .clearAndSetSemantics {
-                contentDescription = "チェンジ。ほかのパーツに替える。あと $left 回"
+                contentDescription = "チェンジ。ほかの道に替える。あと $left 回"
                 role = Role.Button
                 if (enabled) onClick { onClick(); true } else disabled()
             },

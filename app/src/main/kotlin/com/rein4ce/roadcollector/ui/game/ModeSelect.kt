@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.sizeIn
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
@@ -86,8 +88,9 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  * - 毎日 1 つずつ積む：#106・決定 61。[StackTab] から DailyScreen を始める。カードには、今の塔の高さと日数（DailyTowerStore）
  */
 enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
-    NORMAL("通常", "次々に出るパーツを、落とすまで積む", ready = true),
-    CHALLENGE("3 分チャレンジ", "3 分のあいだに、ピースを高く積む", ready = true),
+    NORMAL("通常", "次々に出る道を、落とすまで積む", ready = true),
+    // 前は 3 分チャレンジ。90 秒にした（決定 75）
+    CHALLENGE("90 秒チャレンジ", "90 秒のあいだに、道を高く積む", ready = true),
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
 }
 
@@ -109,14 +112,21 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
 
     when (mode) {
         PlayMode.NORMAL -> {
-            BackHandler { chosen = null }
-            ModePlayPage(PlayMode.NORMAL, onBack = { chosen = null }) { leading ->
+            // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
+            val vm: StackViewModel = viewModel()
+            // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして止め、次に通常を開いたときに
+            // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは、今までどおり続きから。
+            // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
+            val leave = {
+                vm.leave()?.let { records.submitNormal(it.finalHeight) }
+                chosen = null
+            }
+            BackHandler(onBack = leave)
+            ModePlayPage(PlayMode.NORMAL, onBack = leave) { leading ->
                 StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
             }
-            // 終わって塔が止まり、パーツが残ったら（「保存」できる結果）、通常の最高を更新する。
+            // 終わって塔が止まり、道が残ったら（「保存」できる結果）、通常の最高を更新する。
             // 高さは天気のボーナスで大きくしたあとのもの（決定 68）
-            // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）を見るだけで、積む画面には手を入れない
-            val vm: StackViewModel = viewModel()
             val canUpload = vm.canUpload
             LaunchedEffect(vm.runId, canUpload) {
                 if (canUpload) vm.result?.let { records.submitNormal(it.finalHeight) }
@@ -368,13 +378,62 @@ private fun ModePlayPage(
     onBack: () -> Unit,
     content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
 ) {
+    // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
+    val narrow = LocalConfiguration.current.screenWidthDp < NARROW_WIDTH_DP
     content { compact ->
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
-            if (!compact) PopTag(mode.label, face = lookOf(mode).tagFace, fontSize = 12.sp, tiltDeg = 2f)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BackButton(onBack, small = compact || narrow)
+            // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした
+            if (!compact) ModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
         }
     }
 }
+
+/**
+ * モードで遊ぶ画面の「‹ 戻る」（モードを選ぶ画面へ）。「みんな」のランキングと同じ黄色い積み木。
+ * 前は小さな札（字 14sp・見た目の高さ 28dp ほど）で押しにくかったので（B の希望）、字を大きくし（16dp。[small] なら 15dp）、
+ * 見た目の高さ 42dp・幅 88dp 以上の積み木にした（押せる範囲も同じ大きさ）。上の行に収めるため、文字の大きさの設定では大きくしない
+ *
+ * @param small 小さい画面か、幅の狭い端末。一回り小さくする
+ */
+@Composable
+private fun BackButton(onBack: () -> Unit, small: Boolean) {
+    val source = remember { MutableInteractionSource() }
+    val size = with(LocalDensity.current) { (if (small) 15.dp else 16.dp).toSp() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .pressFeel(source)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る", onClick = onBack)
+            .popBlock(face = Pop.Yellow, corner = 50.dp, depth = 3.dp)
+            .sizeIn(minWidth = if (small) 80.dp else 88.dp, minHeight = if (small) 40.dp else 42.dp)
+            .padding(horizontal = 14.dp),
+    ) {
+        Text("‹ 戻る", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.InkOnYellow, maxLines = 1)
+    }
+}
+
+/**
+ * 遊んでいるモードの札（「通常」「90 秒チャレンジ」「毎日 1 つずつ積む」）。モードの色の積み木に白い字で、少し傾ける。
+ * 「‹ 戻る」と同じ高さ・同じ字の大きさ（[small] なら一回り小さく）。押すものではないので、読み上げでは字だけ
+ */
+@Composable
+private fun ModeTag(label: String, face: Color, small: Boolean) {
+    val size = with(LocalDensity.current) { (if (small) 14.dp else 16.dp).toSp() }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .graphicsLayer { rotationZ = 2f }
+            .popBlock(face = face, corner = 10.dp, depth = 3.dp)
+            .heightIn(min = if (small) 36.dp else 42.dp)
+            .padding(horizontal = 8.dp),
+    ) {
+        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.Letter, maxLines = 1)
+    }
+}
+
+/** これより幅の狭い端末では、モードで遊ぶ画面の「‹ 戻る」と札を一回り小さくする [dp] */
+private const val NARROW_WIDTH_DP = 400
 
 /**
  * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き・遊んでいるときの札の色。

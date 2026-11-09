@@ -31,6 +31,7 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.game.RULER_LABEL_DP
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 
 /**
@@ -81,7 +82,8 @@ internal fun TowerSection(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     // 図の中の字は図の一部なので、文字の大きさの設定では大きくしない（大きくすると目盛りや呼び名がぶつかる）
-    val tick = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 9.dp.toSp() }, color = Fieldbook.Muted)
+    // 標尺の字は、積む画面の目盛と同じ大きさ（前は 9dp で小さかったので、少し大きくした。決定 75）
+    val tick = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { RULER_LABEL_DP.dp.toSp() }, color = Fieldbook.Muted)
     val caption = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 13.dp.toSp() }, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
     val small = TextStyle(fontFamily = Pop.Rounded, fontSize = with(density) { 9.dp.toSp() }, fontWeight = FontWeight.Black)
     val note = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = with(density) { 10.dp.toSp() }, color = Fieldbook.Muted)
@@ -150,8 +152,8 @@ internal fun TowerSection(
         }
 
         // 標尺：目盛りと、右へ伸びる薄い点線（演出中は下から伸びる）。
-        // 刻みは、目盛りの間が 16dp 以上空く 1・2・5・10 m… から選ぶ（変に高いタワーが来ても数字が重ならない）
-        val step = tickStepM(pxPerM, minGapPx = 16.dp.toPx())
+        // 刻みは、目盛りの間が 18dp 以上空く 1・2・5・10 m… から選ぶ（変に高いタワーが来ても数字が重ならない。字を 11dp にしたので 16dp から広げた）
+        val step = tickStepM(pxPerM, minGapPx = 18.dp.toPx())
         val meters = ceil(tallest).toInt()
         val shownTop = baseY - (baseY - y(meters.toFloat())) * progressNow
         val dash = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx()))

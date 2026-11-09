@@ -32,12 +32,13 @@ class ChallengeRunTest {
         now += 1_000_000_000; run.tick()
         assertEquals(ChallengeRun.Phase.UNRESOLVED, run.phase)
     }
-    @Test fun `three minute play can place more than five pieces without an early finish`() {
+    @Test fun `a full play can place more than five pieces without an early finish`() {
         var now = 0L
         val run = ChallengeRun(123, clock = { now })
         var placed = 0
         run.resume()
-        repeat(3600) {
+        // 遊べる時間（90 秒。決定 75）を 0.05 秒ずつ進める
+        repeat((ChallengeRules.DURATION_NS / 50_000_000).toInt()) {
             if (run.place()) placed++
             now += 50_000_000; run.tick()
             assertFalse(run.terminal)
@@ -120,7 +121,9 @@ class ChallengeRunTest {
         run.resume(); now = ChallengeRules.DURATION_NS; run.tick()
         repeat(20) { now += 50_000_000; run.tick() }
         assertEquals(ChallengeRules.ID, run.score!!.rule)
-        assertEquals("manual-180-v6", ChallengeRules.ID)
+        assertEquals("manual-90-v1", ChallengeRules.ID)
+        // 90 秒（決定 75。前は 3 分）
+        assertEquals(90_000_000_000L, ChallengeRules.DURATION_NS)
     }
 
     @Test fun `記録になった回は、止まった塔を「みんな」に送る形で持つ（決定 77）`() {
@@ -205,9 +208,9 @@ class ChallengeRunTest {
         run.resume(); now += 1_000_000_000L; run.pause()
         now += 999_000_000_000L; wall = -100000L
         assertFalse(run.place()); run.resume(); run.tick()
-        assertEquals(179_000_000_000L, run.remainingNs)
+        assertEquals(ChallengeRules.DURATION_NS - 1_000_000_000L, run.remainingNs)
         now += 1_000_000_000L; run.tick()
-        assertEquals(178_000_000_000L, run.remainingNs)
+        assertEquals(ChallengeRules.DURATION_NS - 2_000_000_000L, run.remainingNs)
     }
     @Test fun `clock consumes full foreground gap despite physics cap and freezes result`() {
         var now = 0L

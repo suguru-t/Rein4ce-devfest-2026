@@ -87,18 +87,18 @@ class ChallengeViewModelTest {
             ChallengeRun(runs.toLong(), clock = { now })
         })
         vm.start(); vm.resume(); now += 30_000_000_000; vm.tick()
-        assertEquals(150, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS - 30, vm.remainingSeconds)
         val generation = vm.generation
         vm.restart()
         assertEquals(2, runs)
         assertTrue(vm.generation > generation)
         assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
 
         vm.leave()
         assertNull(vm.frame)
         assertTrue(vm.shapes.isEmpty())
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
         runCurrent()
         assertEquals(0, writes)
         assertTrue(vm.canStart)
@@ -124,7 +124,7 @@ class ChallengeViewModelTest {
         vm.start()
         assertEquals(2, runs)
         assertEquals(ChallengeRun.Phase.AIMING, vm.frame!!.phase)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
     }
 
     @Test fun `何も起きないコマではフレームを変えず、残り時間は秒が変わったときだけ変える`() = runTest {
@@ -132,13 +132,13 @@ class ChallengeViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
         val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { ChallengeRun(1, clock = { now }) })
-        vm.start(); vm.resume()
+        vm.start(); vm.finishCountdown(); vm.resume()
         val frame = vm.frame
         repeat(10) { now += 16_000_000; vm.tick() }
         assertSame(frame, vm.frame)
-        assertEquals(180, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS, vm.remainingSeconds)
         now += 1_000_000_000; vm.tick()
-        assertEquals(179, vm.remainingSeconds)
+        assertEquals(ChallengeViewModel.FULL_SECONDS - 1, vm.remainingSeconds)
         vm.move(0.1)
         assertNotEquals(frame, vm.frame)
     }
@@ -181,7 +181,7 @@ class ChallengeViewModelTest {
         runCurrent()
         assertEquals(ChallengeStyle.MANUAL, vm.style)
         assertEquals(listOf(ChallengeRules.ID), asked)
-        vm.start(); vm.resume()
+        vm.start(); vm.finishCountdown(); vm.resume()
         assertEquals(listOf(ChallengeStyle.MANUAL), styles)
         // 自分で落とす形は、狙っている間は下がらない（指を離すまで、出てくる高さで待つ）
         val start = vm.ghostY
@@ -195,6 +195,35 @@ class ChallengeViewModelTest {
         assertEquals(ChallengeRun.Phase.FALLING, vm.frame!!.phase)
     }
 
+    @Test fun `新しい回は「3・2・1」を数え終えるまで、動かす・回す・落とすを受け付けない（決定 76）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val now = 0L
+        val vm = ChallengeViewModel(updateRecords = { listOfNotNull(it) }, newRun = { style -> ChallengeRun(1, style = style, clock = { now }) })
+        runCurrent()
+        vm.start()
+        assertTrue(vm.needsCountdown)
+        assertFalse(vm.canAim)
+        vm.showCountdown(3)
+        assertEquals(3, vm.countdown)
+        val before = vm.frame!!
+        vm.move(0.3); vm.rotate(30.0); vm.place()
+        assertEquals("数えている間は何も変わらない", before, vm.frame)
+        // 数え終えたら、時計を動かして（画面の時計のループと同じ）、操作できる
+        vm.finishCountdown(); vm.resume()
+        assertEquals(0, vm.countdown)
+        assertFalse(vm.needsCountdown)
+        assertTrue(vm.canAim)
+        vm.move(0.3)
+        assertEquals(0.3, vm.frame!!.x, 1e-9)
+        // やり直すと、新しい回なので、また数える
+        vm.restart()
+        assertTrue(vm.needsCountdown)
+        // 画面を離れたら、数えていた途中でも消す
+        vm.showCountdown(2)
+        vm.leave()
+        assertEquals(0, vm.countdown)
+    }
+
     @Test fun `記録になった回の塔は、自動で 1 回だけ「みんな」に送り、送れなければもう一度送れる（決定 77）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         var now = 0L
@@ -205,7 +234,8 @@ class ChallengeViewModelTest {
             newRun = { ChallengeRun(1, clock = { now }) },
             sendTower = { tower -> if (broken) error("offline"); sent += tower; TowerCreated("c1", "https://example.test/towers/c1") },
         )
-        vm.start(); vm.resume()
+        // 「3・2・1」を数え終えてから置く（決定 76）
+        vm.start(); vm.finishCountdown(); vm.resume()
         vm.place()
         repeat(40) { now += 50_000_000; vm.tick() }
         now = ChallengeRules.DURATION_NS; vm.tick()

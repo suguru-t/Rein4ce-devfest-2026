@@ -102,6 +102,40 @@ class ChallengeViewModel(
     var ranking by mutableStateOf<List<ChallengeScore>>(emptyList())
         private set
 
+    /**
+     * 始まる前の「3・2・1」で、いま出している数（決定 76）。0 なら数えていない。数えている間は時計を進めず、動かす・回す・落とすも受け付けない
+     */
+    var countdown by mutableIntStateOf(0)
+        private set
+
+    /** 「3・2・1」を数え終えた回（[generation]） */
+    private var countedGeneration = -1
+
+    /** この回は、まだ「3・2・1」を数え終えていない（新しい回の始まり。終わった回は数えない） */
+    val needsCountdown: Boolean get() = frame?.terminal == false && countedGeneration != generation
+
+    /** いま狙えるか（数えている間・数える前は狙えない） */
+    val canAim: Boolean get() = frame?.phase == ChallengeRun.Phase.AIMING && !needsCountdown
+
+    /** 「3・2・1」の [n] を出す（画面の時計のループが 1 秒ごとに呼ぶ） */
+    fun showCountdown(n: Int) {
+        countdown = n
+    }
+
+    /** 「3・2・1」を数え終えた。ここから時計が進み、操作できる */
+    fun finishCountdown() {
+        countdown = 0
+        countedGeneration = generation
+    }
+
+    /**
+     * 「3・2・1」を途中でやめた（「やり直す」の確かめの窓・裏に回った・画面を回した）。数字を消す。
+     * 数え終えたことにはしないので、次に時計のループが回り始めたときに 3 から数え直す
+     */
+    fun stopCountdown() {
+        countdown = 0
+    }
+
     /** 結果を保存しているところ */
     var saving by mutableStateOf(false)
         private set
@@ -154,6 +188,7 @@ class ChallengeViewModel(
      * 終わった回の記録は、結果が出たときに保存を始めているので、離れても保存は続く
      */
     fun leave() {
+        countdown = 0
         run?.pause()
         run = null
         frame = null
@@ -178,16 +213,19 @@ class ChallengeViewModel(
     }
 
     fun move(dx: Double) {
+        if (!canAim) return
         run?.move(dx)
         publishFrame()
     }
 
     fun rotate(degrees: Double) {
+        if (!canAim) return
         run?.rotate(degrees)
         publishFrame()
     }
 
     fun place() {
+        if (!canAim) return
         run?.place()
         publishFrame()
     }
@@ -298,7 +336,7 @@ class ChallengeViewModel(
     companion object {
         private const val NS_PER_SECOND = 1_000_000_000L
 
-        /** 始める前の残り時間の表示 [秒]（3:00） */
+        /** 始める前の残り時間の表示 [秒]（1:30） */
         val FULL_SECONDS = (ChallengeRules.DURATION_NS / NS_PER_SECOND).toInt()
 
         /**

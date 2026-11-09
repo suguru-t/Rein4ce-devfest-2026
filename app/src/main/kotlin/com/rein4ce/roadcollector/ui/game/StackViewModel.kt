@@ -112,6 +112,9 @@ class StackViewModel(
     /** パーツが台から落ちて、このゲームは終わった（塔が落ち着くのを待っている、または終わった） */
     private var gameOver = false
 
+    /** 遊び方を選ぶ画面へ戻ってゲームを止めた（[leave]）。次にこの画面を開いたら、そのときのコレクションで新しいゲームを始める */
+    private var startOnNextOpen = false
+
     var runId: Long by mutableStateOf(0L)
         private set
 
@@ -200,7 +203,31 @@ class StackViewModel(
         origins: Map<String, PartOrigin> = emptyMap(),
     ) {
         if (!isLoaded) return
-        if (runId == 0L && inventory.isNotEmpty()) start(inventory, origins)
+        if ((runId == 0L || startOnNextOpen) && inventory.isNotEmpty()) start(inventory, origins)
+    }
+
+    /**
+     * 遊び方を選ぶ画面へ戻る（「‹ 戻る」・端末の「戻る」。決定 76）。このゲームは終わりにして止め、次にこの画面を開いたときに、
+     * そのときのコレクションで新しいゲームを始める（[updateInventory]。前は戻った時点のコレクションですぐ始め直していたので、
+     * 戻ってから道を記録しても出なかった）。
+     * パーツが落ちて終わり、塔が落ち着くのを待っている途中なら、その場で落ち着くまで進めて結果を決める
+     * （画面を離れると物理が止まり、その回が自分の最高に数えられなかったため。#130 の C のレビュー）。
+     *
+     * @return 自分の最高に数えてよい結果（終わって塔が止まり、道が残ったとき）。無ければ null
+     */
+    fun leave(): StackResult? {
+        if (phase == Phase.Idle) return null
+        if (gameOver && phase == Phase.Settling) {
+            // 待つ上限（maxSeconds）までに必ず終わるので、そのぶんだけ回す
+            val steps = (settleTiming.maxSeconds / SETTLE_NOW_STEP_SECONDS).toInt() + 2
+            repeat(steps) { if (phase == Phase.Settling) tick(SETTLE_NOW_STEP_SECONDS) }
+        }
+        val done = result?.takeIf { canUpload }
+        phase = Phase.Idle
+        current = null
+        startMessage = null
+        startOnNextOpen = true
+        return done
     }
 
     /**
@@ -223,6 +250,7 @@ class StackViewModel(
 
     private fun start(parts: List<Part>, origins: Map<String, PartOrigin>) {
         runId++
+        startOnNextOpen = false
         // 前のゲームの送信は打ち切らない（サーバ側の保存と食い違わないように）。
         // 結果は runId で照合するので、次のゲームの表示には混ざらない
         uploading = false
@@ -433,10 +461,13 @@ class StackViewModel(
          */
         const val MAX_FRAME_SECONDS = 0.05
 
+        /** 戻るときに、落ち着くのを待っている塔をその場で進める 1 回の時間 [s]（画面のコマと同じくらい） */
+        private const val SETTLE_NOW_STEP_SECONDS = 1.0 / 60
+
         /** ゴーストを台の端からどこまで外へ動かせるか [m] */
         const val DRAG_MARGIN_M = 0.8
 
-        const val MESSAGE_COLLECTION_EMPTY = "コレクションにパーツがありません。"
+        const val MESSAGE_COLLECTION_EMPTY = "コレクションに道がありません。"
 
         /** 1 ゲームでチェンジできる回数（[change]） */
         const val CHANGES_PER_GAME = 3
