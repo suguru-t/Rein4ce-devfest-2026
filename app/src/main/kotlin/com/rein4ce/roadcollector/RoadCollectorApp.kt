@@ -13,6 +13,9 @@ import com.rein4ce.roadcollector.data.PartRepository
 import com.rein4ce.roadcollector.data.DailyTowerStore
 import com.rein4ce.roadcollector.data.StackRecords
 import com.rein4ce.roadcollector.data.WeatherService
+import com.rein4ce.roadcollector.ui.common.Daypart
+import com.rein4ce.roadcollector.ui.common.PiecePalette
+import com.rein4ce.roadcollector.ui.common.toPartColors
 import com.rein4ce.roadcollector.ui.gallery.TowerGallery
 import com.rein4ce.roadcollector.ui.theme.JapaneseText
 
@@ -77,6 +80,10 @@ class RoadCollectorApp : Application() {
         val owner = OwnerId.of(this, sentBefore = myTowers.ids.value.isNotEmpty())
         ApiClient.ownerId = { owner }
         partRepository = PartRepository(this)
+        // 送る塔のパーツの色：積む画面と同じ、歩いたときの天気と時間帯の色（決定 74・95）
+        ApiClient.pieceColors = { part ->
+            PiecePalette.colors(partRepository.weatherOf(part.id)?.sky, Daypart.of(part, partRepository.placeOf(part.id)?.startedAt)).toPartColors()
+        }
         weatherService = WeatherService(this, partRepository)
         gallery = TowerGallery()
         LocationRecordingService.createNotificationChannel(this)

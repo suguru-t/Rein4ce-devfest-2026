@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.physics.PartGeometry
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.svg.TowerSvg
+import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.geom.Path2D
@@ -33,6 +34,9 @@ object TowerPng {
     const val HEIGHT = 630
 
     private val BACKGROUND = Color(0xFF, 0xF8, 0xF2)
+
+    /** 色が入っているパーツ（決定 95）の縁の線の太さ（形の外側に出る幅）[px]。1200×630 の絵で、積む画面の線と同じくらいに見える太さ */
+    private const val OUTLINE_PX = 3.0
     private val PLATFORM = Color(0x4A, 0x4E, 0x69)
 
     init {
@@ -76,7 +80,9 @@ object TowerPng {
             // パーツ
             for (pl in tower.placements) {
                 val part = partsById[pl.partId] ?: continue
-                g.color = Color.decode(TowerSvg.colorOf(part.kind))
+                // 色があれば積む画面と同じ色（決定 95）。無ければ形ごとの色
+                val colors = tower.colors[part.id]?.takeIf { TowerSvg.isHexColor(it.fill) && TowerSvg.isHexColor(it.outline) }
+                g.color = Color.decode(colors?.fill ?: TowerSvg.colorOf(part.kind))
                 // 形の多角形（長方形と曲がり角の継ぎ目。アプリ・物理と同じ）を 1 つのパスにまとめて塗る（継ぎ目に線が出ない）
                 val path = Path2D.Double(Path2D.WIND_NON_ZERO)
                 // 大きさ（歩いた距離で決まる）は、形を作るときに掛ける（物理と同じ）
@@ -89,6 +95,16 @@ object TowerPng {
                 val saved = g.transform
                 g.translate(sx(pl.x.toDouble()), sy(pl.y.toDouble()))
                 g.rotate(-pl.angleRad.toDouble()) // y 下向きなので回転も反転
+                if (colors != null) {
+                    // 形を太い線でなぞってから面を重ねる（外側だけが線になる。TowerSvg と同じ）
+                    val fillColor = g.color
+                    g.color = Color.decode(colors.outline)
+                    val savedStroke = g.stroke
+                    g.stroke = BasicStroke((OUTLINE_PX * 2).toFloat(), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                    g.draw(path)
+                    g.stroke = savedStroke
+                    g.color = fillColor
+                }
                 g.fill(path)
                 g.transform = saved
             }

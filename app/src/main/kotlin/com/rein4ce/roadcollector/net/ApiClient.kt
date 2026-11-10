@@ -6,6 +6,7 @@ import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartNameResponse
+import com.rein4ce.roadcollector.core.model.PartColors
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.model.TowerMode
@@ -85,6 +86,12 @@ object ApiClient {
     var ownerId: () -> String? = { null }
 
     /**
+     * パーツの色（積む画面と同じ、歩いたときの天気と時間帯の色。決定 95）。送る塔に入れ、「みんな」の絵と共有ページの絵がこの色で描く。
+     * アプリの起動時に RoadCollectorApp がつなぐ。null を返したパーツには入れない（形ごとの色で描かれる）
+     */
+    var pieceColors: (Part) -> PartColors? = { null }
+
+    /**
      * 送信できたタワーの id を受け取る係（自分のタワーの印。data/MyTowers）。
      * アプリの起動時に RoadCollectorApp がつなぐ
      */
@@ -123,8 +130,9 @@ object ApiClient {
             setBody(prepared(tower))
         }.body<TowerCreated>().also { onPosted(it, TowerMode.DAILY) }
 
-    /** 送る形：時刻を日付までに丸め、作者名と持ち主の印を入れる */
-    private fun prepared(tower: Tower): Tower = withOwner(withAuthor(withDayOnlyTimes(tower), authorName()), ownerId())
+    /** 送る形：パーツの色を入れ（時刻を丸める前に。時間帯の色に使う）、時刻を日付までに丸め、作者名と持ち主の印を入れる */
+    private fun prepared(tower: Tower): Tower =
+        withOwner(withAuthor(withDayOnlyTimes(withPieceColors(tower, pieceColors)), authorName()), ownerId())
 
     /**
      * パーツの名前を AI（サーバの Gemini）に考えてもらう（POST /parts/name）。
@@ -172,6 +180,17 @@ internal fun namingRequest(part: Part): Part = part.copy(name = null)
 /** 送るタワーに作者名を入れる。もう入っていればそのまま。[author] が空なら入れない（「みんな」ではゲスト） */
 internal fun withAuthor(tower: Tower, author: String?): Tower =
     if (!tower.author.isNullOrBlank() || author.isNullOrBlank()) tower else tower.copy(author = author)
+
+/**
+ * 送るタワーにパーツの色を入れる（決定 95）。積む画面と同じ、歩いたときの天気と時間帯の色で、時刻そのものは入らない
+ * （時間帯は朝・昼・夕方・夜の 4 つの明るさだけ。時刻は日付までに丸めて送る。決定 47）。
+ * 90 秒チャレンジは形ごとの色で遊ぶので入れない。もう入っている色はそのまま
+ */
+internal fun withPieceColors(tower: Tower, colorsOf: (Part) -> PartColors?): Tower {
+    if (tower.mode == TowerMode.CHALLENGE) return tower
+    val added = tower.parts.filter { it.id !in tower.colors }.mapNotNull { p -> colorsOf(p)?.let { p.id to it } }.toMap()
+    return if (added.isEmpty()) tower else tower.copy(colors = tower.colors + added)
+}
 
 /** 送るタワーに持ち主の印を入れる。[owner] が無ければ入れない（サーバは印なしとして保存する） */
 internal fun withOwner(tower: Tower, owner: String?): Tower =

@@ -53,6 +53,9 @@ enum class TowerMode(val wire: String) {
  * @property streakDays 毎日 1 つずつ積むの、最後に積んだ日（[lastDay]）までの連続日数。「今も続いている日数」は見るときに、
  *   [lastDay] が今日か昨日なら [streakDays]、それより前なら 0 と決める（送ったあとに積むのをやめると、日がたつと 0 になる）
  * @property lastDay 毎日 1 つずつ積むで、最後に積んだ日（端末の日付。"2026-11-10"）。ほかの遊び方は null
+ * @property colors パーツの色（パーツの id → 塗りと縁。決定 95）。積む画面と同じ、歩いたときの天気と時間帯の色（決定 74）で、
+ *   送るときにアプリが入れる（通常と毎日 1 つずつ積む。90 秒チャレンジは形ごとの色で遊ぶので入れない）。
+ *   「みんな」の絵と共有ページの絵・PNG は、色があればそれで描き、無いパーツ（入れる前のタワー）は形ごとの色で描く
  */
 @Serializable
 data class Tower(
@@ -69,7 +72,16 @@ data class Tower(
     val rule: String? = null,
     val streakDays: Int = 0,
     val lastDay: String? = null,
+    val colors: Map<String, PartColors> = emptyMap(),
 )
+
+/**
+ * パーツ 1 つの色（決定 95）。どちらも "#RRGGBB"。
+ * @property fill 面の色
+ * @property outline 形を囲む線の色（面の色を暗くしたもの）
+ */
+@Serializable
+data class PartColors(val fill: String, val outline: String)
 
 /**
  * ギャラリー一覧用の軽い形。

@@ -11,7 +11,9 @@ import java.util.Locale
  *
  * og:image は PNG（/towers/{id}/image.png）。SVG を読まないクローラが多いため。PNG は TowerPng がその場で描く。
  *
- * 見た目はアプリにそろえる（決定 94）：字はアプリと同じ M PLUS Rounded 1c の太字（Google Fonts から読む。読めなければ端末の丸い字）、
+ * 見た目はアプリにそろえる（決定 94）：字はアプリと同じ M PLUS Rounded 1c の太字（このページで使う字だけを切り出して、このサーバから配る。
+ * 決定 95。前は Google Fonts から読んでいて、開いた人のブラウザから Google にも通信が行っていた。読めなければ端末の丸い字。
+ * 作者名は人が入れる字で切り出しに入っていないので、作者名だけ端末の字で出す）、
  * 地は方眼紙（8 px ごとに細い線、5 本ごとに太い線。アプリの Fieldbook と同じ色）、題字「ミチツミ」は 4 色の積み木、
  * 遊び方の札と高さの数字は遊び方ごとの色（アプリの ModeTheme と同じ）、絵は下に側面がのぞくカード（アプリの popBlock と同じ）。
  * 端末がダークモードなら、アプリのダークの色にする
@@ -30,8 +32,11 @@ object SharePage {
             else -> "$author さんが "
         }
         // 本文の一言。プレビュー（og:description）には、どのアプリかが分かるよう「— ミチツミ」を付ける（本文は下の行に出すので付けない）
-        val sentence = "$who${tower.placements.size} 個の散歩パーツで積みました"
+        val rest = "${tower.placements.size} 個の散歩パーツで積みました"
+        val sentence = "$who$rest"
         val desc = "$sentence — ミチツミ"
+        // 本文では作者名だけ端末の字で出す（切り出した字体に入っていない字で、1 つの名前の中で字体が混ざらないように）
+        val sentenceHtml = if (author.isEmpty()) esc(rest) else "<span class=\"name\">${esc(author)}</span>${esc(who.removePrefix(author))}${esc(rest)}"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)
@@ -56,10 +61,11 @@ object SharePage {
 <meta property="og:image:alt" content="${esc(title)}">
 <meta name="twitter:image" content="${esc(image)}">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800;900&display=swap">
 <style>
+  @font-face {
+    font-family: "MichitsumiRounded"; src: url("$FONT_PATH") format("woff");
+    font-weight: 800 900; font-display: swap;
+  }
   :root {
     --paper: #F3F6F0; --grid-minor: #E2E8DF; --grid-major: #CED8CA;
     --ink: #2F3A2E; --muted: #5E6B5D; --card: #FBFCF9; --edge: #B8C5B3; --edge-side: ${side("B8C5B3")};
@@ -74,7 +80,7 @@ object SharePage {
   }
   body {
     margin: 0; color: var(--ink);
-    font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-weight: 800;
+    font-family: "MichitsumiRounded", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-weight: 800;
     background-color: var(--paper);
     background-image:
       linear-gradient(var(--grid-major) 1px, transparent 1px),
@@ -98,6 +104,7 @@ object SharePage {
   .height .num { font-size: 56px; }
   .height .unit { font-size: 24px; margin-left: 4px; }
   .desc { margin: 8px 0 0; font-size: 15px; }
+  .desc .name { font-family: system-ui, sans-serif; font-weight: 700; }
   .streak { margin: 4px 0 0; font-size: 14px; color: var(--mode-ink); }
   .card {
     margin: 18px 0 0; padding: 8px; background: var(--card); border: 2px solid var(--edge); border-radius: 14px;
@@ -117,7 +124,7 @@ object SharePage {
   <span class="tag">${esc(look.label)}</span>
   <p class="label">高さ</p>
   <p class="height"><span class="num">${esc(heightText)}</span><span class="unit">m</span></p>
-  <p class="desc">${esc(sentence)}</p>
+  <p class="desc">$sentenceHtml</p>
 ${if (streak != null) "  <p class=\"streak\">${esc(streak)}</p>\n" else ""}  <div class="card">$svg</div>
   <p class="parts">使ったパーツ：${esc(kinds)}</p>
   <p class="foot">歩いた道を、積み上げよう — ミチツミ</p>
@@ -136,12 +143,19 @@ ${if (streak != null) "  <p class=\"streak\">${esc(streak)}</p>\n" else ""}  <di
             .filterNot { it.isISOControl() || it.category == CharCategory.FORMAT }
             .trim()
 
-    /** 毎日 1 つずつ積むの塔なら「11/10 まで 3 日続けて積みました」。ほかの遊び方・日付が読めないときは null */
+    /**
+     * 毎日 1 つずつ積むの塔なら「11/10 まで 3 日続けて積みました」。1 日だけなら「11/10 に積みました」（「1 日続けて」は不思議に読めるため。決定 95）。
+     * ほかの遊び方・日付が読めないときは null
+     */
     internal fun streakLine(tower: Tower): String? {
         if (tower.mode != TowerMode.DAILY || tower.streakDays <= 0) return null
         val last = tower.lastDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
-        return "${last.monthValue}/${last.dayOfMonth} まで ${tower.streakDays} 日続けて積みました"
+        val day = "${last.monthValue}/${last.dayOfMonth}"
+        return if (tower.streakDays == 1) "$day に積みました" else "$day まで ${tower.streakDays} 日続けて積みました"
     }
+
+    /** 切り出した字体の場所（Routes.kt の GET /fonts/share-rounded.woff。tools/subset_share_font.py で作る） */
+    const val FONT_PATH = "/fonts/share-rounded.woff"
 
     /** 題字「ミチツミ」の積み木（アプリの TitleBlocks と同じ 4 色と傾き。側面は面の色を 3 割黒に寄せる） */
     private fun titleBlocks(): String = TITLE.joinToString("") { (char, face, tilt) ->

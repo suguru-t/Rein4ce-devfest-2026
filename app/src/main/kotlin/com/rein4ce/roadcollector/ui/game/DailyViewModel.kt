@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.rein4ce.roadcollector.core.daily.DailyBlock
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartColors
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
@@ -48,6 +49,12 @@ class DailyViewModel(
      */
     private val sendTower: (suspend (Tower) -> TowerCreated)? = null,
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * 送る塔のパーツの色（決定 95）。画面（DailyScreen の pieceColorsOf）と同じく、コレクションに天気が無いパーツ
+     * （積んだあとでコレクションから消した道）は、積んだときのすべりやすさ（[DailyBlock.grip]）から天気を戻して決める。
+     * 送るときの ApiClient の色はコレクションの天気しか見ないので、ここで先に入れておく（もう入っている色は、ApiClient が変えない）
+     */
+    private val colorsOf: (Part, Grip) -> PartColors? = { _, _ -> null },
 ) : ViewModel() {
 
     /** 「みんな」に送ったようす（決定 77） */
@@ -132,6 +139,12 @@ class DailyViewModel(
      * まだ「みんな」に送っていない形があれば送る（決定 77）。送れたら、送った日（[DailyTower.sentDay]）を塔と一緒に保存する。
      * 送れなかったら [SendState.FAILED]（画面の「もう一度送る」か、次に開いたときに送り直す）
      */
+    /** 送る塔に、画面と同じパーツの色を入れる（[colorsOf]。決定 95） */
+    private fun withColors(daily: DailyTower, tower: Tower): Tower {
+        val colors = daily.blocks.mapNotNull { b -> colorsOf(b.part, b.grip)?.let { b.part.id to it } }.toMap()
+        return if (colors.isEmpty()) tower else tower.copy(colors = tower.colors + colors)
+    }
+
     fun sendIfNeeded() {
         val upload = sendTower ?: return
         val current = tower
@@ -140,7 +153,7 @@ class DailyViewModel(
         sendState = SendState.SENDING
         viewModelScope.launch {
             val ok = try {
-                upload(current.toTower(platformWidth = StackViewModel.PLATFORM_WIDTH_M, createdAt = now()))
+                upload(withColors(current, current.toTower(platformWidth = StackViewModel.PLATFORM_WIDTH_M, createdAt = now())))
                 true
             } catch (e: CancellationException) {
                 throw e

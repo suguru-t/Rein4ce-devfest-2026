@@ -266,4 +266,25 @@ class DailyViewModelTest {
         waitUntil { saved?.sentDay == day }
         assertFalse(vm.tower.needsSend)
     }
+
+    @Test fun `送る塔に、パーツごとの色を積んだときのすべりやすさも見て入れる（決定 95）`() {
+        // コレクションから消した道は天気が分からないので、画面と同じく積んだときのすべりやすさから天気を戻す
+        val yesterday = DailyBlock(part("yesterday"), Placement("yesterday", 0f, 0.05f, 0f), Grip.ICY, "2026-11-09")
+        val sent = java.util.concurrent.CopyOnWriteArrayList<com.rein4ce.roadcollector.core.model.Tower>()
+        val text = AppJson.encodeToString(DailyTower.serializer(), DailyTower(listOf(yesterday), sentDay = "2026-11-09"))
+        val store = DailyTowerStore(read = { text }, write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) }, quarantine = {}, io = Dispatchers.Unconfined)
+        val vm = DailyViewModel(
+            store, today = { day },
+            sendTower = { tower -> sent += tower; com.rein4ce.roadcollector.core.model.TowerCreated("d1", "https://example.test/towers/d1") },
+            colorsOf = { _, grip -> com.rein4ce.roadcollector.core.model.PartColors(if (grip == Grip.ICY) "#EDF5F8" else "#F7A964", "#000000") },
+        )
+        waitUntil { vm.phase != DailyViewModel.Phase.Loading }
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.place()
+        vm.runUntilStill()
+        waitUntil { sent.size == 1 && vm.sendState == DailyViewModel.SendState.SENT }
+        assertEquals("#EDF5F8", sent.last().colors["yesterday"]?.fill)
+        assertEquals("#F7A964", sent.last().colors["today"]?.fill)
+    }
 }
+

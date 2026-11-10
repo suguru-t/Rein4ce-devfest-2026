@@ -67,6 +67,7 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.toPartColors
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.Daypart
@@ -104,7 +105,23 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, onGoRanking: () -> Unit = {}) {
     val app = RoadCollectorApp.from(LocalContext.current)
-    val vm: DailyViewModel = viewModel(factory = remember { viewModelFactory { initializer { DailyViewModel(app.dailyTower, sendTower = { ApiClient.putDailyTower(it) }) } } })
+    val vm: DailyViewModel = viewModel(
+        factory = remember {
+            viewModelFactory {
+                initializer {
+                    DailyViewModel(
+                        app.dailyTower,
+                        sendTower = { ApiClient.putDailyTower(it) },
+                        // 送る色は、下の pieceColorsOf と同じ決め方（コレクションに天気が無ければ、積んだときのすべりやすさから。決定 95）
+                        colorsOf = { part, grip ->
+                            val repo = app.partRepository
+                            PiecePalette.colors(repo.weatherOf(part.id)?.sky ?: grip.shownSky, Daypart.of(part, repo.placeOf(part.id)?.startedAt)).toPartColors()
+                        },
+                    )
+                }
+            }
+        },
+    )
     // 「置き直す」の確かめの窓を出しているか（決定 86）
     var confirmingRedo by rememberSaveable { mutableStateOf(false) }
     val repository = app.partRepository

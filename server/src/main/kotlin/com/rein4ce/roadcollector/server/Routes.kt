@@ -41,6 +41,7 @@ import kotlinx.coroutines.withContext
  *   GET  /towers/{id}          共有ページ（HTML）。Accept: application/json なら JSON（ownerId は null にして返す）。どの遊び方のタワーでも
  *   GET  /towers/{id}/image.svg  タワーの絵（SVG）。共有ページの中に描く
  *   GET  /towers/{id}/image.png  タワーの絵（PNG、1200×630）。共有ページの og:image（LINE / X のプレビュー）
+ *   GET  /fonts/share-rounded.woff  共有ページの字体（決定 95）
  *
  *   POST /parts/name           パーツに名前を付ける（Gemini）→ { name }。失敗は 503。PartRoutes.kt
  *   POST /nickname             ニックネームを考える（Gemini）→ { name }。失敗は 503。PartRoutes.kt
@@ -130,6 +131,13 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
         call.respondText(TowerSvg.render(tower), ContentType.Image.SVG)
     }
 
+    // 共有ページの字体（このページで使う字だけを切り出したもの。決定 95）。中身は変わらないので、長くキャッシュさせる
+    get(SharePage.FONT_PATH) {
+        if (call.overLimit(limits.fontFile)) return@get
+        call.response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
+        call.respondBytes(SHARE_FONT, ContentType("font", "woff"))
+    }
+
     // 共有ページの og:image 用。LINE / X は SVG を読まないので PNG。タワーは保存後に変わらないのでキャッシュさせる。
     // GET だけで HEAD には応えない（AutoHeadResponse は入れていない）ので、確認は `curl -I` ではなく GET で行う
     get("/towers/{id}/image.png") {
@@ -145,6 +153,11 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
         call.response.header(HttpHeaders.CacheControl, "public, max-age=86400")
         call.respondBytes(png, ContentType.Image.PNG)
     }
+}
+
+/** 共有ページの字体（tools/subset_share_font.py で作り、resources に置いたもの）。起動のときに 1 回だけ読む */
+private val SHARE_FONT: ByteArray by lazy {
+    requireNotNull(object {}.javaClass.getResourceAsStream("/fonts/share-rounded.woff")) { "share font is missing" }.use { it.readBytes() }
 }
 
 /**
