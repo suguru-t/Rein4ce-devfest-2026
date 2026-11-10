@@ -326,7 +326,7 @@ fun StackScreen(
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 StackCanvas(vm = vm, bonusShow = bonusShow, colorsOf = pieceColorsOf, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
-                // 終わったときの天気のボーナスの倍率（札が全部出たあと、最後に白い札で出す。決定 68・91）
+                // 終わったときの天気のボーナスの倍率（札が全部出たあと、最後に白い札で出す。決定 68・92）
                 BonusBanner(bonusShow, compact, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
                 // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
                 // （段を伸ばすと塔を描く所が狭くなるため）
@@ -726,8 +726,9 @@ private fun DrawScope.drawBonusTag(tag: BonusTag, bottomCenter: Offset, pop: Flo
 
 /**
  * 終わったときの天気のボーナスの倍率（「天気ボーナス ×1.30」）。キャンバスの上のまん中に、札が全部出て足し終わったあと、
- * 最後に合計をポンと出す（決定 68・91）。前は最初の札と一緒に出て数え上がり、字も方眼紙の上に縁取りだけで、天気の背景や塔と重なると見づらかった。
- * 白い紙の札（終わりのカードの「やり直す」などと同じ、遊び方の色の縁と下にのぞく側面）に、遊び方の色の太い丸ゴシックで書く。
+ * 最後に合計をポンと出す（決定 68・92）。前は最初の札と一緒に出て数え上がり、字も方眼紙の上に縁取りだけで、天気の背景や塔と重なると見づらかった。
+ * 白い紙の札（終わりのカードの「やり直す」などと同じ、縁と下にのぞく側面）に、太い丸ゴシックで書く。色は、終わりのカードの「天気ボーナス」の行と
+ * 情報の段の「ボーナス」と同じ青緑（天気のボーナスの字は青緑。決定 84。#145 の C のレビュー）。
  * ボーナスが無いとき・札が出終わる前は出さない
  */
 @Composable
@@ -735,7 +736,8 @@ private fun BonusBanner(show: BonusShowState, compact: Boolean, modifier: Modifi
     if (!show.active) return
     val pop = show.timeline.bannerPop(show.elapsedMs)
     if (pop <= 0f) return
-    val ink = modeInkOr(Pop.TealLine)
+    // 天気のボーナスの字は、どの遊び方でも青緑（終わりのカードの行・情報の段の「ボーナス」とそろえる。決定 84）
+    val ink = Pop.TealLine
     val size = with(LocalDensity.current) { (if (compact) 18.dp else 22.dp).toSp() }
     Text(
         "天気ボーナス ${multiplierText(show.timeline.multiplier)}",

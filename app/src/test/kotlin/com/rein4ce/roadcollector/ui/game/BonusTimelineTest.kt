@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 終わったときの天気のボーナスの見せ方の時間割（決定 68・91）：札を 1 つずつ出し、最後に合計を出してから、ゆっくり大きくする */
+/** 終わったときの天気のボーナスの見せ方の時間割（決定 68・92）：札を 1 つずつ出し、最後に合計を出してから、ゆっくり大きくする */
 class BonusTimelineTest {
 
     @Test
