@@ -147,6 +147,19 @@ class GalleryOrderTest {
     }
 
     @Test
+    fun `メダルの順位：カードの文と同じ高い順の並びで、自分のいちばん良い順位。無ければ null（決定 82）`() {
+        val loaded = TowerGallery.State.Loaded(listOf(tower("a", 3f), tower("b", 2f), tower("c", 1f), tower("d", 2.5f)))
+        val order = heightOrder(loaded, TowerMode.NORMAL)
+        assertEquals(listOf("a", "d", "b", "c"), order.map { it.id })
+        assertEquals(3, myRank(order) { it.id == "b" })
+        assertEquals("自分のタワーが 2 つあれば、良いほう", 2, myRank(order) { it.id == "b" || it.id == "d" })
+        assertEquals(null, myRank(order) { false })
+        assertEquals("読み込めていなければ並びは空", emptyList<TowerSummary>(), heightOrder(TowerGallery.State.Loading, TowerMode.NORMAL))
+        // カードの文も同じ並びの順位
+        assertEquals("あなたの最高 2.00 m・3 位", homeRecord(loaded, TowerMode.NORMAL, order) { it.id == "b" })
+    }
+
+    @Test
     fun `ホームの行のようす：自分のがあれば最高と順位、無ければ 1 番、3 分チャレンジは今の決まりだけ（決定 77）`() {
         val loaded = TowerGallery.State.Loaded(listOf(tower("a", 3f), tower("b", 2f), tower("c", 1f)))
         assertEquals("あなたの最高 2.00 m・2 位", homeRecord(loaded, TowerMode.NORMAL) { it.id == "b" })

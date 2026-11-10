@@ -68,7 +68,7 @@ import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
 import com.rein4ce.roadcollector.ui.common.artBars
 import com.rein4ce.roadcollector.ui.common.artSlab
-import com.rein4ce.roadcollector.ui.common.bar
+import com.rein4ce.roadcollector.ui.common.artBar
 import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -258,11 +258,11 @@ private fun StackArt(modifier: Modifier = Modifier) {
         // 横たわった板
         artSlab(Pop.Yellow, x = 30f, y = 84f, w = 116f, h = 14f, r = 4f, u = u)
         // U（2 本の脚と下の棒）
-        artBars(Pop.Teal, u, bar(38f, 50f, 11f, 34f), bar(76f, 50f, 11f, 34f), bar(38f, 73f, 49f, 11f))
+        artBars(Pop.Teal, u, artBar(38f, 50f, 11f, 34f), artBar(76f, 50f, 11f, 34f), artBar(38f, 73f, 49f, 11f))
         // L（縦の棒と、下の横の棒）
-        artBars(navy, u, bar(100f, 46f, 11f, 38f), bar(100f, 73f, 36f, 11f))
+        artBars(navy, u, artBar(100f, 46f, 11f, 38f), artBar(100f, 73f, 36f, 11f))
         // 上から落ちてくるクランク（段になった 3 本の棒）
-        artBars(Pop.Orange, u, bar(66f, 8f, 30f, 11f), bar(85f, 8f, 11f, 26f), bar(85f, 23f, 30f, 11f))
+        artBars(Pop.Orange, u, artBar(66f, 8f, 30f, 11f), artBar(85f, 8f, 11f, 26f), artBar(85f, 23f, 30f, 11f))
     }
 }
 
@@ -312,20 +312,20 @@ internal fun ModeRow(
         Box(modifier = Modifier.width(BLOCK_COLUMN), contentAlignment = Alignment.Center) {
             if (leading != null) {
                 leading()
-                return@Box
-            }
-            // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .graphicsLayer { rotationZ = look.tiltDeg }
-                    .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
-                    .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
-            ) {
-                val iconModifier = Modifier.size(ICON_SIZE)
-                when (val icon = look.icon) {
-                    null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
-                    else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+            } else {
+                // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .graphicsLayer { rotationZ = look.tiltDeg }
+                        .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
+                        .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
+                ) {
+                    val iconModifier = Modifier.size(ICON_SIZE)
+                    when (val icon = look.icon) {
+                        null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
+                        else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+                    }
                 }
             }
         }

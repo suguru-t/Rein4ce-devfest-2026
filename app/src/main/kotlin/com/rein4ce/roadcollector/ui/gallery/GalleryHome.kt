@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -41,19 +42,18 @@ import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.artBars
 import com.rein4ce.roadcollector.ui.common.artSlab
 import com.rein4ce.roadcollector.ui.common.artStar
-import com.rein4ce.roadcollector.ui.common.bar
+import com.rein4ce.roadcollector.ui.common.artBar
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.game.MODE_LEADING_DEPTH
 import com.rein4ce.roadcollector.ui.game.MODE_LEADING_SIZE
 import com.rein4ce.roadcollector.ui.game.ModeRow
 import com.rein4ce.roadcollector.ui.game.modeBlockFace
-import com.rein4ce.roadcollector.ui.game.PlayMode
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
  * 「みんな」のホーム（決定 77）。みちをつむの、遊び方を選ぶ画面（ui/game/ModeSelect.kt の ModeSelectScreen）と同じ組み方：
- * - 上の部分：積み木で作った塔の絵（[RankingArt]）、大きな画面名「みんなのタワー」（ほかの画面と同じ積み木）、「どのランキングを見に行く？」
- * - 下に、遊び方の行（みちをつむと同じ行。左に色の積み木とアイコン、右に紙のカード：名前・一言・そのランキングのようす）
+ * - 上の部分：表彰台の絵（[RankingArt]。決定 82）、大きな画面名「みんなのタワー」（ほかの画面と同じ積み木）、「どのランキングを見に行く？」
+ * - 下に、遊び方の行（みちをつむと同じ行。左に遊び方の色のメダルと自分の順位（[RankMedal]）、右に紙のカード：名前・一言・そのランキングのようす）
  * 行を押すと、その遊び方のランキング（断面図と「ランキングを見る」「あなたのタワー」）へ行き、「‹ 戻る」でここに戻る。
  * 行はふつうの大きさのままいちばん下に置き、余った高さは上の部分を大きくして埋める（[HeaderFillLayout]）
  *
@@ -80,13 +80,24 @@ internal fun GalleryHome(
                         Column(verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
                             TowerMode.entries.forEach { mode ->
                                 val play = playModeOf(mode)
+                                val state = stateOf(mode)
+                                // 高い順の並びは 1 回だけ作り、カードの文とメダルの順位で同じものを使う
+                                val order = heightOrder(state, mode)
+                                val rank = if (state is TowerGallery.State.Loaded) myRank(order, isMine) else null
                                 ModeRow(
                                     mode = play,
                                     note = rankingNote(mode),
-                                    record = homeRecord(stateOf(mode), mode, isMine),
+                                    record = homeRecord(state, mode, order, isMine),
                                     onClick = { onPick(mode) },
-                                    // みちをつむの四角い積み木（アイコン）の代わりに、遊び方の色のメダルに自分の順位（決定 82）
-                                    leading = { RankMedal(modeBlockFace(play), myRank(stateOf(mode), mode, isMine)) },
+                                    // みちをつむの四角い積み木（アイコン）の代わりに、遊び方の色のメダルに自分の順位（決定 82）。
+                                    // 通常と 90 秒チャレンジはカードの文も順位を言うので、読み上げはカードだけ。毎日 1 つずつ積むのカードは連続日数なので、メダルが順位を言う
+                                    leading = {
+                                        RankMedal(
+                                            face = modeBlockFace(play),
+                                            rank = rank,
+                                            spoken = if (mode == TowerMode.DAILY && rank != null) "高さの順位は $rank 位" else null,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -132,55 +143,73 @@ private fun HomeTitle(scale: Float) {
 private fun RankingArt(modifier: Modifier = Modifier) {
     // 段の色は積む画面の台と同じ（ダークでは、暗い地の上でも見える明るさ）
     val step = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
+    // 段の数字：ライトは白。ダークの明るい段の上では白が読みにくい（3.9:1）ので、暗い紙の色（4.5:1）
+    val numberColor = if (Fieldbook.dark) Fieldbook.Paper else Pop.Letter
     val measurer = rememberTextMeasurer()
-    val numberStyle = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, color = Pop.Letter)
-    Canvas(modifier = modifier.clearAndSetSemantics {}) {
-        // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる（みちをつむの絵と同じ）
-        val u = size.width / 176f
-        // 段：左が 2 位・まん中が 1 位・右が 3 位。段の数字は白
-        // (順位, 左, 上, 幅, 高さ)。数字は段の上のほう（高い段でも上から 12 の所まで）に置く
-        val steps = listOf(
-            floatArrayOf(1f, 65f, 70f, 46f, 40f),
-            floatArrayOf(2f, 17f, 82f, 46f, 28f),
-            floatArrayOf(3f, 113f, 92f, 46f, 18f),
-        )
-        for (st in steps) {
-            val rank = st[0].toInt()
-            artSlab(step, x = st[1], y = st[2], w = st[3], h = st[4], r = 3f, u = u)
-            val text = measurer.measure("$rank", numberStyle.copy(fontSize = ((if (rank == 1) 15f else 12f) * u).toSp()))
-            val cx = (st[1] + st[3] / 2) * u
-            val cy = (st[2] + minOf(st[4] / 2, 12f)) * u
-            drawText(text, topLeft = Offset(cx - text.size.width / 2f, cy - text.size.height / 2f))
-        }
-        // 1 位の塔（まん中の段の上）：黄の板・青緑の橋・オレンジの L、てっぺんに星
-        artSlab(Pop.Yellow, x = 70f, y = 60f, w = 36f, h = 10f, r = 3f, u = u)
-        artBars(Pop.Teal, u, bar(74f, 43f, 8f, 17f), bar(94f, 43f, 8f, 17f), bar(74f, 43f, 28f, 8f))
-        artBars(Pop.Orange, u, bar(80f, 22f, 8f, 21f), bar(80f, 35f, 18f, 8f))
-        artStar(Pop.Yellow, cx = 84f, cy = 12f, r = 8.5f, u = u)
-        // 2 位の塔（左の段の上）：オレンジの板・黄の四角・青緑の短い棒
-        artSlab(Pop.Orange, x = 24f, y = 72f, w = 32f, h = 10f, r = 3f, u = u)
-        artSlab(Pop.Yellow, x = 30f, y = 56f, w = 20f, h = 16f, r = 3f, u = u)
-        artBars(Pop.Teal, u, bar(34f, 48f, 12f, 8f))
-        // 3 位の塔（右の段の上）：青緑の板・オレンジの四角
-        artSlab(Pop.Teal, x = 120f, y = 84f, w = 32f, h = 8f, r = 3f, u = u)
-        artSlab(Pop.Orange, x = 127f, y = 70f, w = 18f, h = 14f, r = 3f, u = u)
-    }
+    // 段の数字の大きさを測るのは、大きさが変わったときだけ（描くたびに測らない）
+    Spacer(
+        modifier = modifier.clearAndSetSemantics {}.drawWithCache {
+            // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる（みちをつむの絵と同じ）
+            val u = size.width / 176f
+            // 段：(順位, 左, 上, 幅, 高さ)。左が 2 位・まん中が 1 位・右が 3 位
+            val steps = listOf(
+                floatArrayOf(1f, 65f, 70f, 46f, 40f),
+                floatArrayOf(2f, 17f, 82f, 46f, 28f),
+                floatArrayOf(3f, 113f, 92f, 46f, 18f),
+            )
+            val numbers = steps.map { st ->
+                val rank = st[0].toInt()
+                val style = TextStyle(fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, color = numberColor, fontSize = ((if (rank == 1) 15f else 12f) * u).toSp())
+                measurer.measure("$rank", style)
+            }
+            onDrawBehind {
+                steps.forEachIndexed { k, st ->
+                    artSlab(step, x = st[1], y = st[2], w = st[3], h = st[4], r = 3f, u = u)
+                    // 数字は段の上のほう（高い段でも上から 12 の所まで）
+                    val text = numbers[k]
+                    val cx = (st[1] + st[3] / 2) * u
+                    val cy = (st[2] + minOf(st[4] / 2, 12f)) * u
+                    drawText(text, topLeft = Offset(cx - text.size.width / 2f, cy - text.size.height / 2f))
+                }
+                // 1 位の塔（まん中の段の上）：黄の板・青緑の橋・オレンジの L、てっぺんに星
+                artSlab(Pop.Yellow, x = 70f, y = 60f, w = 36f, h = 10f, r = 3f, u = u)
+                artBars(Pop.Teal, u, artBar(74f, 43f, 8f, 17f), artBar(94f, 43f, 8f, 17f), artBar(74f, 43f, 28f, 8f))
+                artBars(Pop.Orange, u, artBar(80f, 22f, 8f, 21f), artBar(80f, 35f, 18f, 8f))
+                artStar(Pop.Yellow, cx = 84f, cy = 12f, r = 8.5f, u = u)
+                // 2 位の塔（左の段の上）：オレンジの板・黄の四角・青緑の短い棒
+                artSlab(Pop.Orange, x = 24f, y = 72f, w = 32f, h = 10f, r = 3f, u = u)
+                artSlab(Pop.Yellow, x = 30f, y = 56f, w = 20f, h = 16f, r = 3f, u = u)
+                artBars(Pop.Teal, u, artBar(34f, 48f, 12f, 8f))
+                // 3 位の塔（右の段の上）：青緑の板・オレンジの四角
+                artSlab(Pop.Teal, x = 120f, y = 84f, w = 32f, h = 8f, r = 3f, u = u)
+                artSlab(Pop.Orange, x = 127f, y = 70f, w = 18f, h = 14f, r = 3f, u = u)
+            }
+        },
+    )
 }
 
 /**
  * 行の左に置くメダル（決定 82）：遊び方の色の丸い積み木（下に側面がのぞく）に、高い順での自分の順位を大きな白い字で。
- * まだ自分のタワーが無ければ「—」。上に短い 2 本のリボンを付ける。
- * みちをつむの行は四角い積み木にアイコンなので、丸いメダルに順位で、どちらの画面か見分けられるようにした（B の希望）
+ * まだ自分のタワーが無ければ「—」。上に細い V のリボンがのぞく。
+ * みちをつむの行は四角い積み木にアイコンなので、丸いメダルに順位で、どちらの画面か見分けられるようにした（B の希望）。
+ * 字は丸に収めるため、端末の文字の大きさの設定では大きくしない（「‹ 戻る」と同じく dp で決める。#136 の A のレビュー）
+ *
+ * @param spoken 読み上げで伝えること。右のカードがもう順位を言うときは null（2 回言わない）
  */
 @Composable
-private fun RankMedal(face: Color, rank: Int?) {
+private fun RankMedal(face: Color, rank: Int?, spoken: String?) {
     val ribbon = Pop.side(face)
-    val spoken = if (rank != null) "あなたは $rank 位" else "まだ順位はありません"
+    val density = LocalDensity.current
+    // 数字はけた数で小さくする（4 けたまで丸に入る）。「位」と「—」も dp で決める
+    val digits = rank?.toString()?.length ?: 0
+    val numberSize = with(density) { (if (digits <= 2) 26.dp else if (digits == 3) 18.dp else 14.dp).toSp() }
+    val unitSize = with(density) { 12.dp.toSp() }
+    val dashSize = with(density) { 22.dp.toSp() }
     Box(
         contentAlignment = Alignment.BottomCenter,
         modifier = Modifier
             .size(width = MODE_LEADING_SIZE, height = MODE_LEADING_SIZE + MODE_LEADING_DEPTH)
-            .clearAndSetSemantics { contentDescription = spoken },
+            .clearAndSetSemantics { if (spoken != null) contentDescription = spoken },
     ) {
         // リボン：上の端から、メダルの裏のまん中へ下りる細い V の 2 本の帯（メダルの上に、首にかける帯がのぞく）
         Canvas(modifier = Modifier.matchParentSize()) {
@@ -207,19 +236,18 @@ private fun RankMedal(face: Color, rank: Int?) {
                 .popBlock(face = face, corner = MEDAL_SIZE / 2, depth = MODE_LEADING_DEPTH),
         ) {
             if (rank == null) {
-                Text("—", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 22.sp, color = Pop.Letter)
+                Text("—", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = dashSize, color = Pop.Letter)
             } else {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         "$rank",
                         fontFamily = Pop.Rounded,
                         fontWeight = FontWeight.Black,
-                        // 3 けたは少し小さく（メダルに入るように）
-                        fontSize = if (rank >= 100) 18.sp else 26.sp,
+                        fontSize = numberSize,
                         color = Pop.Letter,
                         maxLines = 1,
                     )
-                    Text("位", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Pop.Letter, modifier = Modifier.padding(bottom = 3.dp))
+                    Text("位", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = unitSize, color = Pop.Letter, modifier = Modifier.padding(bottom = 3.dp))
                 }
             }
         }
@@ -229,12 +257,13 @@ private fun RankMedal(face: Color, rank: Int?) {
 /** メダルの丸の大きさ（行の左の積み木より一回り小さく、上にリボンがのぞく場所を残す） */
 private val MEDAL_SIZE = 52.dp
 
-/** 高い順での自分のいちばん良い順位（1 から）。読み込めていない・自分のタワーが無いときは null */
-internal fun myRank(state: TowerGallery.State, mode: TowerMode, isMine: (TowerSummary) -> Boolean): Int? {
-    if (state !is TowerGallery.State.Loaded) return null
-    val i = sortTowers(rankedTowers(state, mode), TowerSort.HEIGHT).indexOfFirst(isMine)
-    return if (i < 0) null else i + 1
-}
+/** 今の決まりの記録を高い順に並べたもの（読み込めていなければ空）。カードの文（[homeRecord]）とメダル（[myRank]）で同じ並びを使う */
+internal fun heightOrder(state: TowerGallery.State, mode: TowerMode): List<TowerSummary> =
+    sortTowers(rankedTowers(state, mode), TowerSort.HEIGHT)
+
+/** [order]（[heightOrder]）での自分のいちばん良い順位（1 から）。自分のタワーが無いときは null */
+internal fun myRank(order: List<TowerSummary>, isMine: (TowerSummary) -> Boolean): Int? =
+    order.indexOfFirst(isMine).takeIf { it >= 0 }?.plus(1)
 
 /** ホームの行の一言（そのランキングで何を比べるか） */
 private fun rankingNote(mode: TowerMode): String = when (mode) {
@@ -254,13 +283,18 @@ internal fun rankedTowers(state: TowerGallery.State, mode: TowerMode): List<Towe
  * ホームの行に出す、そのランキングのようす（決定 77）。自分のタワーがあれば自分の最高と順位（毎日は自分の塔と連続日数）、
  * 無ければ 1 番の高さと数。読み込み中・つながらない・まだ無い、のときはその一言
  */
-internal fun homeRecord(state: TowerGallery.State, mode: TowerMode, isMine: (TowerSummary) -> Boolean): String {
+internal fun homeRecord(
+    state: TowerGallery.State,
+    mode: TowerMode,
+    order: List<TowerSummary> = heightOrder(state, mode),
+    isMine: (TowerSummary) -> Boolean,
+): String {
     when (state) {
         TowerGallery.State.Loading -> return "読み込み中…"
         is TowerGallery.State.Error -> return "サーバに接続できません"
         is TowerGallery.State.Loaded -> Unit
     }
-    val towers = sortTowers(rankedTowers(state, mode), TowerSort.HEIGHT)
+    val towers = order
     val top = towers.firstOrNull() ?: return "まだタワーがありません"
     val mineIndex = towers.indexOfFirst(isMine)
     if (mineIndex < 0) return "1 位 %.2f m・全部で %d 個".format(top.height, towers.size)

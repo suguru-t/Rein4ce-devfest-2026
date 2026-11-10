@@ -29,7 +29,7 @@ internal fun DrawScope.artBars(color: Color, u: Float, vararg bars: FloatArray) 
 }
 
 /** 棒 1 本ぶん（左, 上, 幅, 高さ）。[artBars] に渡す */
-internal fun bar(x: Float, y: Float, w: Float, h: Float): FloatArray = floatArrayOf(x, y, w, h)
+internal fun artBar(x: Float, y: Float, w: Float, h: Float): FloatArray = floatArrayOf(x, y, w, h)
 
 /** 5 つの角の星（1 番の印）。まん中 ([cx], [cy])・外の半径 [r]（絵の目盛り）。ほかの積み木と同じく面だけで、傾けない */
 internal fun DrawScope.artStar(color: Color, cx: Float, cy: Float, r: Float, u: Float) {
