@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
@@ -50,6 +52,8 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.ProvideAppHaptics
 import com.rein4ce.roadcollector.ui.common.zoomInFrom
 import com.rein4ce.roadcollector.ui.common.zoomOrigin
+import com.rein4ce.roadcollector.ui.common.LocalPageWashes
+import com.rein4ce.roadcollector.ui.common.PageWashes
 import com.rein4ce.roadcollector.ui.gallery.GalleryScreen
 import com.rein4ce.roadcollector.ui.game.StackTab
 import com.rein4ce.roadcollector.ui.inventory.InventoryScreen
@@ -256,7 +260,13 @@ fun AppNav(collectRequests: Int = 0) {
 @Composable
 private fun TabPage(padding: PaddingValues, onBack: () -> Unit, content: @Composable () -> Unit) {
     BackHandler(onBack = onBack)
-    Box(modifier = Modifier.fillMaxSize().padding(padding)) { content() }
+    // 画面が伝えた下地の色（「みんな」の遊び方の色。決定 81）は、端末のバーとタブバーの裏まで含めた画面全体に敷く
+    val washes = remember { PageWashes() }
+    Box(modifier = Modifier.fillMaxSize().drawBehind { washes.current?.let { drawRect(it) } }) {
+        CompositionLocalProvider(LocalPageWashes provides washes) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) { content() }
+        }
+    }
 }
 
 /** 画面を切り替えるときに、うすく入れ替わる時間 [ms]（Navigation の決まりの値と同じ） */

@@ -400,9 +400,13 @@ class StackViewModel(
      * - パーツが 1 つでも落ちたら終わり（[gameOver]）。狙っている間に塔が崩れて落ちたときも、狙っていたパーツは置かずに終わる。
      *   どちらも、塔全体が止まるのを待ってから結果を固定する（止まらなければ時間切れで [Phase.Unresolved]）
      * - 終わったあと（[Phase.Finished] / [Phase.Unresolved]）は物理を進めない。結果と画面の塔が変わらない
+     * - 狙っている間（[Phase.Placing]）も、塔が止まっていれば物理を進めず、図形（[shapes]）も作り直さない。
+     *   前は毎コマ作り直していたので、置いたままでも画面を 1 秒に約 60 回描き直していた（#4 の A のコメント）。
+     *   待ちの上限で次へ進んで塔がまだ動いているときは、今までどおり進める（崩れて落ちたら終わりにするため）
      */
     fun tick(dtSeconds: Double) {
         if (phase == Phase.Idle || phase == Phase.Finished || phase == Phase.Unresolved) return
+        if (phase == Phase.Placing && world.isSettled()) return
         val dt = dtSeconds.coerceIn(0.0, MAX_FRAME_SECONDS)
         world.step(dt)
         val fallen = world.removeFallen()

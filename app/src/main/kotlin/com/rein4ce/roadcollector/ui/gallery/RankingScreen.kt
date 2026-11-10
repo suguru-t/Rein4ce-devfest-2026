@@ -38,10 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -52,7 +49,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
@@ -62,9 +58,12 @@ import com.rein4ce.roadcollector.ui.inventory.dashedOutline
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.rein4ce.roadcollector.ui.common.PageWash
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -76,7 +75,7 @@ import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
  * [mineOnly] なら「あなたのタワー」：自分のタワーだけを同じ形で並べる。番号はその中での順番（1、2、3）で、
  * 「最長」「最多」の札は付けない（全部の中での 1 番ではないので）。送っていなければ案内。
  * 見た目は「みんな」の最初の画面と同じポップなブロック（ui/common/Pop.kt）。
- * 順位の積み木（1〜3 位は金・銀・銅）、タワーの絵（一覧の中で同じ縮尺）、高さ（主役）、1 番の値を 100% にした横棒（物差しの色）、パーツ数・作者・日時。
+ * 順位の積み木（1〜3 位は金・銀・銅）、タワーの絵（一覧の中で同じ縮尺）、高さ（主役）、1 番の値を 100% にした横棒（遊び方の色。決定 81）、パーツ数・作者・日時。
  * 1 番には「最長」「最多」の札、自分のタワーには「あなた」の札。カードを押すと紙片（TowerSheet）が開く。
  * 読み込み中・取り直せなかったときの知らせと、リロードの印は「みんな」の最初の画面と同じ（[GalleryStatusRow]）
  *
@@ -91,7 +90,7 @@ internal fun RankingScreen(
     mineOnly: Boolean,
     sort: TowerSort,
     onSort: (TowerSort) -> Unit,
-    onBack: () -> Unit,
+    onBack: (center: Offset) -> Unit,
     onOpen: (TowerSummary) -> Unit,
 ) {
     var page by rememberSaveable { mutableIntStateOf(0) }
@@ -122,15 +121,16 @@ internal fun RankingScreen(
     }
 
     // 「みんな」の最初の画面と同じ余白・同じ見出し（積み木）。上に「‹ 戻る」の黄色い札、その下に画面名と個数とリロード
-    // 遊び方ごとの色合い（決定 81。断面図の画面と同じ色を薄く敷き、札・横棒・1 番の札をこの色でそろえる）
+    // 遊び方ごとの色合い（決定 81。断面図の画面と同じ色を薄く敷き、札・横棒・1 番の札・めくる札をこの色でそろえる）
     val theme = galleryTheme(gallery.mode)
+    PageWash(theme.wash)
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(theme.wash)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
+        // 積む画面と同じ「‹ 戻る」（ui/common/PopBack.kt。決定 80）。戻った先（遊び方のランキング）は、ここから大きくなって出てくる
+        PopBackButton(onBack, small = isNarrowScreen(), onClickLabel = "遊び方のランキングに戻る")
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
@@ -139,10 +139,10 @@ internal fun RankingScreen(
                 // どの遊び方のランキングか（決定 77）
                 "${gallery.mode.shortLabel}・" + if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 modifier = Modifier.padding(end = 4.dp),
             )
-            PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
+            PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() }, face = theme.face)
         }
         // 読み込み中・つながらない・取り直せなかった、のときの知らせ（最初の画面と同じ）
         GalleryStatusRow(gallery)
@@ -158,8 +158,8 @@ internal fun RankingScreen(
                     .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
                     .padding(14.dp),
             ) {
-                Text("まだ送っていません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("${howToSend(gallery.mode)}、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("まだ送っていません。", fontFamily = Pop.Rounded, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+                Text("${howToSend(gallery.mode)}、ここに並びます。", fontFamily = Pop.Rounded, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
             }
         }
         LazyColumn(
@@ -188,18 +188,18 @@ internal fun RankingScreen(
             }
         }
         if (pages > 1) {
-            PagerRow(page = current, pages = pages, total = listed.size, onPage = { page = it })
+            PagerRow(page = current, pages = pages, total = listed.size, onPage = { page = it }, theme = theme)
         }
     }
 }
 
 /**
- * 並びの切り替え。選択肢を横に並べ、1 つずつ丸いブロックの札にする。物差しごとに色を持ち（高い順はオレンジ、多い順は青緑、
- * 新しい順は紺。見出しの数字や横棒と同じ色）、選んでいる札はその色で塗って白い字・下に側面がのぞく。選んでいない札は白い面に色の縁。
+ * 並びの切り替え。選択肢を横に並べ、1 つずつ丸いブロックの札にする。色は遊び方の色（[theme]。見出しの数字や横棒と同じ。決定 81）で、
+ * 選んでいる札はその色で塗って白い字・下に側面がのぞく。選んでいない札は白い面に色の字と縁。
  * 読み上げではラジオボタンの組として伝える。押し心地（#76）はほかのボタンとそろえ、札の形だけが縮む（波紋は出さない）
  */
 @Composable
-internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme? = null) {
+internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -226,16 +226,15 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     s.label,
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    // 「みんな」の遊び方の画面では、物差しごとの色ではなく遊び方の色にそろえる（決定 81）
-                    color = if (selected) Pop.Letter else theme?.ink ?: sortInk(s),
+                    fontSize = 15.sp,
+                    color = if (selected) Pop.Letter else theme.ink,
                     maxLines = 1,
                     modifier = Modifier
                         .popBlock(
-                            face = if (selected) theme?.face ?: sortFace(s) else Fieldbook.Card,
+                            face = if (selected) theme.face else Fieldbook.Card,
                             corner = 50.dp,
                             depth = if (selected) 4.dp else 2.dp,
-                            edge = if (selected) null else theme?.ink ?: sortInk(s),
+                            edge = if (selected) null else theme.ink,
                         )
                         .padding(horizontal = 16.dp, vertical = 6.dp),
                 )
@@ -300,12 +299,12 @@ private fun TowerCard(
                     // 単位は数字の 6 割ほど（見出しの「2.68 m」と同じ釣り合い）。数字の下端にそろえる
                     Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
                 }
-                // 全部の中で 1 番のタワーには、物差しに合わせた札（高い順は「最長」、多い順は「最多」）。記録の札は紺
+                // 全部の中で 1 番のタワーには、物差しに合わせた札（高い順は「最長」、多い順は「最多」）。札は遊び方の色
                 if (rank == 1 && showTopTag) PopTag(sort.topLabel, face = theme.face, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
                 // 自分のタワーには「あなた」の札（自分の色＝道のオレンジを、白い字が読める濃さにしたもの）
                 if (mine) PopTag("あなた", face = Pop.OrangeDeep, tiltDeg = 3f, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
             }
-            // 物差しの横棒：この一覧の 1 番を 100% にする（高い順・新しい順は高さ、多い順はパーツ数）。色は物差しの色
+            // 物差しの横棒：この一覧の 1 番を 100% にする（高い順・新しい順は高さ、多い順はパーツ数）。色は遊び方の色
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Fieldbook.GridMajor, RoundedCornerShape(3.dp))) {
                 Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(6.dp).background(theme.face, RoundedCornerShape(3.dp)))
             }
@@ -377,7 +376,7 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
             // 小さな積み木（傾けた四角）の印
             Box(modifier = Modifier.graphicsLayer { rotationZ = 12f }.size(10.dp).clip(RoundedCornerShape(3.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
-            SkyText(status.text, color = Fieldbook.Muted, fontSize = 12.sp)
+            SkyText(status.text, color = Fieldbook.Muted, fontSize = 13.sp)
         }
     }
 }
@@ -389,20 +388,20 @@ private data class StatusLine(val text: String, val color: Color)
  * それより多いときだけ出す。端のページでは、その向きのボタンを押せなくする
  */
 @Composable
-internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) {
+internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit, theme: GalleryTheme) {
     val first = page * PAGE_SIZE + 1
     val last = minOf((page + 1) * PAGE_SIZE, total)
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // めくれるときは黄色の札、端で押せないときは白い面に薄い縁
+        // めくれるときは遊び方の色の札（決定 81。前は黄色）、端で押せないときは白い面に薄い縁
         val canPrev = page > 0
         val canNext = page < pages - 1
         PopChip(
             "‹ 前の $PAGE_SIZE 個",
-            face = if (canPrev) Pop.Yellow else Fieldbook.Card,
-            text = if (canPrev) Pop.InkOnYellow else Fieldbook.Mark,
+            face = if (canPrev) theme.face else Fieldbook.Card,
+            text = if (canPrev) Pop.Letter else Fieldbook.Mark,
             edge = if (canPrev) null else Fieldbook.CardEdge,
             depth = if (canPrev) 3.dp else 1.dp,
             enabled = canPrev,
@@ -411,7 +410,7 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
         SkyText(
             "$first〜$last / $total",
             color = Fieldbook.Muted,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             maxLines = 1,
             modifier = Modifier
                 .weight(1f)
@@ -421,8 +420,8 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
         )
         PopChip(
             "次の $PAGE_SIZE 個 ›",
-            face = if (canNext) Pop.Yellow else Fieldbook.Card,
-            text = if (canNext) Pop.InkOnYellow else Fieldbook.Mark,
+            face = if (canNext) theme.face else Fieldbook.Card,
+            text = if (canNext) Pop.Letter else Fieldbook.Mark,
             edge = if (canNext) null else Fieldbook.CardEdge,
             depth = if (canNext) 3.dp else 1.dp,
             enabled = canNext,

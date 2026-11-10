@@ -35,21 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -63,8 +52,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.foundation.layout.sizeIn
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
@@ -74,11 +61,16 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.PopBackButton
+import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
-import com.rein4ce.roadcollector.ui.common.zoomOrigin
+import com.rein4ce.roadcollector.ui.common.artBars
+import com.rein4ce.roadcollector.ui.common.artSlab
+import com.rein4ce.roadcollector.ui.common.artBar
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
+import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -117,18 +109,16 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     // 「‹ 戻る」で選ぶ画面に戻るときだけ、選ぶ画面を「‹ 戻る」の所から大きくして出す（ホームの家のボタンと同じ。決定 78）。
-    // 値は大きくなり始める点（画面の中の割合）。端末の「戻る」では null にして、今までどおりすぐ切り替える
-    var selectZoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
-    // この画面（積むタブの中身）の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため）
-    val area = remember { arrayOf(Rect.Zero) }
+    // 端末の「戻る」では、今までどおりすぐ切り替える（ランキングと共通の仕組み。ui/common/ZoomFrom.kt）
+    val zoom = rememberBackZoom()
 
     // 選ぶ画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
     fun backToSelect(center: Offset?) {
-        selectZoomFrom = center?.let { zoomOrigin(it, area[0]) ?: SELECT_ZOOM_FALLBACK }
+        zoom.back(center)
         chosen = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { area[0] = it.boundsInRoot() }) {
+    Box(modifier = Modifier.fillMaxSize().then(zoom.area)) {
         when (mode) {
             PlayMode.NORMAL -> {
                 // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
@@ -176,16 +166,17 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
                 val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
                 val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
-                ZoomInFrom(selectZoomFrom) {
-                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
+                ZoomInFrom(zoom.from, zoom::settled) {
+                    // 先へ進むときは、戻るときの大きくする動きを終わったことにする（大きくなり終わる前に選んでも、次の「‹ 戻る」がずれない。#134 の A のレビュー）
+                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = {
+                        zoom.forward()
+                        chosen = it
+                    })
                 }
             }
         }
     }
 }
-
-/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、選ぶ画面が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
-private val SELECT_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
 
 /**
  * モードを選ぶ画面（ゲームのタイトル画面のように）。ホームと同じ組み方：
@@ -251,37 +242,31 @@ private fun ModeTitle(scale: Float) {
 }
 
 /**
- * 台に積んだパーツの絵（飾り。読み上げない）。積む画面と同じ紺の台に、題字の色の道のパーツを 3 つ：
- * 下に横たわった棒（黄）、その上に橋のような形（青緑）、いちばん上に少し傾いた L（オレンジ）。
- * パーツは、コレクションの道と同じく、濃い縁取りを描いてから本体を重ねる
+ * 積んでいる途中の絵（飾り。読み上げない）。積む画面と同じ紺の台に、形の違う道のパーツを積み、上からもう 1 つ落ちてくる：
+ * 台の上に横たわった板（黄）、その上に U（青緑）と L（紺）を並べ、上にクランク（オレンジ）が浮いている。
+ * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツは角の立った同じ太さの棒を組み合わせ、
+ * 板と台だけ角を少し丸め、傾けない（ui/common/TowerArt.kt。決定 82。前は縁取りのある丸い太線で、ホームと質感が違った）。
+ * 並びはホームの塔（板・橋・L を 1 本に積む）と同じにならないよう、横に並べて、落ちてくるパーツを足した（B の希望）
  */
 @Composable
 private fun StackArt(modifier: Modifier = Modifier) {
     // 台の色は積む画面と同じ（ダークでは、暗い地の上でも見える明るさ）
     val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
+    // 紺のパーツは、ダークでは台と同じ明るい紺にして、暗い地に沈ませない
+    val navy = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
     Canvas(modifier = modifier.clearAndSetSemantics {}) {
         // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる
         val u = size.width / 176f
-        fun p(x: Float, y: Float) = Offset(x * u, y * u)
-        val width = 10f * u
-        fun part(color: Color, points: List<Offset>) {
-            val path = Path().apply {
-                moveTo(points[0].x, points[0].y)
-                points.drop(1).forEach { lineTo(it.x, it.y) }
-            }
-            drawPath(path, Pop.side(color), style = Stroke(width + 3f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
         // 台
-        drawRoundRect(platform, topLeft = p(34f, 96f), size = Size(108f * u, 14f * u), cornerRadius = CornerRadius(2f * u))
-        // 横たわった棒
-        part(Pop.Yellow, listOf(p(46f, 87f), p(130f, 87f)))
-        // 橋のような形
-        part(Pop.Teal, listOf(p(60f, 79f), p(60f, 60f), p(114f, 60f), p(114f, 79f)))
-        // 少し傾いた L
-        rotate(degrees = -8f, pivot = p(92f, 38f)) {
-            part(Pop.Orange, listOf(p(70f, 51f), p(104f, 51f), p(104f, 22f)))
-        }
+        artSlab(platform, x = 22f, y = 98f, w = 132f, h = 12f, r = 3f, u = u)
+        // 横たわった板
+        artSlab(Pop.Yellow, x = 30f, y = 84f, w = 116f, h = 14f, r = 4f, u = u)
+        // U（2 本の脚と下の棒）
+        artBars(Pop.Teal, u, artBar(38f, 50f, 11f, 34f), artBar(76f, 50f, 11f, 34f), artBar(38f, 73f, 49f, 11f))
+        // L（縦の棒と、下の横の棒）
+        artBars(navy, u, artBar(100f, 46f, 11f, 38f), artBar(100f, 73f, 36f, 11f))
+        // 上から落ちてくるクランク（段になった 3 本の棒）
+        artBars(Pop.Orange, u, artBar(66f, 8f, 30f, 11f), artBar(85f, 8f, 11f, 26f), artBar(85f, 23f, 30f, 11f))
     }
 }
 
@@ -298,9 +283,18 @@ private fun dailyRecord(tower: DailyTower?): String =
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
  * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
  * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 77。一言だけ [note] で替える）
+ *
+ * @param leading 左の積み木の代わりに置くもの（「みんな」のホームでは、遊び方の色のメダルに自分の順位。決定 82）。
+ *   無ければ、モードの色の積み木にモードのアイコン。[MODE_LEADING_SIZE] の場所に置く
  */
 @Composable
-internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
+internal fun ModeRow(
+    mode: PlayMode,
+    record: String?,
+    onClick: () -> Unit,
+    note: String = mode.note,
+    leading: (@Composable () -> Unit)? = null,
+) {
     val look = lookOf(mode)
     val source = remember { MutableInteractionSource() }
     val action = if (mode.ready) {
@@ -320,18 +314,22 @@ internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note:
         modifier = Modifier.fillMaxWidth().then(action),
     ) {
         Box(modifier = Modifier.width(BLOCK_COLUMN), contentAlignment = Alignment.Center) {
-            // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .graphicsLayer { rotationZ = look.tiltDeg }
-                    .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
-                    .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
-            ) {
-                val iconModifier = Modifier.size(ICON_SIZE)
-                when (val icon = look.icon) {
-                    null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
-                    else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+            if (leading != null) {
+                leading()
+            } else {
+                // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .graphicsLayer { rotationZ = look.tiltDeg }
+                        .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
+                        .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
+                ) {
+                    val iconModifier = Modifier.size(ICON_SIZE)
+                    when (val icon = look.icon) {
+                        null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
+                        else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+                    }
                 }
             }
         }
@@ -404,71 +402,25 @@ private fun ModePlayPage(
     content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
-    val narrow = LocalConfiguration.current.screenWidthDp < NARROW_WIDTH_DP
+    val narrow = isNarrowScreen()
     content { compact ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BackButton(onBack, small = compact || narrow)
+            // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
+            PopBackButton(onBack, small = compact || narrow, onClickLabel = "遊び方を選ぶ画面に戻る")
             // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした
-            if (!compact) ModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
+            if (!compact) PopModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
         }
     }
 }
-
-/**
- * モードで遊ぶ画面の「‹ 戻る」（モードを選ぶ画面へ）。「みんな」のランキングと同じ黄色い積み木。
- * 前は小さな札（字 14sp・見た目の高さ 28dp ほど）で押しにくかったので（B の希望）、字を大きくし（16dp。[small] なら 15dp）、
- * 見た目の高さ 42dp・幅 88dp 以上の積み木にした（押せる範囲も同じ大きさ）。上の行に収めるため、文字の大きさの設定では大きくしない
- *
- * @param onBack 押したとき。ボタンのまん中（アプリの画面の左上から）を渡す。選ぶ画面はここから大きくなって出てくる（決定 78）
- * @param small 小さい画面か、幅の狭い端末。一回り小さくする
- */
-@Composable
-private fun BackButton(onBack: (center: Offset) -> Unit, small: Boolean) {
-    val source = remember { MutableInteractionSource() }
-    val size = with(LocalDensity.current) { (if (small) 15.dp else 16.dp).toSp() }
-    // 置かれた所のまん中。押したときに渡すだけなので、変わっても描き直さない（State にしない）
-    val center = remember { arrayOf(Offset.Unspecified) }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
-            .pressFeel(source)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る") { onBack(center[0]) }
-            .popBlock(face = Pop.Yellow, corner = 50.dp, depth = 3.dp)
-            .sizeIn(minWidth = if (small) 80.dp else 88.dp, minHeight = if (small) 40.dp else 42.dp)
-            .padding(horizontal = 14.dp),
-    ) {
-        Text("‹ 戻る", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.InkOnYellow, maxLines = 1)
-    }
-}
-
-/**
- * 遊んでいるモードの札（「通常」「90 秒チャレンジ」「毎日 1 つずつ積む」）。モードの色の積み木に白い字で、少し傾ける。
- * 「‹ 戻る」と同じ高さ・同じ字の大きさ（[small] なら一回り小さく）。押すものではないので、読み上げでは字だけ
- */
-@Composable
-private fun ModeTag(label: String, face: Color, small: Boolean) {
-    val size = with(LocalDensity.current) { (if (small) 14.dp else 16.dp).toSp() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .graphicsLayer { rotationZ = 2f }
-            .popBlock(face = face, corner = 10.dp, depth = 3.dp)
-            .heightIn(min = if (small) 36.dp else 42.dp)
-            .padding(horizontal = 8.dp),
-    ) {
-        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.Letter, maxLines = 1)
-    }
-}
-
-/** これより幅の狭い端末では、モードで遊ぶ画面の「‹ 戻る」と札を一回り小さくする [dp] */
-private const val NARROW_WIDTH_DP = 400
 
 /**
  * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き・遊んでいるときの札の色。
  * 色は題字の積み木の色から（通常＝オレンジ、3 分チャレンジ＝青緑、毎日＝紺）。アイコンの字の色はどれも題字の字と同じ
  */
 private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float, val tagFace: Color)
+
+/** モードの行の積み木の面の色（題字の積み木の色。「みんな」のホームのメダルもこの色にする） */
+internal fun modeBlockFace(mode: PlayMode): Color = lookOf(mode).face
 
 private fun lookOf(mode: PlayMode): ModeLook = when (mode) {
     PlayMode.NORMAL -> ModeLook(Pop.Orange, null, -4f, Pop.OrangeDeep)
@@ -485,7 +437,7 @@ private const val HEADER_SCALE_MAX = 1.8f
 private val HEADER_ROWS_GAP = 22.dp
 
 /**
- * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ほかの画面の見出しは 26dp。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
+ * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ランキングの一覧の見出しは 26dp、記録とコレクションは 30dp（決定 80）。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
  * はじめは 40dp で画面の幅いっぱいになり、B が大きすぎるとした）
  */
 private val ART_WIDTH = 176.dp
@@ -499,6 +451,12 @@ private val ROW_GAP = 14.dp
 private val BLOCK_COLUMN = 84.dp
 private val BLOCK_SIZE = 68.dp
 private val BLOCK_DEPTH = 5.dp
+
+/** 行の左の積み木の大きさ（[ModeRow] の leading も、この大きさに収める） */
+internal val MODE_LEADING_SIZE = BLOCK_SIZE
+
+/** 行の左の積み木の、下にのぞく側面の厚み（leading もそろえる） */
+internal val MODE_LEADING_DEPTH = BLOCK_DEPTH
 private val ICON_SIZE = 38.dp
 
 /** 右の紙のカードの、いちばん低い高さ（積み木と同じくらい） */

@@ -112,6 +112,8 @@ import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.foundation.LocalIndication
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.SCREEN_TITLE_BLOCK
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PopChip
@@ -180,10 +182,11 @@ fun InventoryScreen() {
         // 画面名（題字「ミチツミ」と同じ積み木。「みんな」と同じ形）と、並べ替え中は右に「並べ替え中」の札。
         // 行の高さは 48dp に決めておく（札が出たときに下の一覧がずれると、長押しでつかんだカードが指の下からずれるため）
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            BlockWord("コレクション")
+            // 画面名は、ほかの画面の名前より一回り大きく（B の希望。決定 80）
+            BlockWord("コレクション", blockDp = SCREEN_TITLE_BLOCK)
             Spacer(Modifier.weight(1f))
             if (editing) {
-                PopTag("並べ替え中", face = Pop.Navy, fontSize = 12.sp, tiltDeg = 2f)
+                PopTag("並べ替え中", face = Pop.Navy, fontSize = 14.sp, tiltDeg = 2f)
             }
         }
         // 歩いた距離の合計（見出しのメーター）。値は画面で持つ（下の見出しは一覧といっしょに動くので、見出しの中で持つと、
@@ -207,6 +210,8 @@ fun InventoryScreen() {
         // メーター・注記・並びと絞り込みは、一覧のいちばん上に置いて、カードといっしょに動かす。
         // 上に止めておくと、小さい画面や文字を大きくしている人の画面では、見出しだけで半分ほどになり、カードが 1 段も見えないため
         // （画面名と「選択」の行だけは止めておく）
+        // 幅の狭い端末か（カードの長さと日付を 2 行にする。カードごとに求めず、ここで 1 回だけ）
+        val narrowScreen = isNarrowScreen()
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             state = gridState,
@@ -237,7 +242,7 @@ fun InventoryScreen() {
                             },
                             fontFamily = Pop.Rounded,
                             fontWeight = FontWeight.Black,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             color = Fieldbook.Muted,
                             modifier = Modifier.weight(1f).wrapContentWidth(Alignment.Start),
                         )
@@ -249,7 +254,7 @@ fun InventoryScreen() {
                                 face = Fieldbook.Card,
                                 text = Pop.TealLine,
                                 edge = Pop.TealLine,
-                                fontSize = 12.sp,
+                                fontSize = 14.sp,
                                 depth = 2.dp,
                                 onClick = { repository.restoreMissingSamples() },
                             )
@@ -279,7 +284,7 @@ fun InventoryScreen() {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("当てはまるパーツがありません", fontSize = 14.sp, color = Fieldbook.Muted)
+                        Text("当てはまるパーツがありません", fontSize = 16.sp, color = Fieldbook.Muted)
                         PressTextButton(onClick = { settings.setPartFilter(filter.copy(sky = null, favoritesOnly = false)) }) {
                             Text("絞り込みを外す", color = Fieldbook.Survey, fontWeight = FontWeight.Bold)
                         }
@@ -303,6 +308,7 @@ fun InventoryScreen() {
                         // 隣どうしで逆向きに揺らすと、iPhone のようにばらばらに揺れて見える
                         jiggleDirection = if (index % 2 == 0) 1f else -1f,
                         reduceMotion = reduceMotion,
+                        narrowScreen = narrowScreen,
                         // タップ：普段は大きく見る。並べ替え中は何もしない
                         // （長押しで並べ替え中に入ったあとに届くタップもここで止まる）
                         onClick = { if (!editing) zoomedId = part.id },
@@ -514,7 +520,7 @@ internal fun CollectionMeter(
             },
             fontFamily = Pop.Rounded,
             fontWeight = FontWeight.Black,
-            fontSize = 13.sp,
+            fontSize = 15.sp,
             color = Fieldbook.Ink,
         )
     }
@@ -726,12 +732,12 @@ private fun DeleteDialog(part: Part, sky: Sky?, startedAt: Long?, onConfirm: () 
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 FieldbookPart(part, modifier = Modifier.size(132.dp), sky = sky, startedAt = startedAt)
-                Text(part.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(part.displayName, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
                     if (isSample) "見本は「見本を戻す」でいつでも戻せます。" else "記録したパーツは、削除すると元に戻せません。",
                     style = noteStyle,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = Fieldbook.Muted,
                 )
             }
@@ -763,6 +769,7 @@ private fun PartCard(
     editing: Boolean,
     jiggleDirection: Float,
     reduceMotion: Boolean,
+    narrowScreen: Boolean,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     dragHandle: Modifier,
@@ -829,7 +836,9 @@ private fun PartCard(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .offset(x = (-8).dp, y = (-8).dp)
+                        // 図の左上の天気のアイコンにかからないよう、少し外へ出す（前は -8dp。カードの注記から天気の名前を外したので、
+                        // 並べ替え中もアイコンで天気が分かるように。#134 の A のレビュー）
+                        .offset(x = (-11).dp, y = (-11).dp)
                         .size(28.dp)
                         .pressFeel(deleteSource)
                         .clip(CircleShape)
@@ -849,10 +858,10 @@ private fun PartCard(
         Column(modifier = Modifier.padding(end = FavoriteToggleWidth)) {
         BasicText(
             part.displayName,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp, stepSize = 0.5.sp),
+            autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 16.sp, stepSize = 0.5.sp),
             modifier = Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
         )
         // 文字の大きさが 1 倍なら 1 行。入らない分は「…」にする（どのカードも同じ高さになる）。
@@ -860,15 +869,18 @@ private fun PartCard(
         // どのカードも 2 行分の高さにして、横に並ぶカードの下端をそろえる。それでも入らない分は「…」にする。
         // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
         val largeText = LocalDensity.current.fontScale > 1f
-        // 歩いた長さ・日付・天気（記録のあとの窓・大きく見る窓と同じ形。ui/common/WalkNote）
+        // 幅の狭い端末（400dp 未満）も、13sp の長さと日付が 1 行に入らない（「776 m・1…」で切れる）ので、2 行にする（#134 の C のレビュー）
+        val twoLines = largeText || narrowScreen
+        // 歩いた長さと日付（記録のあとの窓・大きく見る窓と同じ形。ui/common/WalkNote）。
+        // 天気の名前は、字を大きくしたら入らなくなったので出さない（左上の天気のアイコンで分かる。読み上げもアイコンが伝える。決定 80）
         WalkNote(
             distanceM = part.distanceM,
             date = date,
-            weather = sky?.label,
-            fontSize = 10.5.sp,
+            weather = null,
+            fontSize = 13.sp,
             separator = "・",
-            minLines = if (largeText) 2 else 1,
-            maxLines = if (largeText) 2 else 1,
+            minLines = if (twoLines) 2 else 1,
+            maxLines = if (twoLines) 2 else 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 6.dp),
         )

@@ -273,11 +273,11 @@ internal fun PopTag(label: String, face: Color, modifier: Modifier = Modifier, f
 internal val SECTION_CORNER: Dp = 14.dp
 
 /**
- * リロードの印：青緑のブロックに白い矢印。傾けずに水平に置く（見出しの札・並びの札とそろえる）。
- * 取り直している間は矢印が回る（端末で動きを減らしていれば回さない）
+ * リロードの印：[face]（ふだんは青緑）のブロックに白い矢印。傾けずに水平に置く（見出しの札・並びの札とそろえる）。
+ * 取り直している間は矢印が回る（端末で動きを減らしていれば回さない）。「みんな」の遊び方の画面では遊び方の色（決定 81）
  */
 @Composable
-internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, face: Color = Pop.Teal) {
     val source = remember { MutableInteractionSource() }
     val reduceMotion = rememberReduceMotion()
     val spin = if (refreshing && !reduceMotion) {
@@ -302,7 +302,7 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(width = 38.dp, height = 41.dp)
-                .popBlock(face = if (refreshing) Pop.Teal.copy(alpha = 0.7f) else Pop.Teal, corner = 10.dp, depth = 3.dp),
+                .popBlock(face = if (refreshing) face.copy(alpha = 0.7f) else face, corner = 10.dp, depth = 3.dp),
         ) {
             Icon(
                 Icons.Filled.Refresh,
@@ -331,6 +331,8 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
 @Composable
 internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp = 26.dp) {
     val density = LocalDensity.current
+    // 動きの大きさ（積み木の大きさに合わせる）。押すたびに作らないよう、大きさが変わったときだけ作る
+    val motionSpec = remember(blockDp) { wordMotionFor(blockDp.value) }
     val shape = RoundedCornerShape(blockDp * 0.22f)
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -377,7 +379,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
-                                    motion.dropIn(fromDx, fromDy, WordMotion) {
+                                    motion.dropIn(fromDx, fromDy, motionSpec) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         sfx.play(Sfx.LAND)
                                     }
@@ -385,7 +387,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
                                     sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
-                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = WordMotion)
+                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = motionSpec)
                                 }
                             }
                         }
@@ -420,6 +422,26 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
  * ブロックが題字より小さいので跳ねる高さを少し低く（題字の 32dp のときの 26/32）、題字より下にあって落ちる距離が長いので、落ちる時間を少し長くする
  */
 private val WordMotion = BlockMotionSpec(hopDp = 10f, hopBounceDp = 3f, fallMs = 220, landDxDp = 10f, landBounceDp = 6f)
+
+/** [WordMotion] の大きさを決めたときの、ブロック 1 つの大きさ [dp]（[BlockWord] の初めの値） */
+private const val WORD_MOTION_BLOCK_DP = 26f
+
+/** ブロックの大きさに合わせた動きの大きさ。大きいブロックは、跳ねる高さ・着いたときの揺れもそのぶん大きく（落ちる時間は同じ） */
+private fun wordMotionFor(blockDp: Float): BlockMotionSpec {
+    val k = blockDp / WORD_MOTION_BLOCK_DP
+    return WordMotion.copy(
+        hopDp = WordMotion.hopDp * k,
+        hopBounceDp = WordMotion.hopBounceDp * k,
+        landDxDp = WordMotion.landDxDp * k,
+        landBounceDp = WordMotion.landBounceDp * k,
+    )
+}
+
+/**
+ * 記録とコレクションの画面名（[BlockWord]）のブロックの大きさ（B の希望。決定 80）。
+ * ほかの画面名は、ランキングの一覧が 26dp（右に個数とリロードが並んで幅が足りない）、「みんな」のホームとみちをつむの選ぶ画面が 28dp
+ */
+internal val SCREEN_TITLE_BLOCK = 30.dp
 
 /** ブロックの色：アイコンの 4 色を順に */
 private val BlockColors = listOf(Pop.Orange, Pop.Teal, Pop.Yellow, Pop.Navy)

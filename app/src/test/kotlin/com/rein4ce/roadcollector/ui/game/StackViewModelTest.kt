@@ -637,6 +637,28 @@ class StackViewModelTest {
         assertEquals(WeatherBonus.NONE, vm.bonus)
     }
 
+    @Test
+    fun `狙っている間、塔が止まっていれば図形を作り直さない（置いたままで描き直さない）`() {
+        val vm = StackViewModel()
+        vm.updateInventory(listOf(a, b), true)
+        // まだ何も置いていない
+        val empty = vm.shapes
+        repeat(30) { vm.tick(1.0 / 60) }
+        assertTrue("置く前", empty === vm.shapes)
+        // 1 本置いて、止まって次のパーツを狙っている間
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        val settled = vm.shapes
+        val height = vm.height
+        repeat(30) { vm.tick(1.0 / 60) }
+        assertTrue("止まった塔", settled === vm.shapes)
+        assertEquals(height, vm.height)
+        // 置けば、また進む
+        placeFlat(vm)
+        vm.tick(1.0 / 60)
+        assertTrue("置いたあとは作り直す", settled !== vm.shapes)
+    }
+
     // ---- 遊び方を選ぶ画面へ戻る（決定 76） ----
 
     @Test
