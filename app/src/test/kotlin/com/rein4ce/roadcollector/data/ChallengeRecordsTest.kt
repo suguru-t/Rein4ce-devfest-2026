@@ -62,4 +62,19 @@ class ChallengeRecordsTest {
         val ranking = listOf(score("a", 3.0), score("b", 2.0), score("c", 2.0))
         assertEquals(listOf(1, 2, 2), ranking.map { rankOf(it.height, ranking) })
     }
+
+    @Test fun `台に何も残らなかった回（0 m）は書かず、前に残した 0 m の回も出さない（決定 89）`() {
+        // 何も置かずに時間切れになっただけで「自分の最高 0.00 m」が出ていた
+        var disk: String? = null
+        var writes = 0
+        val records = ChallengeRecords({ disk }, { disk = it; writes++ })
+        assertTrue(records.add(score("a", 0.0)).isEmpty())
+        assertEquals(0, writes)
+        assertNull(disk)
+        // 前の版で残した 0 m の回は、ファイルには残っていても一覧と最高には出さない
+        disk = "[" + listOf("old" to 0.0, "b" to 1.5).joinToString(",") { (id, h) ->
+            "{\"runId\":\"$id\",\"seed\":1,\"height\":$h,\"createdAt\":1,\"rule\":\"manual-180-v1\"}"
+        } + "]"
+        assertEquals(listOf("b"), ChallengeRecords({ disk }, { disk = it }).ranking("manual-180-v1").map { it.runId })
+    }
 }

@@ -258,4 +258,27 @@ class ChallengeViewModelTest {
         vm.start()
         assertEquals(ChallengeViewModel.SendState.IDLE, vm.sendState)
     }
+
+    @Test fun `台に何も残らなかった回は記録にせず「みんな」にも送らないが、次の回へは進める（決定 89）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val sent = mutableListOf<Tower>()
+        val vm = ChallengeViewModel(
+            updateRecords = { listOfNotNull(it?.takeIf { s -> s.counts }) },
+            newRun = { ChallengeRun(1, clock = { now }) },
+            sendTower = { tower -> sent += tower; TowerCreated("c1", "https://example.test/towers/c1") },
+        )
+        // 何も置かずに時間切れ
+        vm.start(); vm.finishCountdown(); vm.resume()
+        now = ChallengeRules.DURATION_NS; vm.tick()
+        repeat(200) { now += 50_000_000; vm.tick() }
+        runCurrent()
+        val score = vm.frame!!.score!!
+        assertEquals(ChallengeRun.Phase.FINISHED, vm.frame!!.phase)
+        assertFalse(score.counts)
+        assertTrue(vm.ranking.isEmpty())
+        assertTrue(sent.isEmpty())
+        assertEquals(ChallengeViewModel.SendState.IDLE, vm.sendState)
+        assertTrue(vm.canStart)
+    }
 }
