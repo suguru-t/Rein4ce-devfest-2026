@@ -11,7 +11,7 @@ import java.util.Locale
  *
  * og:image は PNG（/towers/{id}/image.png）。SVG を読まないクローラが多いため。PNG は TowerPng がその場で描く。
  *
- * 見た目はアプリにそろえる（決定 92）：字はアプリと同じ M PLUS Rounded 1c の太字（Google Fonts から読む。読めなければ端末の丸い字）、
+ * 見た目はアプリにそろえる（決定 94）：字はアプリと同じ M PLUS Rounded 1c の太字（Google Fonts から読む。読めなければ端末の丸い字）、
  * 地は方眼紙（8 px ごとに細い線、5 本ごとに太い線。アプリの Fieldbook と同じ色）、題字「ミチツミ」は 4 色の積み木、
  * 遊び方の札と高さの数字は遊び方ごとの色（アプリの ModeTheme と同じ）、絵は下に側面がのぞくカード（アプリの popBlock と同じ）。
  * 端末がダークモードなら、アプリのダークの色にする

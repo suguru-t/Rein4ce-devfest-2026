@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import org.junit.Test
 
-/** 共有ページの見た目をアプリにそろえる（決定 92） */
+/** 共有ページの見た目をアプリにそろえる（決定 94） */
 class SharePageTest {
 
     private val parts = SampleParts.all.take(2)
