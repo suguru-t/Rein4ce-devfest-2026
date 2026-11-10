@@ -144,7 +144,11 @@ class ChallengeViewModel(
     var saveError by mutableStateOf(false)
         private set
 
-    private var savedRunId: String? = null
+    /**
+     * 保存し終えた回。[canStart]（「もう一度」を押せるか）が見るので、画面に知らせる状態にする。
+     * 0 m の回は記録の一覧が変わらず、ほかに描き直すきっかけが無いため（決定 89）
+     */
+    private var savedRunId: String? by mutableStateOf(null)
     private var pendingRunId: String? = null
 
     /** 保存に失敗した回。自動では保存し直さない（「再試行」で保存し直す） */
@@ -242,9 +246,10 @@ class ChallengeViewModel(
         frame = ChallengeFrame(r.phase, r.current, r.next, r.x, r.angle, r.spawnY, r.cameraTop, r.towerHeight, r.score)
         val score = r.score
         if (score != null && score.runId != savedRunId && score.runId != pendingRunId && score.runId != failedRunId) save(score)
-        // 記録になった回の塔は、自動で「みんな」に送る（1 回だけ。送れなかったら「もう一度送る」で）
+        // 記録になった回の塔は、自動で「みんな」に送る（1 回だけ。送れなかったら「もう一度送る」で）。
+        // 台に何も残らなかった回は記録にしないので送らない（決定 89。空の塔はサーバも受け取らない。sendableTower も同じ判定。決定 88）
         val tower = sendableTower(r)
-        if (score != null && tower != null && score.runId != sentRunId && score.runId != sendingRunId && score.runId != sendFailedRunId) {
+        if (score != null && score.counts && tower != null && score.runId != sentRunId && score.runId != sendingRunId && score.runId != sendFailedRunId) {
             send(score.runId, tower)
         }
         sendState = when (score?.runId) {
