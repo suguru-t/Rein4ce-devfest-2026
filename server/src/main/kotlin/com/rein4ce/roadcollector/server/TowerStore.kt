@@ -4,6 +4,9 @@ import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import java.security.SecureRandom
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
 
@@ -19,7 +22,7 @@ import org.slf4j.LoggerFactory
  */
 interface TowerStore {
     /**
-     * id を振って保存し、保存したものを返す。createdAt が 0 以下なら現在時刻を入れる。
+     * id を振って保存し、保存したものを返す。createdAt が 0 以下なら現在時刻を、未来なら今日の日付を入れる（[stamped]）。
      * 保存先はタワーの遊び方（[Tower.mode]）で決まる（通常・3 分チャレンジ。毎日 1 つずつ積むは [putDaily]）
      */
     suspend fun add(tower: Tower): Tower
@@ -96,10 +99,22 @@ internal fun isOwnedBy(ownerId: String?, owner: String?): Boolean = !owner.isNul
 
 private fun Tower.isOwnedBy(owner: String?) = isOwnedBy(ownerId, owner)
 
-internal fun Tower.stamped(id: String) = copy(
+/**
+ * id を振り、作った日時を決める。0 以下（分からない）なら今。
+ * 未来の日時は今日（日本時間の 0 時）にする（決定 88）。一覧は新しい順に 500 件なので、前は未来の日付の塔を送り続けると、
+ * 本物の塔を一覧から押し出せた。アプリは日付まで（日本時間の 0 時）に丸めて送るので（決定 47）、それに合わせて丸める
+ */
+internal fun Tower.stamped(id: String, now: Long = System.currentTimeMillis()) = copy(
     id = id,
-    createdAt = if (createdAt > 0) createdAt else System.currentTimeMillis(),
+    createdAt = when {
+        createdAt <= 0 -> now
+        createdAt > now -> startOfDayInJapan(now)
+        else -> createdAt
+    },
 )
+
+private fun startOfDayInJapan(epochMs: Long): Long =
+    Instant.ofEpochMilli(epochMs).atZone(ZoneId.of("Asia/Tokyo")).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli()
 
 /** プロセス内メモリ版。遊び方ごとに、古いものから消して [maxEntries] 件を保つ */
 class MemoryTowerStore(private val maxEntries: Int = TowerStore.SUMMARY_LIMIT) : TowerStore {
@@ -116,7 +131,7 @@ class MemoryTowerStore(private val maxEntries: Int = TowerStore.SUMMARY_LIMIT) :
 
     override suspend fun putDaily(tower: Tower): Tower = synchronized(lock) {
         val existing = towers.values.firstOrNull { it.mode == TowerMode.DAILY && it.ownerId != null && it.ownerId == tower.ownerId }
-        val saved = tower.copy(mode = TowerMode.DAILY).stamped(existing?.id ?: newId())
+        val saved = tower.copy(mode = TowerMode.DAILY).stamped(existing?.id ?: tower.ownerId?.let(FirestoreTowerStore::dailyIdFor) ?: newId())
         towers[saved.id] = saved
         trim(TowerMode.DAILY)
         saved

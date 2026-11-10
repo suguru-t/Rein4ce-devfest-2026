@@ -7,9 +7,11 @@ import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.header
 import io.ktor.client.request.options
 import io.ktor.client.request.post
@@ -144,5 +146,23 @@ class RateLimitRoutesTest {
             header(HttpHeaders.AccessControlRequestMethod, "POST")
         }
         assertNull(preflight.headers[HttpHeaders.AccessControlAllowOrigin])
+    }
+
+    @Test
+    fun `タワー 1 基と絵も数える（決定 88）`() = testApplication {
+        val limits = RateLimits(
+            towersPost = null, towersGet = null, partName = null, nickname = null,
+            towerView = RateLimiter(perClient = 2, total = 100),
+            towerImage = RateLimiter(perClient = 1, total = 100),
+        )
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer, limits = limits) }
+        val id = AppJson.decodeFromString(TowerCreated.serializer(), client.postJson("/towers", towerJson(), owner = me).bodyAsText()).id
+        suspend fun get(path: String, owner: String) = client.get(path) { header(OWNER_HEADER, owner) }.status
+        assertEquals(HttpStatusCode.OK, get("/towers/$id", me))
+        assertEquals(HttpStatusCode.OK, get("/towers/$id/image.svg", me))
+        assertEquals(HttpStatusCode.TooManyRequests, get("/towers/$id", me))
+        assertEquals(HttpStatusCode.OK, get("/towers/$id", other), "ほかの端末は通る")
+        assertEquals(HttpStatusCode.OK, get("/towers/$id/image.png", me), "PNG は別の数え")
+        assertEquals(HttpStatusCode.TooManyRequests, get("/towers/$id/image.png", me))
     }
 }

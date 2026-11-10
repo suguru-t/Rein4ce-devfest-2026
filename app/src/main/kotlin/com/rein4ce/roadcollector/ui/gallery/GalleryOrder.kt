@@ -108,11 +108,12 @@ internal fun howToSend(mode: TowerMode): String = when (mode) {
 
 /**
  * 毎日 1 つずつ積むの、今も続いている連続日数（決定 77）。最後に積んだ日（[TowerSummary.lastDay]）が [today] か前の日なら、
- * その日までの連続日数（[TowerSummary.streakDays]）。それより前・日付が読めない・ほかの遊び方なら 0
+ * その日までの連続日数（[TowerSummary.streakDays]）。それより前・日付が読めない・ほかの遊び方なら 0。
+ * 次の日より先（未来）の日付も 0（時計を進めた端末や作った値で、ずっと 1 位に居座れないように。次の日までは時差の分として数える。決定 88）
  */
 internal fun TowerSummary.currentStreak(today: LocalDate = LocalDate.now()): Int {
     val last = lastDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return 0
-    return if (!last.isBefore(today.minusDays(1))) streakDays else 0
+    return if (!last.isBefore(today.minusDays(1)) && !last.isAfter(today.plusDays(1))) streakDays else 0
 }
 
 /** 一覧を [sort] の順に並べ直す */
