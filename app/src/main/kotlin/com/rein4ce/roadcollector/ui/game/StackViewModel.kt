@@ -207,6 +207,22 @@ class StackViewModel(
     }
 
     /**
+     * パーツが落ちて終わり、塔が落ち着くのを待っている途中なら、その場で落ち着くまで進めて結果を決める（ゲームは終わった形のまま残す）。
+     * 画面を離れると物理が止まるので、離れるとき（「‹ 戻る」・ほかのタブへ移る）に呼んで、その回を自分の最高に数える
+     * （#130 の C のレビュー・#139 の A のレビュー）。
+     *
+     * @return 自分の最高に数えてよい結果（終わって塔が止まり、道が残ったとき）。まだ終わっていない・数えられない結果なら null
+     */
+    fun settleNow(): StackResult? {
+        if (gameOver && phase == Phase.Settling) {
+            // 待つ上限（maxSeconds）までに必ず終わるので、そのぶんだけ回す
+            val steps = (settleTiming.maxSeconds / SETTLE_NOW_STEP_SECONDS).toInt() + 2
+            repeat(steps) { if (phase == Phase.Settling) tick(SETTLE_NOW_STEP_SECONDS) }
+        }
+        return result?.takeIf { canUpload }
+    }
+
+    /**
      * 遊び方を選ぶ画面へ戻る（「‹ 戻る」・端末の「戻る」。決定 76）。このゲームは終わりにして止め、次にこの画面を開いたときに、
      * そのときのコレクションで新しいゲームを始める（[updateInventory]。前は戻った時点のコレクションですぐ始め直していたので、
      * 戻ってから道を記録しても出なかった）。
@@ -217,12 +233,7 @@ class StackViewModel(
      */
     fun leave(): StackResult? {
         if (phase == Phase.Idle) return null
-        if (gameOver && phase == Phase.Settling) {
-            // 待つ上限（maxSeconds）までに必ず終わるので、そのぶんだけ回す
-            val steps = (settleTiming.maxSeconds / SETTLE_NOW_STEP_SECONDS).toInt() + 2
-            repeat(steps) { if (phase == Phase.Settling) tick(SETTLE_NOW_STEP_SECONDS) }
-        }
-        val done = result?.takeIf { canUpload }
+        val done = settleNow()
         phase = Phase.Idle
         current = null
         startMessage = null

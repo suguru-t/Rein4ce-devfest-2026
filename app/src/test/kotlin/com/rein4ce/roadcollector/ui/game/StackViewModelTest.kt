@@ -710,6 +710,23 @@ class StackViewModelTest {
     }
 
     @Test
+    fun `ほかのタブへ移るとき：落ち着くのを待っている回は結果を決めて返し、ゲームは終わった形のまま残す（決定 85）`() {
+        val vm = StackViewModel(settleTiming = StackViewModel.SettleTiming(minSeconds = 3.0, maxSeconds = 6.0))
+        vm.updateInventory(listOf(a, b), true)
+        assertNull("まだ終わっていなければ何も返さない", vm.settleNow())
+        assertEquals(StackViewModel.Phase.Placing, vm.phase)
+        placeFlat(vm)
+        tickUntil(vm) { vm.phase == StackViewModel.Phase.Placing }
+        placeOffPlatform(vm)
+        tickUntil(vm) { vm.fallenCount > 0 }
+        assertEquals(StackViewModel.Phase.Settling, vm.phase)
+        val result = vm.settleNow()
+        assertTrue("台に 1 本残った、数えてよい結果", result != null && result.settled && result.remainingCount == 1)
+        assertEquals("ゲームは終わった形のまま（選び直すと結果のカード）", StackViewModel.Phase.Finished, vm.phase)
+        assertEquals(result, vm.result)
+    }
+
+    @Test
     fun `終わったあとに戻ると、その結果を返す（もう数えてあっても、最高は大きい方だけ残る）`() {
         val vm = StackViewModel()
         vm.updateInventory(listOf(a, b), true)

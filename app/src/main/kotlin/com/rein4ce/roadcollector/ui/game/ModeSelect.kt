@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.ui.game
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,13 +120,22 @@ internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
  * 積むタブの中身。開くと、まずモードを選ぶ画面（ホームのような、色の積み木と紙のカード）。
  * 選ぶとそのモードで遊ぶ画面になり、上の「‹ 戻る」か端末の「戻る」で選ぶ画面に戻る（選ぶ画面での「戻る」はホームへ）。
  *
- * どのモードを選んでいるかは、この画面の中だけで覚える（タブを移ってから戻ると、遊んでいた画面の続き。
- * アプリを開き直すと、また選ぶ画面から）。前に遊んだモードをスマホに残して、そこから始めることはしない
+ * ほかのタブやホームへ移ってから戻ると、選ぶ画面から（「みんな」と同じ。決定 85。前は遊んでいた画面の続きだった）。
+ * 通常は、もう一度選ぶとそのゲームの続きから（ゲームはこの行き先の ViewModel が持っている）。90 秒チャレンジはその回を捨てて新しい回から（決定 69）。
+ * 画面の作り直し（ダークへの切り替え・文字の大きさの変更など）では、遊んでいる画面のまま。
+ * アプリを開き直すと、また選ぶ画面から。前に遊んだモードをスマホに残して、そこから始めることはしない
  */
 @Composable
 fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     // 選んだモード（null ならモードを選ぶ画面）。コレクションでパーツを選んで積む流れはやめたので（決定 62）、いつも選ぶ画面から入る
     var chosen by rememberSaveable { mutableStateOf<PlayMode?>(null) }
+    // ほかのタブやホームへ移ってこの画面が消えるときは、選ぶ画面に戻しておく（戻ってきたら選ぶ画面から。「みんな」と同じ。決定 85）。
+    // 画面の作り直しのときは消えても戻すので、そのまま（rememberSaveable が覚えている）。
+    // 選んだモードは、この画面が消えるときに残す（タブの行き来で NavHost が残す）ので、その前にここで null にする
+    val activity = LocalActivity.current
+    DisposableEffect(Unit) {
+        onDispose { if (activity?.isChangingConfigurations != true) chosen = null }
+    }
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
     // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 77）
@@ -146,13 +157,21 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
                 val vm: StackViewModel = viewModel()
                 // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして止め、次に通常を開いたときに
-                // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは、今までどおり続きから。
-                // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
+                // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは選ぶ画面からで、
+                // 通常を選び直すとそのゲームの続きから（決定 85）。
+                // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るとき・ほかのタブへ移るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
                 val leave = { center: Offset? ->
                     vm.leave()?.let { records.submitNormal(it.finalHeight) }
                     backToSelect(center)
                 }
                 BackHandler { leave(null) }
+                // ほかのタブへ移ってこの画面が消えるとき（画面の作り直しは除く）：ゲームは続きから選び直せるよう残し、
+                // 落ち着くのを待っていた回だけ、ここで結果を決めて自分の最高に数える（#139 の A のレビュー）
+                DisposableEffect(vm) {
+                    onDispose {
+                        if (activity?.isChangingConfigurations != true) vm.settleNow()?.let { records.submitNormal(it.finalHeight) }
+                    }
+                }
                 ModePlayPage(PlayMode.NORMAL, onBack = { leave(it) }) { leading ->
                     StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
                 }
