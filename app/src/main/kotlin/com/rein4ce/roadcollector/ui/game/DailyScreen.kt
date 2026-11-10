@@ -159,6 +159,8 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                     Spacer(Modifier.weight(1f))
                     DailyDays(vm.tower.days, compact)
                 }
+                // 何を積むか（「その日に歩いた道を 1 日 1 つ積む」。決定 87）
+                PlayMaterialNote(compact, Modifier.padding(top = 4.dp))
                 DailyHeight(vm.height, compact)
             }
 
