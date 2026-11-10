@@ -13,6 +13,9 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.http.content.OutgoingContent
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeFully
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -25,6 +28,10 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import org.junit.Test
 
 /**
@@ -161,7 +168,7 @@ class RoutesTest {
         val first = put(day1)
         assertEquals(HttpStatusCode.OK, first.status)
         val id = AppJson.decodeFromString(TowerCreated.serializer(), first.bodyAsText()).id
-        val second = put(day1.copy(height = 1.6f, lastDay = "2026-11-10", streakDays = 2))
+        val second = put(day1.copy(height = 0.7f, lastDay = "2026-11-10", streakDays = 2))
         assertEquals(id, AppJson.decodeFromString(TowerCreated.serializer(), second.bodyAsText()).id, "同じ持ち主は同じ id")
         put(sampleTower().copy(ownerId = "b".repeat(64), lastDay = "2026-11-10", streakDays = 1))
 
@@ -169,7 +176,7 @@ class RoutesTest {
         assertEquals(2, list.size)
         val mine = list.single { it.mine }
         assertEquals(id, mine.id)
-        assertEquals(1.6f, mine.height)
+        assertEquals(0.7f, mine.height)
         assertEquals(2, mine.streakDays)
         assertEquals("2026-11-10", mine.lastDay)
         assertTrue(client.summariesOf("normal").isEmpty(), "通常のランキングには混ざらない")
@@ -312,5 +319,65 @@ class RoutesTest {
         val old = AppJson.encodeToString(Tower.serializer(), sampleTower()).replace(Regex(""",?"platformWidth":[0-9.]+"""), "")
         assertTrue(!old.contains("platformWidth"))
         assertEquals(1.4f, AppJson.decodeFromString(Tower.serializer(), old).platformWidth)
+    }
+
+    @Test
+    fun `大きすぎる本文は読まずに 413 で断る（Content-Length が無くても。決定 88）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val huge = "{" + " ".repeat((MAX_TOWER_BODY_BYTES + 10).toInt()) + "}"
+        val declared = client.post("/towers") {
+            contentType(ContentType.Application.Json)
+            setBody(huge)
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, declared.status)
+        // 長さを書かずに流し込む本文（chunked）も、上限の先までは読まない
+        val streamed = client.post("/towers") {
+            setBody(object : OutgoingContent.WriteChannelContent() {
+                override val contentType = ContentType.Application.Json
+                override suspend fun writeTo(channel: ByteWriteChannel) {
+                    channel.writeFully(huge.encodeToByteArray())
+                }
+            })
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, streamed.status)
+        val part = client.post("/parts/name") {
+            contentType(ContentType.Application.Json)
+            setBody("{" + " ".repeat((MAX_PART_BODY_BYTES + 10).toInt()) + "}")
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, part.status)
+        // ふつうのタワーは今までどおり通る
+        assertEquals(HttpStatusCode.Created, client.postTower(sampleTower()).status)
+    }
+
+    @Test
+    fun `その遊び方で使わない項目は保存しない（一覧が大きくならない。決定 88）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val big = "x".repeat(100_000)
+        assertEquals(HttpStatusCode.Created, client.postTower(sampleTower().copy(rule = big, lastDay = big, streakDays = 99)).status)
+        val row = client.summariesOf("normal").single()
+        assertNull(row.rule)
+        assertNull(row.lastDay)
+        assertEquals(0, row.streakDays)
+    }
+
+    @Test
+    fun `未来の日付で送られた塔は、今日の日付にする（決定 88）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val past = Instant.parse("2026-11-01T00:00:00Z").toEpochMilli()
+        client.postTower(sampleTower().copy(createdAt = past))
+        client.postTower(sampleTower().copy(createdAt = Instant.parse("2099-01-01T00:00:00Z").toEpochMilli()))
+        val dates = client.summariesOf("normal").map { it.createdAt }.sorted()
+        assertEquals(past, dates[0], "過去の日付はそのまま")
+        val today = Instant.now().atZone(ZoneId.of("Asia/Tokyo")).truncatedTo(ChronoUnit.DAYS).toInstant().toEpochMilli()
+        assertTrue(dates[1] in today - 1..System.currentTimeMillis(), "未来は今日の日付（日本時間の 0 時）")
+    }
+
+    @Test
+    fun `stamped：0 以下は今、未来は今日の 0 時（日本時間）、過去はそのまま（決定 88）`() {
+        val now = Instant.parse("2026-11-10T05:30:00Z").toEpochMilli() // 日本時間 14:30
+        val midnight = Instant.parse("2026-11-09T15:00:00Z").toEpochMilli() // 日本時間 11/10 0:00
+        assertEquals(now, sampleTower().copy(createdAt = 0L).stamped("a", now).createdAt)
+        assertEquals(midnight, sampleTower().copy(createdAt = now + 86_400_000L).stamped("a", now).createdAt)
+        assertEquals(midnight, sampleTower().copy(createdAt = midnight).stamped("a", now).createdAt)
     }
 }

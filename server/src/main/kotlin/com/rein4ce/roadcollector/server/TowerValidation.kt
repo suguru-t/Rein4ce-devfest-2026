@@ -2,7 +2,13 @@ package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerMode
+import com.rein4ce.roadcollector.core.physics.PartGeometry
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * POST /towers・POST /towers/challenge・PUT /towers/daily で受け付けるタワーの検査。
@@ -33,6 +39,22 @@ const val MAX_STREAK_DAYS = 36_500
 
 /** 毎日 1 つずつ積むの日付の形（"2026-11-10"） */
 private val DAY_PATTERN = Regex("^\\d{4}-\\d{2}-\\d{2}$")
+
+/**
+ * 毎日 1 つずつ積むを始めた日（決定 61）。これより前から続いている連続日数はありえないので断る（決定 88）。
+ * 端末の日付のずれも見て、月の初めにしてある
+ */
+val DAILY_LAUNCH: LocalDate = LocalDate.of(2026, 11, 1)
+
+/** パーツの id の上限（文字）。アプリの id は UUID（36 字）か、見本・90 秒チャレンジの短い名前 */
+const val MAX_PART_ID_LENGTH = 64
+
+/**
+ * 高さの検査の余裕（決定 88）。置いたパーツから見積もった「届きうるいちばん上」に、この割合と長さ [m] を足した高さまで通す
+ * （見積もりと物理の計算のずれ・小数の丸めで、アプリが正しく作った塔を断らないように）
+ */
+private const val HEIGHT_SLACK_RATIO = 1.02
+private const val HEIGHT_SLACK_M = 0.1
 
 /** 作者名の上限（文字）。みんなの一覧のカードに収まる長さ */
 const val MAX_AUTHOR_LENGTH = 20
@@ -67,8 +89,13 @@ const val MAX_PLACEMENT_SCALE = 5f
 /**
  * 受け付けられない理由（英語の短い文。400 の本文にそのまま出す）。問題なければ null。
  * 最初に見つかった 1 つだけ返す。
+ *
+ * 高さ・連続日数・最後に積んだ日はアプリが計算して送るので、作った値で 1 位になれないよう、ありうる範囲かも見る（決定 88）：
+ * 高さは置いたパーツが届く高さまで、最後に積んだ日は次の日まで、連続日数は台に残ったパーツの数と、始めた日からの日数まで
+ *
+ * @param today 最後に積んだ日が未来でないかを見る日（UTC。端末の日付は時差で 1 日先まであるので、次の日までは通す）
  */
-internal fun Tower.validationError(): String? {
+internal fun Tower.validationError(today: LocalDate = LocalDate.now(ZoneOffset.UTC)): String? {
     if (parts.isEmpty()) return "parts is empty"
     if (parts.size > MAX_TOWER_PARTS) return "too many parts (${parts.size} > $MAX_TOWER_PARTS)"
     if (placements.isEmpty()) return "placements is empty"
@@ -77,6 +104,7 @@ internal fun Tower.validationError(): String? {
     val ids = HashSet<String>()
     for (p in parts) {
         if (p.id.isBlank()) return "part id is blank"
+        if (p.id.length > MAX_PART_ID_LENGTH) return "part id too long (> $MAX_PART_ID_LENGTH)"
         if (!ids.add(p.id)) return "duplicate part id: ${p.id}"
         if (p.points.isEmpty() || p.points.size > MAX_PART_POINTS) return "part ${p.id}: points must have 1..$MAX_PART_POINTS items"
         if (p.points.any { !inRange(it.x) || !inRange(it.y) }) return "part ${p.id}: point out of range"
@@ -91,6 +119,7 @@ internal fun Tower.validationError(): String? {
         if (!pl.scale.isFinite() || pl.scale < MIN_PLACEMENT_SCALE || pl.scale > MAX_PLACEMENT_SCALE) return "placement $i: scale out of range"
     }
     if (!inRange(height) || height < 0f) return "height out of range"
+    if (height > reachableTop() * HEIGHT_SLACK_RATIO + HEIGHT_SLACK_M) return "height is taller than the placed parts can reach"
     if (!platformWidth.isFinite() || platformWidth < MIN_PLATFORM_WIDTH || platformWidth > MAX_PLATFORM_WIDTH) return "platformWidth out of range"
     val a = author
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
@@ -106,9 +135,13 @@ internal fun Tower.validationError(): String? {
         TowerMode.DAILY -> {
             // 持ち主ごとに 1 基を新しくするので、持ち主の印が無いと誰の塔か分からない
             if (o == null) return "daily tower needs ownerId"
-            val d = lastDay
-            if (d == null || !DAY_PATTERN.matches(d)) return "daily tower needs lastDay (yyyy-mm-dd)"
+            val last = lastDay?.takeIf { DAY_PATTERN.matches(it) }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?: return "daily tower needs lastDay (yyyy-mm-dd)"
+            if (last.isAfter(today.plusDays(1))) return "lastDay is in the future"
             if (streakDays < 1 || streakDays > MAX_STREAK_DAYS) return "streakDays out of range"
+            // 1 日に 1 つ積み、続いている日のパーツは台に残っているので、連続日数は配置の数を超えない
+            if (streakDays > placements.size) return "streakDays is more than the placed parts"
+            if (streakDays > ChronoUnit.DAYS.between(DAILY_LAUNCH, last) + 1) return "streakDays is longer than the daily mode has existed"
         }
     }
     return null
@@ -116,3 +149,32 @@ internal fun Tower.validationError(): String? {
 
 /** 有限で、絶対値が [MAX_COORDINATE] 以下 */
 private fun inRange(v: Float): Boolean = v.isFinite() && abs(v) <= MAX_COORDINATE
+
+/**
+ * 置いたパーツのいちばん上 [m]（台の上面から）。物理と同じ当たり判定の形（[PartGeometry.collisionShapes]）を、
+ * 置いた向きに回して位置に動かし（世界の点 = 回転 × 形の点 + 位置。StackWorld.place と同じ）、いちばん高い頂点を取る。
+ * 塔の高さ（StackWorld.height）も同じ形のいちばん上なので、アプリが正しく作った塔ならこれと同じになる。
+ * 天気のボーナスで大きくした塔も、位置と大きさに同じ倍率をかけてあるので同じように出せる（決定 68）。partId が正しいことを確かめてから呼ぶ
+ */
+internal fun Tower.reachableTop(): Double {
+    val byId = parts.associateBy { it.id }
+    val shapes = HashMap<Pair<String, Float>, List<PartGeometry.Vec>>()
+    return placements.maxOf { pl ->
+        val points = shapes.getOrPut(pl.partId to pl.scale) {
+            PartGeometry.collisionShapes(byId.getValue(pl.partId), pl.scale.toDouble()).flatMap { it.points }
+        }
+        val sin = sin(pl.angleRad.toDouble())
+        val cos = cos(pl.angleRad.toDouble())
+        pl.y + (points.maxOfOrNull { p -> sin * p.x + cos * p.y } ?: 0.0)
+    }
+}
+
+/**
+ * その遊び方で使わない項目を捨てる（決定 88）。前は通常の塔の rule・lastDay なども長さを見ずに保存していて、
+ * 一覧（GET /towers）の各行にそのまま入るので、大きな文字列を入れた塔を何基か送られると、一覧が何十 MB にもなった
+ */
+internal fun Tower.withoutUnusedFields(): Tower = when (mode) {
+    TowerMode.NORMAL -> copy(rule = null, streakDays = 0, lastDay = null)
+    TowerMode.CHALLENGE -> copy(streakDays = 0, lastDay = null)
+    TowerMode.DAILY -> copy(rule = null)
+}

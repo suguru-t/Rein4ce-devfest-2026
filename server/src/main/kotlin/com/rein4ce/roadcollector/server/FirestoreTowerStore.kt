@@ -44,6 +44,26 @@ class FirestoreTowerStore(
 
     private fun towersOf(mode: TowerMode): CollectionReference = collections.getValue(mode)
 
+    /** 一覧の 1 行と、その持ち主の印（「あなた」の判定は、頼まれるたびにする） */
+    private class SummaryRow(val summary: TowerSummary, val ownerId: String?)
+
+    /**
+     * 一覧を遊び方ごとに [SUMMARY_CACHE_MS] だけ覚えておく（決定 88）。前は一覧を頼まれるたびに Firestore から最大 500 件を読み、
+     * 端末ごとの回数制限は印を変えればすり抜けられるので、読み取りの料金をいくらでも膨らませられた。
+     * このサーバで書き込んだら、その遊び方の一覧はすぐ取り直す（送ったばかりの塔が出るように）。
+     * サーバがもう 1 台動いているときは、そちらで送った塔が出るまで最大 [SUMMARY_CACHE_MS] かかる
+     */
+    private val summaryCache = TtlCache<TowerMode, List<SummaryRow>>(SUMMARY_CACHE_MS)
+
+    /** 「動作確認」（GET /）の数。誰でも叩けるので、数えるのも覚えておく */
+    private val countCache = TtlCache<Unit, Int>(COUNT_CACHE_MS)
+
+    /** 書き込んだ遊び方の一覧と数を、次に頼まれたときに取り直す */
+    private fun written(mode: TowerMode) {
+        summaryCache.invalidate(mode)
+        countCache.invalidate(Unit)
+    }
+
     /** 起動ログ用。接続先を人が確かめられるように（認証情報は含めない） */
     val description: String
         get() = "project=${db.options.projectId}, database=${db.options.databaseId}, collections=${collections.values.joinToString { it.id }}"
@@ -57,6 +77,7 @@ class FirestoreTowerStore(
             val document = towers.document(saved.id)
             try {
                 document.create(fields).await()
+                written(saved.mode)
                 return saved
             } catch (e: AlreadyExistsException) {
                 // 「既にある」には 2 通りある：
@@ -65,7 +86,10 @@ class FirestoreTowerStore(
                 //     （SDK は UNAVAILABLE などを自動で再試行する）→ 振り直すと同じタワーが 2 件できるので、
                 //     既にある文書が今回の内容と同じなら成功として返す
                 // 読み取り自体に失敗したら、保存できたか不明なまま次の id に進まず、そのエラーを伝える
-                if (document.get().await().getString("json") == fields["json"]) return saved
+                if (document.get().await().getString("json") == fields["json"]) {
+                    written(saved.mode)
+                    return saved
+                }
             }
         }
         error("tower id の採番に失敗しました")
@@ -82,6 +106,7 @@ class FirestoreTowerStore(
             ?: return add(tower.copy(mode = TowerMode.DAILY))
         val saved = tower.copy(mode = TowerMode.DAILY).stamped(found.id)
         daily.document(found.id).set(saved.toFields()).await()
+        written(TowerMode.DAILY)
         return saved
     }
 
@@ -96,26 +121,33 @@ class FirestoreTowerStore(
         return null
     }
 
-    override suspend fun count(): Int =
+    override suspend fun count(): Int = countCache.get(Unit) {
         TowerMode.entries.sumOf { towersOf(it).count().get().await().count.toInt() }
+    }
 
     override suspend fun summaries(owner: String?, mode: TowerMode): List<TowerSummary> =
+        summaryCache.get(mode) { readSummaries(mode) }
+            // 持ち主の印は Firestore から読むだけで、返事には「同じか」だけを入れる
+            .map { row -> row.summary.copy(mine = isOwnedBy(row.ownerId, owner)) }
+
+    private suspend fun readSummaries(mode: TowerMode): List<SummaryRow> =
         summariesQuery(mode).get().await()
             .documents
             .map { doc ->
-                TowerSummary(
-                    id = doc.id,
-                    height = doc.getDouble("height")?.toFloat() ?: 0f,
-                    partCount = doc.getLong("partCount")?.toInt() ?: 0,
-                    createdAt = doc.getLong("createdAt") ?: 0L,
-                    author = doc.getString("author"),
-                    // 持ち主の印は Firestore から読むだけで、返事には「同じか」だけを入れる
-                    mine = isOwnedBy(doc.getString("ownerId"), owner),
-                    // 遊び方は、どのコレクションから読んだかで決まる（今までのタワーには項目が無い）
-                    mode = mode,
-                    rule = doc.getString("rule"),
-                    streakDays = doc.getLong("streakDays")?.toInt() ?: 0,
-                    lastDay = doc.getString("lastDay"),
+                SummaryRow(
+                    TowerSummary(
+                        id = doc.id,
+                        height = doc.getDouble("height")?.toFloat() ?: 0f,
+                        partCount = doc.getLong("partCount")?.toInt() ?: 0,
+                        createdAt = doc.getLong("createdAt") ?: 0L,
+                        author = doc.getString("author"),
+                        // 遊び方は、どのコレクションから読んだかで決まる（今までのタワーには項目が無い）
+                        mode = mode,
+                        rule = doc.getString("rule"),
+                        streakDays = doc.getLong("streakDays")?.toInt() ?: 0,
+                        lastDay = doc.getString("lastDay"),
+                    ),
+                    ownerId = doc.getString("ownerId"),
                 )
             }
 
@@ -145,6 +177,12 @@ class FirestoreTowerStore(
 
     companion object {
         private val ID_PATTERN = Regex("^[a-z0-9]{1,32}$")
+
+        /** 一覧を覚えておく時間 [ms]（決定 88） */
+        const val SUMMARY_CACHE_MS = 20_000L
+
+        /** 数を覚えておく時間 [ms] */
+        const val COUNT_CACHE_MS = 60_000L
 
         /** 一覧で Firestore から取る項目。json は含めない */
         val SUMMARY_FIELDS = arrayOf("height", "partCount", "createdAt", "author", "ownerId", "rule", "streakDays", "lastDay")
