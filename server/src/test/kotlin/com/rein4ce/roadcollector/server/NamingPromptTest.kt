@@ -122,9 +122,9 @@ class NamingPromptTest {
     }
 
     @Test
-    fun `AI らしい名前を避ける：造語・カタカナの英語を使わず、季節と時間帯は入れなくてよい。詩的なのはよい（決定 91）`() {
+    fun `AI らしい名前を避ける：カタカナの英語を使わず、季節と時間帯は入れなくてよい。詩的なのと漢字をつなげた言葉はよい（決定 91）`() {
         val prompt = buildNamingPrompt(zigzag)
-        assertContains(prompt, "漢字をつなげて作った言葉")
+        assertFalse(prompt.contains("漢字をつなげて作った言葉"))
         assertContains(prompt, "カタカナの英語")
         assertContains(prompt, "季節や時間帯は入れなくてよい")
         assertContains(prompt, "「〜の道」「〜道」で終わらせない")
