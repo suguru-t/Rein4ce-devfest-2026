@@ -9,6 +9,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.Test
 
 /**
@@ -34,7 +35,7 @@ class NamingPromptTest {
         val prompt = buildNamingPrompt(zigzag)
 
         assertContains(prompt, "道の形：何度も折れ曲がった道（ジグザグ）。横に長い。3 回曲がった")
-        assertContains(prompt, "歩いた距離：820 m")
+        assertContains(prompt, "歩いた距離：820 m（ちょっとそこまで）")
         assertContains(prompt, "歩いた時間：晩秋の夕方")
         assertContains(prompt, "日本語で 8 文字くらい。長くても 10 文字まで（11 文字以上は使えない）")
         assertContains(prompt, "地名・人名・店名・実在の作品名は入れない")
@@ -119,4 +120,27 @@ class NamingPromptTest {
         assertNull(parseNameResponse(""))
         assertNull(parseNameResponse(null))
     }
+
+    @Test
+    fun `AI らしい名前を避ける：造語・カタカナの英語を使わず、季節と時間帯は入れなくてよい。詩的なのはよい（決定 91）`() {
+        val prompt = buildNamingPrompt(zigzag)
+        assertContains(prompt, "漢字をつなげて作った言葉")
+        assertContains(prompt, "カタカナの英語")
+        assertContains(prompt, "季節や時間帯は入れなくてよい")
+        assertContains(prompt, "「〜の道」「〜道」で終わらせない")
+        // 前は「意外性」「詩的」を頼んでいて、「春夜のループ」「霜柱の直線バー」のような名前ばかりになっていた
+        assertFalse(prompt.contains("意外性"))
+    }
+
+    @Test
+    fun `距離の感じを言葉でも添える（決定 91）`() {
+        assertEquals("ほんの少し", distanceFeel(165))
+        assertEquals("ちょっとそこまで", distanceFeel(820))
+        assertEquals("けっこう歩いた", distanceFeel(1631))
+        assertEquals("たくさん歩いた", distanceFeel(5200))
+        assertNull(distanceFeel(0))
+        // 距離が分からなければ、感じの言葉は添えない（行は「不明」で終わる）
+        assertTrue(buildNamingPrompt(zigzag.copy(distanceM = 0)).lines().contains("- 歩いた距離：不明"))
+    }
 }
+
