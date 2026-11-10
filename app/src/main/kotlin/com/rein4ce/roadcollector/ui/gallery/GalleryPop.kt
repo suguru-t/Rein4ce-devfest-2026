@@ -15,7 +15,7 @@ import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
-// 「みんな」だけで使うポップな部品（遊び方の色・タワーの注記の行）。コレクションと共通の部品は ui/common/Pop.kt、天気の上に直接書く字は ui/common/SkyText.kt
+// 「みんな」だけで使うポップな部品（タワーの注記の行。遊び方の色は ui/common/ModeTheme.kt）。コレクションと共通の部品は ui/common/Pop.kt、天気の上に直接書く字は ui/common/SkyText.kt
 
 /**
  * タワーの注記の行：本数・作者・日時を「・」でつなぐ。本数と日時は太い丸ゴシックで、前の細い字より一回り大きく（13sp）。

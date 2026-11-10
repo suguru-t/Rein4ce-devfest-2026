@@ -935,8 +935,8 @@ private val CHANGE_BUTTON_DROP = 24.dp
 private val FALLEN_RED = Color(0xFFD64545)
 
 /**
- * 終わりのカードの「ランキング」の字と縁の色（「みんな」のタブの紺）。ダークモードでは紺が暗い紙に沈むので、明るい紺にする
- * （モードを選ぶ画面の台の色と同じ考え。「サーバに送信」の青緑の縁の札（`Pop.TealLine`）と同じく、明るさだけ変える）
+ * 終わりのカードの「ランキング」の、遊ぶ画面の外での字と縁の色（「みんな」のタブの紺）。遊ぶ画面では遊び方の色（決定 84）。
+ * ダークモードでは紺が暗い紙に沈むので、明るい紺にする（モードを選ぶ画面の台の色と同じ考え）
  */
 private fun galleryInk(): Color = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
 

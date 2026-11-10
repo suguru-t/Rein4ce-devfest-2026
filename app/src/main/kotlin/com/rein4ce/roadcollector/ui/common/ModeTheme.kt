@@ -16,9 +16,11 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
  *
  * @property face 塗りの色（白い字（[Pop.Letter]）を載せる。札の字は小さいので 4.5:1 以上。#135 のレビューで、前の 3.4〜3.8 から少し濃くした）
  * @property ink  字と縁の色（[tint] の上で 4.5:1 以上）
+ * 色が同じなら同じものとみなす（data class）。描き直すたびに作り直しても、[LocalModeTheme] で渡した先が全部描き直されないように（#138 の A のレビュー）
+ *
  * @property tint 下地のやわらかい色（断面図の枠の面・全体を出す画面。画面全体には [wash] で薄く敷く）
  */
-internal class ModeTheme(val face: Color, val ink: Color, val tint: Color) {
+internal data class ModeTheme(val face: Color, val ink: Color, val tint: Color) {
     /** 画面全体に敷く下地（後ろの方眼と天気がうっすら透ける。端末のバーとタブバーの裏まで敷く：ui/common/PageWash.kt） */
     val wash: Color get() = tint.copy(alpha = 0.72f)
 
