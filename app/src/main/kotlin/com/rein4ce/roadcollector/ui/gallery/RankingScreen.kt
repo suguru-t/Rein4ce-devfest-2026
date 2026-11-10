@@ -262,7 +262,7 @@ private fun TowerCard(
     theme: GalleryTheme,
     onClick: () -> Unit,
 ) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
+    val author = tower.displayAuthor
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
         verticalAlignment = Alignment.CenterVertically,

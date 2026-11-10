@@ -220,7 +220,7 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
 
     private val _nickname = MutableStateFlow(store.get(KEY_NICKNAME)?.let(::cleanNickname).orEmpty())
 
-    /** 「みんなのタワー」に作者名として出すニックネーム。空なら名無し */
+    /** 「みんなのタワー」に作者名として出すニックネーム。空なら「ゲスト」と出る（[GUEST_NAME]） */
     val nickname: StateFlow<String> = _nickname
 
     /** 前後の空白を落とし、[MAX_NICKNAME_LENGTH] 文字までにして保存する */
@@ -285,6 +285,13 @@ class AppSettings(private val store: Store, private val demoEnabled: Boolean = D
     companion object {
         /** ニックネームの長さの上限。「みんな」の一覧の 1 行に収まる長さ */
         const val MAX_NICKNAME_LENGTH = NicknameHints.MAX_NICKNAME_LENGTH
+
+        /**
+         * ニックネームが空のときに出す名前（「みんな」の作者名・設定のニックネームの欄）。前は「名無し」で、
+         * 呼び名として冷たく感じるので「ゲスト」にした（B の希望。決定 83）。タワーには入れず、出すときに当てる
+         * （名前が空のタワーは、サーバにも空のまま送る。共有ページは今までどおり名前を出さない）
+         */
+        const val GUEST_NAME = "ゲスト"
 
         /** BGM の音量の段階の数と、初めの音量（まん中） */
         const val MAX_BGM_VOLUME = 10

@@ -68,7 +68,7 @@ object ApiClient {
         client.get("$baseUrl/towers/$id") { accept(ContentType.Application.Json) }.body()
 
     /**
-     * 送るときの作者名（設定のニックネーム。空なら null で、「みんな」には「名無し」と出る）。
+     * 送るときの作者名（設定のニックネーム。空なら null で、「みんな」には「ゲスト」と出る）。
      * アプリの起動時に RoadCollectorApp が設定とつなぐ
      */
     var authorName: () -> String? = { null }
@@ -161,7 +161,7 @@ object ApiClient {
  */
 internal fun namingRequest(part: Part): Part = part.copy(name = null)
 
-/** 送るタワーに作者名を入れる。もう入っていればそのまま。[author] が空なら入れない（名無し） */
+/** 送るタワーに作者名を入れる。もう入っていればそのまま。[author] が空なら入れない（「みんな」ではゲスト） */
 internal fun withAuthor(tower: Tower, author: String?): Tower =
     if (!tower.author.isNullOrBlank() || author.isNullOrBlank()) tower else tower.copy(author = author)
 

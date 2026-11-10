@@ -362,7 +362,7 @@ private fun Overview(
                             TowerRow(label = s.caption, tower = t, mine = isMine(t), sort = sort, onClick = { onOpen(t) })
                         }
                         // ニックネームを付けていない自分のタワーがあるときだけ、一言。押すとニックネームの窓。
-                        // 作者名は送るときにタワーに入るので、付けても今までのタワーは名無しのまま（文もそう書く）
+                        // 作者名は送るときにタワーに入るので、付けても今までのタワーはゲストのまま（文もそう書く）
                         if (nicknameMissing && towers.any { isMine(it) && it.author.isNullOrBlank() }) {
                             PressTextButton(onClick = onNickname, modifier = Modifier.padding(top = 2.dp)) {
                                 Text(
@@ -497,7 +497,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
  */
 @Composable
 private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: TowerSort, onClick: () -> Unit) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
+    val author = tower.displayAuthor
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
         verticalAlignment = Alignment.CenterVertically,

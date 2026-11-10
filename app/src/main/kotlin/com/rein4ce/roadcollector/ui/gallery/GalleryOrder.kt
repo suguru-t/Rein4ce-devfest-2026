@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.gallery
 
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
+import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.ui.game.PlayMode
 import java.time.LocalDate
 
@@ -75,6 +76,13 @@ internal enum class TowerSort(val label: String, val spoken: String, val topLabe
         }
     }
 }
+
+/**
+ * 「みんな」に出す作者名。名前が無いタワー（ニックネームを付けずに送った）は「ゲスト」（[AppSettings.GUEST_NAME]。決定 83）。
+ * 名前はタワーには入れず、出すときにここで当てる（断面図の 2 基の行・全部の一覧の紙片・紙片を開いたとき）
+ */
+internal val TowerSummary.displayAuthor: String
+    get() = author?.takeIf { it.isNotBlank() } ?: AppSettings.GUEST_NAME
 
 /**
  * 遊び方の名前（みちをつむのモードの名前と同じ。決定 77）。みちをつむの名前（[PlayMode.label]）から取るので、
