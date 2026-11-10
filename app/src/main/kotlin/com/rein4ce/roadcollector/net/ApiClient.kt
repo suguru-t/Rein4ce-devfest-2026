@@ -15,6 +15,7 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -56,7 +57,7 @@ object ApiClient {
     suspend fun listTowers(mode: TowerMode = TowerMode.NORMAL): List<TowerSummary> =
         client.get("$baseUrl/towers") {
             parameter("mode", mode.wire)
-            ownerId()?.let { header(OWNER_HEADER, it) }
+            withOwnerHeader(ownerId())
         }.body<List<TowerSummary>>().filter { it.mode == mode }
 
     /**
@@ -65,7 +66,11 @@ object ApiClient {
      * この呼び出しはそれに頼っていることが分かるよう明示しておく
      */
     suspend fun getTower(id: String): Tower =
-        client.get("$baseUrl/towers/$id") { accept(ContentType.Application.Json) }.body()
+        client.get("$baseUrl/towers/$id") {
+            accept(ContentType.Application.Json)
+            // 回数を数えるのにだけ使う（会場の Wi-Fi で全員が同じ IP に見えても、ほかの人のぶんまで止められないように。決定 88）
+            withOwnerHeader(ownerId())
+        }.body()
 
     /**
      * 送るときの作者名（設定のニックネーム。空なら null で、「みんな」には「ゲスト」と出る）。
@@ -92,6 +97,7 @@ object ApiClient {
     suspend fun postTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers") {
             contentType(ContentType.Application.Json)
+            withOwnerHeader(ownerId())
             setBody(prepared(tower))
         }.body<TowerCreated>().also { onPosted(it, TowerMode.NORMAL) }
 
@@ -102,6 +108,7 @@ object ApiClient {
     suspend fun postChallengeTower(tower: Tower): TowerCreated =
         client.post("$baseUrl/towers/challenge") {
             contentType(ContentType.Application.Json)
+            withOwnerHeader(ownerId())
             setBody(prepared(tower))
         }.body<TowerCreated>().also { onPosted(it, TowerMode.CHALLENGE) }
 
@@ -112,6 +119,7 @@ object ApiClient {
     suspend fun putDailyTower(tower: Tower): TowerCreated =
         client.put("$baseUrl/towers/daily") {
             contentType(ContentType.Application.Json)
+            withOwnerHeader(ownerId())
             setBody(prepared(tower))
         }.body<TowerCreated>().also { onPosted(it, TowerMode.DAILY) }
 
@@ -126,7 +134,7 @@ object ApiClient {
         client.post("$baseUrl/parts/name") {
             contentType(ContentType.Application.Json)
             // 持ち主の印は、サーバが回数を数えるのにだけ使う（会場の Wi-Fi で全員が同じ IP に見えても、ほかの人のぶんまで止められないように。決定 57）
-            ownerId()?.let { header(OWNER_HEADER, it) }
+            withOwnerHeader(ownerId())
             setBody(namingRequest(part))
         }.body<PartNameResponse>().name
     } catch (e: CancellationException) {
@@ -144,7 +152,7 @@ object ApiClient {
     suspend fun suggestNickname(hints: NicknameHints): String? = try {
         client.post("$baseUrl/nickname") {
             contentType(ContentType.Application.Json)
-            ownerId()?.let { header(OWNER_HEADER, it) } // 回数を数えるのにだけ使う（上と同じ）
+            withOwnerHeader(ownerId()) // 回数を数えるのにだけ使う（上と同じ）
             setBody(hints)
         }.body<PartNameResponse>().name
     } catch (e: CancellationException) {
@@ -191,3 +199,12 @@ private val JAPAN: ZoneId = ZoneId.of("Asia/Tokyo")
 
 /** 一覧を取るときに持ち主の印を送るヘッダ（サーバの TowerValidation.kt の OWNER_HEADER と同じ） */
 internal const val OWNER_HEADER = "X-Owner-Id"
+
+/**
+ * 持ち主の印をヘッダ（[OWNER_HEADER]）に付ける。[owner] が無ければ付けない。
+ * サーバは回数制限をこのヘッダで端末ごとに数え、無ければ IP で数える（RateLimit.kt）。会場や大学の Wi-Fi では全員が同じ IP に見えるので、
+ * どの呼び出しにも付ける（前はタワーを送る 3 つに付け忘れていて、同じ Wi-Fi の全員で投稿が 1 分 10 回までになっていた。決定 57・88）
+ */
+internal fun HttpRequestBuilder.withOwnerHeader(owner: String?) {
+    if (!owner.isNullOrBlank()) header(OWNER_HEADER, owner)
+}

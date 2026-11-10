@@ -281,4 +281,26 @@ class ChallengeViewModelTest {
         assertEquals(ChallengeViewModel.SendState.IDLE, vm.sendState)
         assertTrue(vm.canStart)
     }
+
+    @Test fun `台に何も残らなかった回は送らず、「送れませんでした」も出さない（決定 88）`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        var now = 0L
+        val sent = mutableListOf<Tower>()
+        val vm = ChallengeViewModel(
+            updateRecords = { listOfNotNull(it) },
+            newRun = { ChallengeRun(1, clock = { now }) },
+            sendTower = { tower -> sent += tower; TowerCreated("c1", "https://example.test/towers/c1") },
+        )
+        // 何も置かずに時間切れ（サーバは空の塔を 400 で断るので、送っても必ず失敗する）
+        vm.start(); vm.finishCountdown(); vm.resume()
+        now = ChallengeRules.DURATION_NS; vm.tick()
+        repeat(200) { now += 50_000_000; vm.tick() }
+        runCurrent()
+        assertEquals(ChallengeRun.Phase.FINISHED, vm.frame!!.phase)
+        assertTrue(sent.isEmpty())
+        assertEquals(ChallengeViewModel.SendState.IDLE, vm.sendState)
+        vm.resend()
+        runCurrent()
+        assertTrue(sent.isEmpty())
+    }
 }

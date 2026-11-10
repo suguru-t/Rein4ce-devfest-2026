@@ -105,4 +105,37 @@ class FirestoreTowerStoreTest {
         assertTrue(job.isCancelled)
         assertTrue(f.isCancelled, "元の ApiFuture にキャンセルが伝わっていない")
     }
+
+    // --- 決定 88：一覧に高い順などの上位と自分の塔を足す・毎日の塔の id ---
+
+    @Test
+    fun `一覧は新しい順に、高い順と多い順（毎日は連続日数順）の上位を足して読む（決定 88）`() {
+        val s = store("towers")
+        for ((mode, third) in listOf(TowerMode.NORMAL to "partCount", TowerMode.CHALLENGE to "partCount", TowerMode.DAILY to "streakDays")) {
+            val qs = s.listQueries(mode).map { it.toProto().structuredQuery }
+            assertEquals(listOf("createdAt", "height", third), qs.map { it.orderByList.single().field.fieldPath })
+            assertTrue(qs.all { q -> q.orderByList.single().direction.name == "DESCENDING" })
+            assertEquals(listOf(TowerStore.SUMMARY_LIMIT, FirestoreTowerStore.RANK_LIMIT, FirestoreTowerStore.RANK_LIMIT), qs.map { it.limit.value })
+            // どれも一覧用の項目だけ（json は読まない）
+            assertTrue(qs.all { q -> "json" !in q.select.fieldsList.map { it.fieldPath } })
+        }
+    }
+
+    @Test
+    fun `自分の塔は持ち主の印が等しいかで読む（決定 88）`() {
+        val q = store().ownerQuery("a".repeat(64), TowerMode.NORMAL).toProto().structuredQuery
+        assertEquals("ownerId", q.where.fieldFilter.field.fieldPath)
+        assertEquals("a".repeat(64), q.where.fieldFilter.value.stringValue)
+        assertEquals(FirestoreTowerStore.OWN_LIMIT, q.limit.value)
+        assertFalse("json" in q.select.fieldsList.map { it.fieldPath })
+    }
+
+    @Test
+    fun `毎日の塔の id は持ち主から決まり、持ち主の印そのものは入らない（決定 88）`() {
+        val a = FirestoreTowerStore.dailyIdFor("a".repeat(64))
+        assertEquals(a, FirestoreTowerStore.dailyIdFor("a".repeat(64)), "同じ持ち主なら同じ id（送信が重なっても 1 基）")
+        assertTrue(a != FirestoreTowerStore.dailyIdFor("b".repeat(64)))
+        assertTrue(Regex("^[0-9a-f]{16}$").matches(a))
+        assertFalse("a".repeat(16) == a)
+    }
 }

@@ -85,10 +85,14 @@ class TowerGallery(
     /**
      * 絵を描くためのタワーの中身（id → Tower）。一覧の JSON には置き方が入っていないので、カードが見えたときに 1 基ずつ取る。
      * 通常と 3 分チャレンジのタワーは保存後に変わらないので、一度取れたら再読み込みでも捨てない。
-     * 毎日 1 つずつ積むの塔は送るたびに同じ id のまま新しくなるので、その一覧を取り直したら捨てて取り直す
+     * 毎日 1 つずつ積むの塔は送るたびに同じ id のまま新しくなるので、その一覧を取り直したら、出ている絵はそのまま新しい形を取り直す
+     * （前は捨てていたが、絵を取りに行くのはカードが見えたときだけなので、一覧が変わらないと取りに行かず、点線の枠のままになっていた。決定 88）
      */
     val sketches = mutableStateMapOf<String, Tower>()
     private val fetching = mutableSetOf<String>()
+
+    /** 取っている最中に、毎日の塔が新しくなったかもしれないと分かった id。今の分が取れたら、もう一度取る */
+    private val stale = mutableSetOf<String>()
 
     /**
      * 取れなかったタワーの id。スクロールで何度もカードが見えるたびに取り直すと、壊れた 1 基のせいで
@@ -114,12 +118,27 @@ class TowerGallery(
 
     /** カードが見えたときに呼ぶ。取れなかったら、次の「再読み込み」のあとにもう一度取る */
     fun loadSketch(id: String) {
-        if (id in sketches || id in failed || !fetching.add(id)) return
+        if (id in sketches || id in failed) return
+        fetchSketch(id)
+    }
+
+    private fun fetchSketch(id: String) {
+        if (!fetching.add(id)) return
         scope.launch {
             runCatching { getTower(id) }
                 .onSuccess { sketches[id] = it }
                 .onFailure { failed.add(id) }
             fetching.remove(id)
+            // 取っている間に一覧が取り直され、塔が新しくなっていたかもしれない：もう一度取る
+            if (stale.remove(id)) fetchSketch(id)
+        }
+    }
+
+    /** 毎日 1 つずつ積むの塔が新しくなったかもしれない：出ている絵（か取っている最中の絵）は、そのまま新しい形を取り直す */
+    private fun refetchSketch(id: String) {
+        when {
+            id in fetching -> stale.add(id)
+            id in sketches -> fetchSketch(id)
         }
     }
 
@@ -148,8 +167,8 @@ class TowerGallery(
             var succeeded = false
             try {
                 val towers = listTowers(mode)
-                // 毎日 1 つずつ積むの塔は同じ id のまま新しくなるので、前に取った絵は捨てる（次に見えたときに取り直す）
-                if (mode == TowerMode.DAILY) towers.forEach { sketches.remove(it.id) }
+                // 毎日 1 つずつ積むの塔は同じ id のまま新しくなるので、前に取った絵は取り直す（取れるまでは前の絵を出しておく）
+                if (mode == TowerMode.DAILY) towers.forEach { refetchSketch(it.id) }
                 // 高さの順位表。同じ高さなら新しいほうを上に
                 list.state = State.Loaded(towers.sortedWith(compareByDescending<TowerSummary> { t -> t.height }.thenByDescending { t -> t.createdAt }))
                 succeeded = true

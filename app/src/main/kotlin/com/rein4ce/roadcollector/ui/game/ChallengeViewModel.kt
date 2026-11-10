@@ -247,8 +247,8 @@ class ChallengeViewModel(
         val score = r.score
         if (score != null && score.runId != savedRunId && score.runId != pendingRunId && score.runId != failedRunId) save(score)
         // 記録になった回の塔は、自動で「みんな」に送る（1 回だけ。送れなかったら「もう一度送る」で）。
-        // 台に何も残らなかった回は記録にしないので送らない（決定 89。空の塔はサーバも受け取らない）
-        val tower = r.tower
+        // 台に何も残らなかった回は記録にしないので送らない（決定 89。空の塔はサーバも受け取らない。sendableTower も同じ判定。決定 88）
+        val tower = sendableTower(r)
         if (score != null && score.counts && tower != null && score.runId != sentRunId && score.runId != sendingRunId && score.runId != sendFailedRunId) {
             send(score.runId, tower)
         }
@@ -265,13 +265,19 @@ class ChallengeViewModel(
     fun resend() {
         val r = run ?: return
         val score = r.score ?: return
-        val tower = r.tower ?: return
+        val tower = sendableTower(r) ?: return
         if (score.runId != sendFailedRunId) return
         sendFailedRunId = null
         // 先に「送っています」にする（送るのがすぐ終わったときに、終わったあとの「出しました」を上書きしないように）
         sendState = SendState.SENDING
         send(score.runId, tower)
     }
+
+    /**
+     * 送れる塔。台に 1 つも残らなかった回（何も置かずに時間切れ・全部落ちた）は送らない（決定 88）。
+     * サーバは空の塔を 400 で断るので、前は「送れませんでした」になり、「もう一度送る」を押しても必ず失敗していた
+     */
+    private fun sendableTower(r: ChallengeRun): Tower? = r.tower?.takeIf { it.placements.isNotEmpty() }
 
     private fun send(runId: String, tower: Tower) {
         val upload = sendTower ?: return

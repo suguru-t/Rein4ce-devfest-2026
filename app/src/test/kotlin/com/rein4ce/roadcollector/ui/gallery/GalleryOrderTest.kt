@@ -128,6 +128,9 @@ class GalleryOrderTest {
         assertEquals("2 日あいたら 0", 0, daily("2026-11-08", 4).currentStreak(today))
         assertEquals(0, daily(null, 4).currentStreak(today))
         assertEquals(0, daily("きのう", 4).currentStreak(today))
+        // 未来の日付：次の日までは時差の分として数え、その先は 0（決定 88）
+        assertEquals(4, daily(today.plusDays(1).toString(), 4).currentStreak(today))
+        assertEquals(0, daily("2099-01-01", 36_500).currentStreak(today))
     }
 
     @Test
