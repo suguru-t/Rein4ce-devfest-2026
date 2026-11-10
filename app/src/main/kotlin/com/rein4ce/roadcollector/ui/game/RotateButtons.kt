@@ -41,11 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive

@@ -71,8 +71,6 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.rankOf
 import com.rein4ce.roadcollector.net.ApiClient
-import com.rein4ce.roadcollector.ui.common.modeInkOr
-import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.PressButton
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -88,6 +86,8 @@ import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.SkyText
 import kotlinx.coroutines.isActive
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
+import com.rein4ce.roadcollector.ui.common.modeInkOr
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.graphics.graphicsLayer
@@ -341,7 +341,7 @@ private fun ChallengeClock(vm: ChallengeViewModel, compact: Boolean) {
     val rest = seconds % 60
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（HeightMeter と同じ）
+    // 遊び方の字の色（決定 84。HeightMeter と同じ）。残り 10 秒からは赤。遊ぶ画面の外では、前のオレンジ（ダークでは明るいオレンジ）
     val number = when {
         seconds <= 10 -> LastSecondsRed
         else -> modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
@@ -495,7 +495,7 @@ private fun AimHint(visible: Boolean = true) {
  */
 @Composable
 private fun RunControls(onRestart: () -> Unit) {
-    // 通常のモードの「やり直す」と同じ、紙の面に青緑の縁の小さな札（決定 67）
+    // 通常のモードの「やり直す」と同じ、紙の面に遊び方の色の縁の小さな札（決定 67・84）
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
         PopChip("やり直す", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = onRestart)
     }
@@ -527,7 +527,7 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopButton("もう一度", onClick = { vm.start() }, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter, enabled = vm.canStart)
-            // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 77）
+            // 「みんな」の 90 秒チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ、遊び方の色の縁。決定 77・84）
             PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = modeInkOr(rankingInk()), edge = modeInkOr(rankingInk()))
         }
         Spacer(Modifier.height(8.dp))

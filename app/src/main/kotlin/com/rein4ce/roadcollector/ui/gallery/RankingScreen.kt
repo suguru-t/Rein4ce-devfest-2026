@@ -59,9 +59,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.PageWash
-import com.rein4ce.roadcollector.ui.common.ModeTheme
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.modeTheme
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopChip
@@ -71,6 +69,8 @@ import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.ModeTheme
+import com.rein4ce.roadcollector.ui.common.modeTheme
 
 /**
  * ランキング：全部のタワーを紙片（カード）で 1 列に、[PAGE_SIZE] 個ずつ。「みんな」の「ランキングを見る」から来て、「‹ 戻る」で戻る。

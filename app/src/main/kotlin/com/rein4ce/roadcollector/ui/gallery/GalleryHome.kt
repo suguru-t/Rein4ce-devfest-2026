@@ -48,6 +48,7 @@ import com.rein4ce.roadcollector.ui.game.MODE_LEADING_DEPTH
 import com.rein4ce.roadcollector.ui.game.MODE_LEADING_SIZE
 import com.rein4ce.roadcollector.ui.game.ModeRow
 import com.rein4ce.roadcollector.ui.game.modeBlockFace
+import com.rein4ce.roadcollector.ui.game.playModeOf
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**

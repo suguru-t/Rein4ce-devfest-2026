@@ -65,9 +65,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.PageWash
-import com.rein4ce.roadcollector.ui.common.ModeTheme
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.modeTheme
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PopBackButton
@@ -80,6 +78,8 @@ import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.ModeTheme
+import com.rein4ce.roadcollector.ui.common.modeTheme
 
 /**
  * みんなのタワー（C）。地は「測量野帳」（Fieldbook.kt）の方眼紙で、画面の部品は題字「ミチツミ」の積み木に合わせた

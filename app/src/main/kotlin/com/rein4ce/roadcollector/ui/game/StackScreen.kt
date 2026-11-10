@@ -92,8 +92,6 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.WalkDistance
-import com.rein4ce.roadcollector.ui.common.modeInkOr
-import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -115,6 +113,8 @@ import com.rein4ce.roadcollector.ui.common.drawPiece
 import com.rein4ce.roadcollector.ui.common.drawWorldShapes
 import com.rein4ce.roadcollector.ui.common.shownSky
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
+import com.rein4ce.roadcollector.ui.common.modeInkOr
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.arrangedNow
 import kotlinx.coroutines.isActive
@@ -867,7 +867,7 @@ internal fun HeightMeter(height: Float, compact: Boolean, follow: Boolean = fals
         animationSpec = if (reduceMotion || follow) snap() else tween(durationMillis = 700, easing = FastOutSlowInEasing),
         label = "HeightMeter",
     )
-    // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（「みんな」の高い順の字と同じ）
+    // 遊び方の字の色（決定 84）。遊ぶ画面の外では、前のオレンジ（ダークでは、濃いオレンジが暗い紙に沈むので明るいオレンジ）
     val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -896,7 +896,7 @@ private fun PlacedAndFallen(placed: Int, fallen: Int, bonus: WeatherBonus.Result
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
     val size = if (compact) fixed(13f) else 15.sp
     Column(horizontalAlignment = Alignment.End) {
-        // 「置いた ○ 本」：数字はオレンジの大きな字、ほかは墨（毎日 1 つずつ積むの「○ 日ぶん」・90 秒チャレンジの残り時間と同じ形。決定 76）。
+        // 「置いた ○ 本」：数字は遊び方の色の大きな字、ほかは墨（毎日 1 つずつ積むの「○ 日ぶん」・90 秒チャレンジの残り時間と同じ形。決定 76）。
         // 前は 15sp の 1 行の字で、ほかの画面の字より小さかった
         val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
         Row(

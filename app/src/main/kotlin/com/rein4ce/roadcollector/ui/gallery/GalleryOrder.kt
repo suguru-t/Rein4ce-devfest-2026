@@ -4,6 +4,7 @@ import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
 import com.rein4ce.roadcollector.data.AppSettings
 import com.rein4ce.roadcollector.ui.game.PlayMode
+import com.rein4ce.roadcollector.ui.game.playModeOf
 import java.time.LocalDate
 
 /**
@@ -94,13 +95,6 @@ internal val TowerMode.fullLabel: String
 /** ランキングの上の個数の行に出す短い名前（空白を詰める。毎日 1 つずつ積むは「毎日積む」） */
 internal val TowerMode.shortLabel: String
     get() = if (this == TowerMode.DAILY) "毎日積む" else fullLabel.replace(" ", "")
-
-/** 遊び方 → みちをつむのモード（ホームの行の色・アイコン・名前を同じにする） */
-internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
-    TowerMode.NORMAL -> PlayMode.NORMAL
-    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
-    TowerMode.DAILY -> PlayMode.DAILY
-}
 
 /**
  * まだ自分のタワーが無いときの、ランキングに並ぶまでの一言（「〜すると、ここに立ちます」の前半。決定 77）。

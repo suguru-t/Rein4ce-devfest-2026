@@ -65,7 +65,6 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
-import com.rein4ce.roadcollector.ui.common.modeInkOr
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -80,6 +79,7 @@ import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.modeInkOr
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import java.time.Instant
 import java.time.ZoneId
@@ -219,7 +219,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                             text = TURN_BUTTON_TEXT,
                             label = TURN_BUTTON_LABEL,
                         )
-                        // ふつうの積む画面の「やり直す」と同じ、紙の面に青緑の縁の小さな札
+                        // ふつうの積む画面の「やり直す」と同じ、紙の面に遊び方の色の縁の小さな札（決定 84）
                         PopChip("選び直す", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::cancelChoice)
                     }
                     DailyViewModel.Phase.Settling -> SkyText("落下中…", color = Fieldbook.Muted, fontSize = 14.sp)
@@ -282,7 +282,7 @@ private fun TodayChoices(todays: List<Part>, colorsOf: (Part) -> PieceColors, on
     }
     if (pages > 1) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // ふつうの積む画面の「やり直す」と同じ、紙の面に青緑の縁の小さな札
+            // ふつうの積む画面の「やり直す」と同じ、紙の面に遊び方の色の縁の小さな札（決定 84）
             PopChip("ほかの道", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = { page = (current + 1) % pages })
             SkyText("${current + 1} / $pages", color = Fieldbook.Muted, fontSize = 13.sp)
         }

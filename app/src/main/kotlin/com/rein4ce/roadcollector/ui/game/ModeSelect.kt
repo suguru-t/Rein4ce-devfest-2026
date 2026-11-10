@@ -53,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.daily.DailyTower
-import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -64,9 +63,6 @@ import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.PopBackButton
-import com.rein4ce.roadcollector.ui.common.modeTheme
-import com.rein4ce.roadcollector.ui.common.PageWash
-import com.rein4ce.roadcollector.ui.common.LocalModeTheme
 import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
 import com.rein4ce.roadcollector.ui.common.artBars
@@ -78,7 +74,11 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.common.LocalModeTheme
+import com.rein4ce.roadcollector.ui.common.modeTheme
+import com.rein4ce.roadcollector.ui.common.PageWash
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.core.model.TowerMode
 
 /**
  * 積む画面の遊び方（モード）。並びは、モードを選ぶ画面の上から。
@@ -95,6 +95,10 @@ enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
 }
 
+/*
+ * みちをつむのモードと「みんな」の遊び方の対応（行き・帰りの 2 つを並べて置く。遊び方を足すときは両方を直す。#138 の C のレビュー）
+ */
+
 /** みちをつむのモード → 「みんな」の遊び方（色合い [modeTheme] を同じにする） */
 internal val PlayMode.towerMode: TowerMode
     get() = when (this) {
@@ -102,6 +106,13 @@ internal val PlayMode.towerMode: TowerMode
         PlayMode.CHALLENGE -> TowerMode.CHALLENGE
         PlayMode.DAILY -> TowerMode.DAILY
     }
+
+/** 遊び方 → みちをつむのモード（ホームの行の色・アイコン・名前を同じにする） */
+internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
+    TowerMode.NORMAL -> PlayMode.NORMAL
+    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
+    TowerMode.DAILY -> PlayMode.DAILY
+}
 
 /**
  * 積むタブの中身。開くと、まずモードを選ぶ画面（ホームのような、色の積み木と紙のカード）。
@@ -414,10 +425,11 @@ private fun ModePlayPage(
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
     val narrow = isNarrowScreen()
-    // 遊び方ごとの色合い（「みんな」の遊び方のランキングと同じ。決定 84）。画面全体（端末のバーとタブバーの裏まで）に下地を薄く敷き、
+    // 遊び方ごとの色合い（「みんな」の遊び方のランキングと同じ。決定 84）。画面全体（端末のバーとタブバーの裏まで）に下地を薄く敷き
+    // （「みんな」より薄く、天気が見えるように。playWash）、
     // 中の画面（積む画面・90 秒チャレンジ・毎日 1 つずつ積む）の数字・ボタン・札は LocalModeTheme からこの色を使う
     val theme = modeTheme(mode.towerMode)
-    PageWash(theme.wash)
+    PageWash(theme.playWash)
     CompositionLocalProvider(LocalModeTheme provides theme) {
         content { compact ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
