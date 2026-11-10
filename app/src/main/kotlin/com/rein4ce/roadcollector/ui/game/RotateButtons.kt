@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
@@ -176,7 +177,7 @@ fun RotateButton(
                         }
                     }
                 }
-                .popBlock(face = if (active) Pop.OrangeDeep else Fieldbook.GridMajor, corner = 14.dp)
+                .popBlock(face = if (active) modeFaceOr(Pop.OrangeDeep) else Fieldbook.GridMajor, corner = 14.dp)
                 .heightIn(min = 48.dp)
                 .padding(contentPadding)
                 .semantics {

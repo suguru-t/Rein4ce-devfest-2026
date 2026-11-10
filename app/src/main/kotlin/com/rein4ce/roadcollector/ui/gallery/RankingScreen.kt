@@ -59,7 +59,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.PageWash
+import com.rein4ce.roadcollector.ui.common.ModeTheme
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.modeTheme
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopChip
@@ -122,7 +124,7 @@ internal fun RankingScreen(
 
     // 「みんな」の最初の画面と同じ余白・同じ見出し（積み木）。上に「‹ 戻る」の黄色い札、その下に画面名と個数とリロード
     // 遊び方ごとの色合い（決定 81。断面図の画面と同じ色を薄く敷き、札・横棒・1 番の札・めくる札をこの色でそろえる）
-    val theme = galleryTheme(gallery.mode)
+    val theme = modeTheme(gallery.mode)
     PageWash(theme.wash)
     Column(
         modifier = Modifier
@@ -199,7 +201,7 @@ internal fun RankingScreen(
  * 読み上げではラジオボタンの組として伝える。押し心地（#76）はほかのボタンとそろえ、札の形だけが縮む（波紋は出さない）
  */
 @Composable
-internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme) {
+internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: ModeTheme) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -259,7 +261,7 @@ private fun TowerCard(
     referenceHeight: Float,
     referenceWidth: Float,
     ratio: Float,
-    theme: GalleryTheme,
+    theme: ModeTheme,
     onClick: () -> Unit,
 ) {
     val author = tower.displayAuthor
@@ -388,7 +390,7 @@ private data class StatusLine(val text: String, val color: Color)
  * それより多いときだけ出す。端のページでは、その向きのボタンを押せなくする
  */
 @Composable
-internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit, theme: GalleryTheme) {
+internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit, theme: ModeTheme) {
     val first = page * PAGE_SIZE + 1
     val last = minOf((page + 1) * PAGE_SIZE, total)
     Row(

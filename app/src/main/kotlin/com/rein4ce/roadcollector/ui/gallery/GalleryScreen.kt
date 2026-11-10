@@ -65,7 +65,9 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.PageWash
+import com.rein4ce.roadcollector.ui.common.ModeTheme
 import com.rein4ce.roadcollector.ui.common.Pop
+import com.rein4ce.roadcollector.ui.common.modeTheme
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopButton
 import com.rein4ce.roadcollector.ui.common.PopBackButton
@@ -271,7 +273,7 @@ private fun Overview(
     }
 
     // 遊び方ごとの色合い（決定 81）。画面全体に薄く敷き、札・数字・ボタン・断面図の枠をこの色でそろえる
-    val theme = galleryTheme(mode)
+    val theme = modeTheme(mode)
     // 方眼の地はアプリ全体（AppNav）に 1 枚だけ敷いてある（#23）。その上に遊び方の色を薄く敷く（端末のバーとタブバーの裏まで。ui/common/PageWash.kt）
     PageWash(theme.wash)
     Column(
@@ -413,7 +415,7 @@ private object SectionIntro {
  * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, theme: GalleryTheme, reduceMotion: Boolean) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, theme: ModeTheme, reduceMotion: Boolean) {
     val isLoaded = state is TowerGallery.State.Loaded
     val isError = state is TowerGallery.State.Error
     val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
@@ -571,7 +573,7 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
 @Composable
 private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDismiss: () -> Unit) {
     // 地と「× 閉じる」は、開いたランキングと同じ遊び方の色（決定 81）
-    val theme = galleryTheme(tower.mode)
+    val theme = modeTheme(tower.mode)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = Modifier
@@ -592,7 +594,7 @@ private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, on
  */
 @Composable
 private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: Boolean, picture: Modifier) {
-    val theme = galleryTheme(tower.mode)
+    val theme = modeTheme(tower.mode)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val url = "${ApiClient.baseUrl}/towers/${tower.id}"

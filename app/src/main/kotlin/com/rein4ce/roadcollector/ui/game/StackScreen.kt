@@ -92,6 +92,8 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.weather.Sky
 import com.rein4ce.roadcollector.data.WalkDistance
+import com.rein4ce.roadcollector.ui.common.modeInkOr
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -195,7 +197,7 @@ fun StackScreen(
             } else {
                 Text(vm.startMessage ?: "コレクションに道がありません")
                 Spacer(Modifier.height(8.dp))
-                PopButton("コレクションへ", onClick = onGoInventory, face = Pop.OrangeDeep, text = Pop.Letter)
+                PopButton("コレクションへ", onClick = onGoInventory, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter)
             }
         }
         return
@@ -397,8 +399,8 @@ fun StackScreen(
                             PopChip(
                                 "やり直す",
                                 face = Fieldbook.Card,
-                                text = Pop.TealLine,
-                                edge = Pop.TealLine,
+                                text = modeInkOr(Pop.TealLine),
+                                edge = modeInkOr(Pop.TealLine),
                                 onClick = { vm.restart(repository.arrangedNow(), repository.origins.value) },
                             )
                         }
@@ -522,7 +524,7 @@ private fun ResultCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            PopButton("もう一度", onClick = onRetry, face = Pop.OrangeDeep, text = Pop.Letter)
+            PopButton("もう一度", onClick = onRetry, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter)
             if (vm.canUpload) {
                 // 送信済みなら押せない（押すたびに同じタワーが別の id で保存され、「みんな」に重複して並ぶため）
                 PopButton(
@@ -534,14 +536,14 @@ private fun ResultCard(
                     },
                     onClick = { vm.upload() },
                     face = Fieldbook.Card,
-                    text = Pop.TealLine,
-                    edge = Pop.TealLine,
+                    text = modeInkOr(Pop.TealLine),
+                    edge = modeInkOr(Pop.TealLine),
                     enabled = !vm.uploading && !vm.uploaded,
                     reserveLabels = listOf("保存", "保存中…", "保存済み"),
                 )
             }
             // 「みんなのタワー」（ランキングと、あなたの最高と一番高い塔の断面図）へ。前は「みんな」で、何のボタンか分かりにくかった（B の希望）
-            PopButton("ランキング", onClick = onGoGallery, face = Fieldbook.Card, text = galleryInk(), edge = galleryInk())
+            PopButton("ランキング", onClick = onGoGallery, face = Fieldbook.Card, text = modeInkOr(galleryInk()), edge = modeInkOr(galleryInk()))
         }
         vm.uploadMessage?.let {
             Spacer(Modifier.height(8.dp))
@@ -866,7 +868,7 @@ internal fun HeightMeter(height: Float, compact: Boolean, follow: Boolean = fals
         label = "HeightMeter",
     )
     // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（「みんな」の高い順の字と同じ）
-    val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+    val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     Row(
         verticalAlignment = Alignment.Bottom,
         // 読み上げは、回っている途中の数字ではなく、今の高さを 1 回で
@@ -896,7 +898,7 @@ private fun PlacedAndFallen(placed: Int, fallen: Int, bonus: WeatherBonus.Result
     Column(horizontalAlignment = Alignment.End) {
         // 「置いた ○ 本」：数字はオレンジの大きな字、ほかは墨（毎日 1 つずつ積むの「○ 日ぶん」・90 秒チャレンジの残り時間と同じ形。決定 76）。
         // 前は 15sp の 1 行の字で、ほかの画面の字より小さかった
-        val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+        val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
         Row(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.clearAndSetSemantics { contentDescription = "置いた $placed 本" },

@@ -71,6 +71,8 @@ import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.data.rankOf
 import com.rein4ce.roadcollector.net.ApiClient
+import com.rein4ce.roadcollector.ui.common.modeInkOr
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.common.PressButton
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
@@ -283,7 +285,7 @@ private fun CountdownNumber(n: Int, modifier: Modifier = Modifier) {
     val size = with(LocalDensity.current) { 96.dp.toSp() }
     SkyText(
         "$n",
-        color = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep,
+        color = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep),
         fontSize = size,
         modifier = modifier
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
@@ -342,8 +344,7 @@ private fun ChallengeClock(vm: ChallengeViewModel, compact: Boolean) {
     // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（HeightMeter と同じ）
     val number = when {
         seconds <= 10 -> LastSecondsRed
-        Fieldbook.dark -> Pop.Orange
-        else -> Pop.OrangeDeep
+        else -> modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     }
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -496,7 +497,7 @@ private fun AimHint(visible: Boolean = true) {
 private fun RunControls(onRestart: () -> Unit) {
     // 通常のモードの「やり直す」と同じ、紙の面に青緑の縁の小さな札（決定 67）
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-        PopChip("やり直す", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = onRestart)
+        PopChip("やり直す", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = onRestart)
     }
 }
 
@@ -525,9 +526,9 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
         if (score != null) SendState(vm)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
+            PopButton("もう一度", onClick = { vm.start() }, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter, enabled = vm.canStart)
             // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 77）
-            PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = rankingInk(), edge = rankingInk())
+            PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = modeInkOr(rankingInk()), edge = modeInkOr(rankingInk()))
         }
         Spacer(Modifier.height(8.dp))
         Records(vm.ranking, highlight = score?.runId)
@@ -543,10 +544,10 @@ private fun SendState(vm: ChallengeViewModel) {
     when (vm.sendState) {
         ChallengeViewModel.SendState.IDLE -> Unit
         ChallengeViewModel.SendState.SENDING -> Text("ランキングに送っています…", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
-        ChallengeViewModel.SendState.SENT -> Text("ランキングに出しました", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Pop.TealLine)
+        ChallengeViewModel.SendState.SENT -> Text("ランキングに出しました", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = modeInkOr(Pop.TealLine))
         ChallengeViewModel.SendState.FAILED -> {
             Text("ランキングに送れませんでした", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
-            PopChip("もう一度送る", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::resend)
+            PopChip("もう一度送る", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::resend)
         }
     }
 }
@@ -565,7 +566,7 @@ private fun SaveState(vm: ChallengeViewModel) {
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
         )
-        PopChip("再試行", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::refreshRecords)
+        PopChip("再試行", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::refreshRecords)
     }
 }
 

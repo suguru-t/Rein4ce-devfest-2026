@@ -65,6 +65,7 @@ import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import com.rein4ce.roadcollector.ui.common.modeInkOr
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -219,7 +220,7 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                             label = TURN_BUTTON_LABEL,
                         )
                         // ふつうの積む画面の「やり直す」と同じ、紙の面に青緑の縁の小さな札
-                        PopChip("選び直す", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::cancelChoice)
+                        PopChip("選び直す", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::cancelChoice)
                     }
                     DailyViewModel.Phase.Settling -> SkyText("落下中…", color = Fieldbook.Muted, fontSize = 14.sp)
                 }
@@ -239,11 +240,11 @@ private fun DailySendRow(vm: DailyViewModel, onGoRanking: () -> Unit) {
         when (vm.sendState) {
             DailyViewModel.SendState.IDLE -> Unit
             DailyViewModel.SendState.SENDING -> SkyText("ランキングに送っています…", color = Fieldbook.Muted, fontSize = 13.sp)
-            DailyViewModel.SendState.SENT -> SkyText("ランキングに出しました", color = Pop.TealLine, fontSize = 13.sp)
+            DailyViewModel.SendState.SENT -> SkyText("ランキングに出しました", color = modeInkOr(Pop.TealLine), fontSize = 13.sp)
             DailyViewModel.SendState.FAILED ->
-                PopChip("もう一度送る", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::sendIfNeeded)
+                PopChip("もう一度送る", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::sendIfNeeded)
         }
-        PopChip("ランキング", face = Fieldbook.Card, text = Pop.Navy, edge = Pop.Navy, onClick = onGoRanking)
+        PopChip("ランキング", face = Fieldbook.Card, text = modeInkOr(Pop.Navy), edge = modeInkOr(Pop.Navy), onClick = onGoRanking)
     }
 }
 
@@ -282,7 +283,7 @@ private fun TodayChoices(todays: List<Part>, colorsOf: (Part) -> PieceColors, on
     if (pages > 1) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // ふつうの積む画面の「やり直す」と同じ、紙の面に青緑の縁の小さな札
-            PopChip("ほかの道", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = { page = (current + 1) % pages })
+            PopChip("ほかの道", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = { page = (current + 1) % pages })
             SkyText("${current + 1} / $pages", color = Fieldbook.Muted, fontSize = 13.sp)
         }
     }
@@ -302,7 +303,7 @@ private fun Note(text: String) {
 private fun DailyDays(days: Int, compact: Boolean) {
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+    val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.clearAndSetSemantics { contentDescription = "$days 日ぶん" },
@@ -317,7 +318,7 @@ private fun DailyDays(days: Int, compact: Boolean) {
 private fun DailyHeight(height: Float, compact: Boolean) {
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    val number = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep
+    val number = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.clearAndSetSemantics { contentDescription = "塔の高さ %.2f メートル".format(height) },
