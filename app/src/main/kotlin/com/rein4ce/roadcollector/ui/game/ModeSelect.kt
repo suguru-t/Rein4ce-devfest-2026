@@ -34,6 +34,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -58,6 +59,7 @@ import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
+import com.rein4ce.roadcollector.ui.common.SkyText
 import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
@@ -90,16 +92,36 @@ import com.rein4ce.roadcollector.core.model.TowerMode
  * - 3 分チャレンジ：#45・#78（D）。[StackTab] から ChallengeScreen を始める。カードには、この端末での最高の記録（ChallengeStorage）
  * - 毎日 1 つずつ積む：#106・決定 61。[StackTab] から DailyScreen を始める。カードには、今の塔の高さと日数（DailyTowerStore）
  */
-enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
-    NORMAL("通常", "次々に出る道を、落とすまで積む", ready = true),
+enum class PlayMode(val label: String, val note: String, val material: String, val ready: Boolean) {
+    // note は選ぶ画面の行の一言。material は遊んでいる画面の上の行の下に出す、積むものの一言（決定 87）。
+    // 90 秒チャレンジだけ歩いた道ではなく決まった形で積むので、どの画面でもそれが分かるようにする（B の希望）。
+    // 「歩いた道は使わない」と無いものを言うより、みんな同じ形で競うことを前向きに書く（B の判断）。
+    // 通常は見本やデモ散歩の道も出るので「歩いた道」ではなく「集めた道」（#87 の A のレビューと同じ考え）
+    NORMAL("通常", "集めた道が次々に出る。落とすまで積む", "コレクションの道で積む", ready = true),
     // 前は 3 分チャレンジ。90 秒にした（決定 75）
-    CHALLENGE("90 秒チャレンジ", "90 秒のあいだに、道を高く積む", ready = true),
-    DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
+    CHALLENGE("90 秒チャレンジ", "みんな同じ形を、90 秒で高く積む", "みんな同じ形で積む", ready = true),
+    DAILY("毎日 1 つずつ積む", "その日に歩いた道を 1 つずつ積んで、塔を育てる", "その日に歩いた道を 1 日 1 つ積む", ready = true),
 }
 
 /*
  * みちをつむのモードと「みんな」の遊び方の対応（行き・帰りの 2 つを並べて置く。遊び方を足すときは両方を直す。#138 の C のレビュー）
  */
+
+/** 遊んでいるモード（遊ぶ画面の枠 [ModePlayPage] が渡す。遊ぶ画面の外では null） */
+internal val LocalPlayMode = staticCompositionLocalOf<PlayMode?> { null }
+
+/**
+ * 遊んでいる画面の上の行の下に出す、何を積むかの一言（決定 87）：通常は「コレクションの道で積む」、
+ * 90 秒チャレンジは「みんな同じ形で積む」、毎日 1 つずつ積むは「その日に歩いた道を 1 日 1 つ積む」。
+ * 90 秒チャレンジだけ歩いた道ではなく決まった形で積むので、どの画面でもそれが分かるようにする（B の希望）。
+ * 小さい画面では、塔を描く所を狭くしないよう出さない。遊ぶ画面の外（[LocalPlayMode] が無い）では何も出さない
+ */
+@Composable
+internal fun PlayMaterialNote(compact: Boolean, modifier: Modifier = Modifier) {
+    val mode = LocalPlayMode.current ?: return
+    if (compact) return
+    SkyText(mode.material, color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, modifier = modifier)
+}
 
 /** みちをつむのモード → 「みんな」の遊び方（色合い [modeTheme] を同じにする） */
 internal val PlayMode.towerMode: TowerMode
@@ -449,7 +471,8 @@ private fun ModePlayPage(
     // 中の画面（積む画面・90 秒チャレンジ・毎日 1 つずつ積む）の数字・ボタン・札は LocalModeTheme からこの色を使う
     val theme = modeTheme(mode.towerMode)
     PageWash(theme.playWash)
-    CompositionLocalProvider(LocalModeTheme provides theme) {
+    // 何を積むか（LocalPlayMode）も渡す。中の画面は、上の行の下に [PlayMaterialNote] で短く出す（決定 87）
+    CompositionLocalProvider(LocalModeTheme provides theme, LocalPlayMode provides mode) {
         content { compact ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
