@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +81,7 @@ import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.modeInkOr
+import com.rein4ce.roadcollector.ui.common.PressTextButton
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import java.time.Instant
 import java.time.ZoneId
@@ -103,6 +105,8 @@ import kotlinx.coroutines.launch
 internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, onGoRanking: () -> Unit = {}) {
     val app = RoadCollectorApp.from(LocalContext.current)
     val vm: DailyViewModel = viewModel(factory = remember { viewModelFactory { initializer { DailyViewModel(app.dailyTower, sendTower = { ApiClient.putDailyTower(it) }) } } })
+    // 「置き直す」の確かめの窓を出しているか（決定 86）
+    var confirmingRedo by rememberSaveable { mutableStateOf(false) }
     val repository = app.partRepository
     val parts by repository.parts.collectAsStateWithLifecycle()
     val weathers by repository.weather.collectAsStateWithLifecycle()
@@ -171,29 +175,44 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                     DailyViewModel.Phase.Loading -> Unit
                     DailyViewModel.Phase.Viewing -> when {
                         vm.placedToday -> {
-                            Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
+                            // 気に入らなければ、今日のうちは今日のパーツを外して置き直せる（落ちたときと合わせて 1 日 3 回まで。決定 86）。
+                            // 一言は、下の「置き直す」の札と続けて読めるように（#140 の A と C のレビュー）
+                            if (vm.redosLeftToday > 0) {
+                                Note("今日の 1 つは積みました。気に入らなければ、今日のうちは置き直せます")
+                                PopChip(
+                                    "置き直す（あと ${vm.redosLeftToday} 回）",
+                                    face = Fieldbook.Card,
+                                    text = modeInkOr(Pop.TealLine),
+                                    edge = modeInkOr(Pop.TealLine),
+                                    enabled = vm.canRedo,
+                                    onClick = { confirmingRedo = true },
+                                )
+                            } else {
+                                Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
+                            }
                             // 積んで止まったら、自動で「みんな」に送る（決定 77）。送ったようすと「ランキング」
                             DailySendRow(vm, onGoRanking)
                         }
                         !vm.canPlaceToday -> Note(
                             // 文の切れ目で改行する（そのままだと「あ／したまた」のように語の途中で折り返していた）
-                            "今日の道は ${DailyTower.MAX_RETRIES} 回置き直しても、台に残りませんでした。\nあしたまた、その日に歩いた道を 1 つ積めます",
+                            // 自分で置き直した回もあるので「3 回置き直しても台に残らなかった」とは言わない（#140 の A のレビュー）
+                            "今日の置き直しを使い切りました（最後の 1 回は台に残りませんでした）。\nあしたまた、その日に歩いた道を 1 つ積めます",
                         )
                         todays.isEmpty() -> Note("今日歩いた道がまだありません。歩いて道を集めると（デモ散歩でも）、1 つ積めます")
                         else -> {
-                            if (vm.fallsToday > 0) // 1 行に収まるように短く（前は「今日は…（置き直しは 1 日 3 回まで）」で、最後の 2 字だけ次の行に落ちていた）
-                            Note("台から ${vm.fallsToday} 回落ちました（置き直しは ${DailyTower.MAX_RETRIES} 回まで）")
+                            // 置き直している途中（落ちたか、自分で置き直して、道を選び直しているとき）。1 行に収まるように短く
+                            if (vm.retriesUsedToday > 0) Note("置き直し ${vm.retriesUsedToday} 回目（${DailyTower.MAX_RETRIES} 回まで）")
                             Note("今日歩いた道から 1 つ選んで積みましょう（1 日に 1 つ）")
                             TodayChoices(todays, colorsOf = pieceColorsOf, onPick = { part -> vm.choose(part, gripOf(part)) })
                         }
                     }
                     DailyViewModel.Phase.Aiming -> {
                         val part = vm.current
-                        // 置き直している間は、何回目かを出す（落ちた回数＝今の置き直しの回数。決定 70）
-                        if (vm.fallsToday > 0) {
+                        // 置き直している間は、何回目かを出す（落ちた回数と自分で置き直した回数の合計＝今の置き直しの回数。決定 70・86）
+                        if (vm.retriesUsedToday > 0) {
                             Note(
                                 (if (vm.lastFell) "台から落ちました。" else "") +
-                                    "置き直し ${vm.fallsToday} 回目（${DailyTower.MAX_RETRIES} 回まで）",
+                                    "置き直し ${vm.retriesUsedToday} 回目（${DailyTower.MAX_RETRIES} 回まで）",
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -227,6 +246,31 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                 if (vm.saveFailed) Note("塔を保存できませんでした。もう一度積むと、保存し直します")
             }
         }
+    }
+
+    // 「置き直す」は押すとすぐ今日のパーツを外して保存するので、押し間違えて今の置き方を消さないよう、確かめてから（#140 の A と C のレビュー）。
+    // 最後の 1 回は、落ちるとその日は何も残らないことも書く
+    if (confirmingRedo) {
+        val left = vm.redosLeftToday
+        AlertDialog(
+            onDismissRequest = { confirmingRedo = false },
+            title = { Text("置き直しますか？") },
+            text = {
+                Text(
+                    "今日積んだ道を外して、もう一度置きます（置き直しはあと $left 回）。" +
+                        if (left == 1) "\nこれが最後の置き直しです。台から落ちると、今日は何も残りません。" else "",
+                )
+            },
+            confirmButton = {
+                PressTextButton(onClick = {
+                    confirmingRedo = false
+                    vm.redo()
+                }) { Text("置き直す") }
+            },
+            dismissButton = {
+                PressTextButton(onClick = { confirmingRedo = false }) { Text("このままにする") }
+            },
+        )
     }
 }
 
