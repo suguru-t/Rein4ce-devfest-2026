@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 終わったときの天気のボーナスの見せ方の時間割（決定 68）：札を 1 つずつ出してから、ゆっくり大きくする */
+/** 終わったときの天気のボーナスの見せ方の時間割（決定 68・91）：札を 1 つずつ出し、最後に合計を出してから、ゆっくり大きくする */
 class BonusTimelineTest {
 
     @Test
@@ -23,18 +23,31 @@ class BonusTimelineTest {
     }
 
     @Test
-    fun `the shown multiplier counts up with each tag`() {
+    fun `上の合計は、札が全部出て足し終わってから最後に出し、そのあと大きくなる（決定 91）`() {
         val timeline = BonusTimeline(listOf(20, 10, 10))
-        assertEquals(1.0, timeline.shownMultiplier(0), 1e-9)
-        assertEquals(1.2, timeline.shownMultiplier(timeline.tagStartMs(0)), 1e-9)
-        assertEquals(1.3, timeline.shownMultiplier(timeline.tagStartMs(1)), 1e-9)
-        assertEquals(1.4, timeline.shownMultiplier(timeline.totalMs), 1e-9)
+        assertEquals(1.4, timeline.multiplier, 1e-9)
+        // 札を出している間は出さない（前は最初の札と一緒に出て数え上がっていた）
+        assertEquals(0f, timeline.bannerPop(timeline.tagStartMs(0)), 0f)
+        assertEquals(0f, timeline.bannerPop(timeline.tagStartMs(2) + BonusTimeline.TAG_POP_MS), 0f)
+        // 最後の札がポンと出終わってから出る
+        assertTrue(timeline.bannerStartMs >= timeline.tagStartMs(2) + BonusTimeline.TAG_POP_MS)
+        assertEquals(1f, timeline.bannerPop(timeline.bannerStartMs + BonusTimeline.BANNER_POP_MS), 1e-6f)
+        // 合計が出てから大きくなり始め、最後まで出したまま
+        assertTrue(timeline.growStartMs >= timeline.bannerStartMs + BonusTimeline.BANNER_POP_MS)
+        assertEquals(1f, timeline.growth(timeline.bannerStartMs + BonusTimeline.BANNER_POP_MS, 1.4), 0f)
+        assertEquals(1f, timeline.bannerPop(timeline.totalMs), 1e-6f)
     }
 
     @Test
-    fun `the counted multiplier stops at the cap`() {
+    fun `ボーナスの札が無ければ、上の合計も出さない`() {
+        val timeline = BonusTimeline(emptyList())
+        assertEquals(0f, timeline.bannerPop(timeline.totalMs), 0f)
+    }
+
+    @Test
+    fun `the multiplier stops at the cap`() {
         val timeline = BonusTimeline(List(15) { 20 })
-        assertEquals(WeatherBonus.MAX_MULTIPLIER, timeline.shownMultiplier(timeline.totalMs), 0.0)
+        assertEquals(WeatherBonus.MAX_MULTIPLIER, timeline.multiplier, 0.0)
     }
 
     @Test
@@ -72,13 +85,15 @@ class BonusTimelineTest {
     }
 
     @Test
-    fun `tags pop in and fade out after growing`() {
+    fun `tags pop in and fade out when the total appears`() {
         val timeline = BonusTimeline(listOf(20))
         val start = timeline.tagStartMs(0)
         assertEquals(0f, timeline.tagPop(0, start - 1), 0f)
         assertTrue(timeline.tagPop(0, start + BonusTimeline.TAG_POP_MS * 6 / 10) > 1f) // 少し大きくなってから
         assertEquals(1f, timeline.tagPop(0, start + BonusTimeline.TAG_POP_MS), 1e-6f) // 戻る
-        assertEquals(1f, timeline.tagAlpha(timeline.growEndMs), 0f)
+        // 上の合計が出るまでは濃いまま、出たら薄くして消す（合計にまとまる。決定 91）
+        assertEquals(1f, timeline.tagAlpha(timeline.bannerStartMs), 0f)
+        assertEquals(0f, timeline.tagAlpha(timeline.bannerStartMs + BonusTimeline.TAG_FADE_MS), 0f)
         assertEquals(0f, timeline.tagAlpha(timeline.totalMs), 0f)
     }
 }

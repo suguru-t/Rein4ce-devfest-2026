@@ -19,9 +19,11 @@ import kotlin.math.min
  * 終わったときの天気のボーナスの見せ方の時間割（決定 68）。速く大きくなるだけだと、なぜ大きくなったのか分からないので、順に見せる：
  *
  * 1. 塔が落ち着いたら少し待つ（[TAGS_START_MS]）
- * 2. ボーナスの付いたパーツの上に、低い順に 1 つずつ「雪 +0.20」の札を出す。札が出るたびに、上の「天気ボーナス ×1.20」が数え上がる
- * 3. 少し待って（[PAUSE_MS]）、[GROW_MS] かけて塔と台を大きくする。高さのメーターも一緒に回る
- * 4. 大きくなったら、札を薄くして消す（[TAG_FADE_MS]。上の倍率と終わりのカードは残る）
+ * 2. ボーナスの付いたパーツの上に、低い順に 1 つずつ「雪 +0.20」の札を出す（ボーナスが足されていく様子）
+ * 3. 札が全部出たら、最後に上の「天気ボーナス ×1.30」（足した合計）を白い札でポンと出す（[BANNER_DELAY_MS]・[BANNER_POP_MS]）。
+ *    パーツの上の札は、合計が出るのに合わせて薄くして消す（[TAG_FADE_MS]。合計にまとまる。塔のてっぺんの札が上の合計と重ならないように）。
+ *    前は最初の札と一緒に出て数え上がり、札は大きくなり終わるまで残していた。字も方眼紙の上の縁取りだけで見づらかった（決定 91）
+ * 4. 少し待って（[PAUSE_MS]）、[GROW_MS] かけて塔と台を大きくする。高さのメーターも一緒に回る（上の合計と終わりのカードは残る）
  *
  * 札の間隔は、全部で [TAGS_TOTAL_MS] に収まるようにし、[MIN_TAG_MS]〜[MAX_TAG_MS] にする（多いと速く、少ないとゆっくり）。
  * 前は間隔を 0.15 秒より短くしなかったので、ボーナスの付いたパーツが多いと長くなっていた（くもりの道 60 個で約 12 秒。#125 の C のレビュー）。
@@ -50,14 +52,20 @@ internal class BonusTimeline(private val percents: List<Int>) {
     /** [i] 番目の札が出始める時刻 */
     fun tagStartMs(i: Int): Long = TAGS_START_MS + i * tagIntervalMs
 
-    /** 大きくなり始める時刻 */
-    val growStartMs: Long = TAGS_START_MS + marks * tagIntervalMs + PAUSE_MS
+    /** 最後の札がポンと出終わる時刻（札が無ければ、札を出し始める時刻） */
+    private val tagsDoneMs: Long = if (marks == 0) TAGS_START_MS else tagStartMs(marks - 1) + TAG_POP_MS
+
+    /** 上の「天気ボーナス ×1.30」が出始める時刻（札が全部出て、足し終わったあと。決定 91） */
+    val bannerStartMs: Long = tagsDoneMs + BANNER_DELAY_MS
+
+    /** 大きくなり始める時刻（合計が出てから） */
+    val growStartMs: Long = bannerStartMs + BANNER_POP_MS + PAUSE_MS
 
     /** 大きくなり終わる時刻 */
     val growEndMs: Long = growStartMs + GROW_MS
 
-    /** 札が消え終わる時刻（見せ方の終わり） */
-    val totalMs: Long = growEndMs + TAG_FADE_MS
+    /** 見せ方の終わり（大きくなり終わる時刻。札はその前に消えている） */
+    val totalMs: Long = maxOf(growEndMs, bannerStartMs + TAG_FADE_MS)
 
     /** [t] のときに出ている札の数 */
     fun tagsShown(t: Long): Int = (0 until marks).count { t >= tagStartMs(it) }
@@ -67,18 +75,24 @@ internal class BonusTimeline(private val percents: List<Int>) {
      */
     fun tagPop(i: Int, t: Long): Float {
         if (i >= marks) return 0f
-        val p = ((t - tagStartMs(i)).toFloat() / TAG_POP_MS).coerceIn(0f, 1f)
-        if (p <= 0f) return 0f
-        // 0 → 1.15 → 1
-        return if (p < 0.6f) p / 0.6f * 1.15f else 1.15f - (p - 0.6f) / 0.4f * 0.15f
+        return popScale((t - tagStartMs(i)).toFloat() / TAG_POP_MS)
     }
 
-    /** [t] のときの札の濃さ（大きくなり終わったら薄くして消す） */
-    fun tagAlpha(t: Long): Float = 1f - ((t - growEndMs).toFloat() / TAG_FADE_MS).coerceIn(0f, 1f)
+    /** [t] のときの上の「天気ボーナス ×1.30」の大きさ（0〜1。札と同じポンと出る動き。出る前は 0） */
+    fun bannerPop(t: Long): Float = if (marks == 0) 0f else popScale((t - bannerStartMs).toFloat() / BANNER_POP_MS)
 
-    /** [t] のときに上に出す倍率（出た札のぶんだけ足す。上限で止める） */
-    fun shownMultiplier(t: Long): Double =
-        min(1.0 + percents.take(tagsShown(t)).sum() / 100.0, WeatherBonus.MAX_MULTIPLIER)
+    /** ポンと出る動き：0 → 1.15 → 1（[p] は動きの進み 0〜1。始まる前は 0） */
+    private fun popScale(p: Float): Float {
+        val q = p.coerceIn(0f, 1f)
+        if (q <= 0f) return 0f
+        return if (q < 0.6f) q / 0.6f * 1.15f else 1.15f - (q - 0.6f) / 0.4f * 0.15f
+    }
+
+    /** [t] のときの札の濃さ（上の合計が出始めたら薄くして消す。決定 91） */
+    fun tagAlpha(t: Long): Float = 1f - ((t - bannerStartMs).toFloat() / TAG_FADE_MS).coerceIn(0f, 1f)
+
+    /** 上に出す倍率：札で足した分の合計（上限で止める） */
+    val multiplier: Double = min(1.0 + percents.take(marks).sum() / 100.0, WeatherBonus.MAX_MULTIPLIER)
 
     /** [t] のときの模型の大きさ（1 → [multiplier]。ゆっくり始まりゆっくり終わる） */
     fun growth(t: Long, multiplier: Double): Float {
@@ -98,13 +112,19 @@ internal class BonusTimeline(private val percents: List<Int>) {
         /** 札がポンと出る動きの時間 */
         const val TAG_POP_MS = 220L
 
-        /** 最後の札から、大きくなり始めるまで */
-        const val PAUSE_MS = 400L
+        /** 最後の札が出終わってから、上の合計を出すまで */
+        const val BANNER_DELAY_MS = 120L
+
+        /** 上の合計がポンと出る動きの時間 */
+        const val BANNER_POP_MS = 320L
+
+        /** 上の合計が出てから、大きくなり始めるまで */
+        const val PAUSE_MS = 300L
 
         /** 大きくなるのにかける時間 */
         const val GROW_MS = 1600L
 
-        /** 大きくなったあと、札を消すのにかける時間 */
+        /** 上の合計が出始めてから、札を消すのにかける時間 */
         const val TAG_FADE_MS = 600L
     }
 }
