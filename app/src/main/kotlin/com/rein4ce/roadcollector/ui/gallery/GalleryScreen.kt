@@ -65,6 +65,7 @@ import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.settings.NicknameDialog
 import java.util.Locale
+import com.rein4ce.roadcollector.ui.common.PageWash
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopButton
@@ -86,7 +87,7 @@ import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
  * 1 本の台に並べ、左に標尺、いちばん高い記録に赤鉛筆の線。絵がそのまま差を語る。
  *
  * - 主役は「あなたの最高（最多）」と「最長（最多）まで あと いくつ」
- * - 物差しごとに色を持つ（高い順はオレンジ、多い順は青緑、新しい順は紺）。自分は道の色（オレンジ）、記録は赤鉛筆
+ * - 遊び方ごとに色を持つ（通常はテラコッタ、90 秒チャレンジはセージ、毎日 1 つずつ積むはラベンダー。決定 81）。自分は道の色（オレンジ）、記録は赤鉛筆
  * - 全部のタワーは「ランキングを見る」で別の画面（RankingScreen.kt。紙片の一覧、5 個ずつ）。戻るで帰る
  * - タワーを押すと、下から紙片がせり上がる（アプリの中で完結）。外に出るのは「共有ページを開く」を押したときだけ
  * - 動きは開いたときに一度だけ（標尺が伸び、タワーが台から立つ）。端末でアニメーションを切っている人には動かさない
@@ -270,7 +271,10 @@ private fun Overview(
         }
     }
 
-    // 方眼の地はアプリ全体（AppNav の Scaffold）に 1 枚だけ敷いてある（#23）。ここでは敷かない
+    // 遊び方ごとの色合い（決定 81）。画面全体に薄く敷き、札・数字・ボタン・断面図の枠をこの色でそろえる
+    val theme = galleryTheme(mode)
+    // 方眼の地はアプリ全体（AppNav）に 1 枚だけ敷いてある（#23）。その上に遊び方の色を薄く敷く（端末のバーとタブバーの裏まで。ui/common/PageWash.kt）
+    PageWash(theme.wash)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -283,12 +287,12 @@ private fun Overview(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PopBackButton(onBack, small = narrow, onClickLabel = "どのランキングを見るかの画面に戻る")
             // 見た目は遊び方の名前だけ。読み上げでは、前と同じく「通常のランキング」と何の画面かを伝える（#134 の C のレビュー）
-            PopModeTag(mode.fullLabel, face = modeFace(mode), small = narrow, spoken = "${mode.fullLabel}のランキング")
+            PopModeTag(mode.fullLabel, face = theme.face, small = narrow, spoken = "${mode.fullLabel}のランキング")
             Spacer(Modifier.weight(1f))
-            PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
+            PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() }, face = theme.face)
         }
 
-        GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, reduceMotion = reduceMotion)
+        GalleryHero(state = state, cmp = cmp, sort = sort, mode = mode, theme = theme, reduceMotion = reduceMotion)
 
         // 状態の行：読み込み中・つながらない・更新中・取り直せなかった、のときだけ出す（ランキングと共通）
         GalleryStatusRow(gallery)
@@ -308,7 +312,7 @@ private fun Overview(
                     Text("${howToSend(mode)}、ここに立ちます。", fontFamily = Pop.Rounded, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
                 }
             } else {
-                SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort)
+                SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort, theme = theme)
                 // 左：その物差しで 1 番。右：自分のいちばん良いタワー（自分が 1 番なら、他人で 1 番のタワー。その順位を呼び名に）
                 val slots = listOf(
                     SectionSlot(
@@ -339,6 +343,7 @@ private fun Overview(
                             // 3 分チャレンジと毎日 1 つずつ積むは塔が高くなるので、高すぎるときは頂上のあたりだけを読める大きさで映す。
                             // 押すと画面いっぱいに全体（TowerFullView。決定 77）
                             topWindow = mode != TowerMode.NORMAL,
+                            paper = theme.tint,
                             // weight は fill=false にして（fill=true だと高さが決め打ちの制約になり、heightIn(max) が効かない）、
                             // 上限を掛けたあとに fillMaxHeight で「残りか上限の小さいほう」の高さを取る
                             // （Canvas の中身は Spacer なので、高さが決まった制約でないと 0 になる）。
@@ -349,7 +354,7 @@ private fun Overview(
                                 .heightIn(max = SECTION_HEIGHT)
                                 .fillMaxHeight()
                                 // ブロックの面（下に側面がのぞく）。中身は TowerSection が同じ角の丸さで描く
-                                .popBlock(face = Fieldbook.Paper, corner = SECTION_CORNER, depth = 4.dp, edge = Fieldbook.CardEdge),
+                                .popBlock(face = theme.tint, corner = SECTION_CORNER, depth = 4.dp, edge = theme.ink.copy(alpha = 0.45f)),
                         )
                         Spacer(Modifier.height(6.dp))
                         // 断面図の 2 基を 1 行ずつ（押すと紙片）
@@ -365,7 +370,7 @@ private fun Overview(
                                     "名前を付けると、次に送るタワーから名前が出ます ›",
                                     fontFamily = Pop.Rounded,
                                     fontWeight = FontWeight.Black,
-                                    color = Pop.TealLine,
+                                    color = theme.ink,
                                     fontSize = 14.sp,
                                 )
                             }
@@ -373,14 +378,14 @@ private fun Overview(
                     }
                 }
                 // 自分のタワーだけの一覧（送っていなければ「まだ送っていません」の案内が出る）は二番手の白いブロック、
-                // ランキングは主役のオレンジのブロック。高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
+                // ランキングは主役の、遊び方の色で塗ったブロック。高さは下限だけ決める（文字を大きくして 2 行になっても切れない）
                 val mineCount = towers.count(isMine)
                 PopButton(
                     label = "あなたのタワー（$mineCount 個）",
                     onClick = onMine,
                     face = Fieldbook.Card,
-                    text = Pop.TealLine,
-                    edge = Pop.TealLine,
+                    text = theme.ink,
+                    edge = theme.ink,
                     fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -388,7 +393,7 @@ private fun Overview(
                 PopButton(
                     label = "ランキングを見る（${towers.size} 個）",
                     onClick = onRanking,
-                    face = Pop.OrangeDeep,
+                    face = theme.face,
                     text = Pop.Letter,
                     fontSize = 17.sp,
                     modifier = Modifier.fillMaxWidth(),
@@ -409,7 +414,7 @@ private object SectionIntro {
  * 字の行ごとに紙の色を敷く（背景に天気が出るため。決定 26）
  */
 @Composable
-private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, reduceMotion: Boolean) {
+private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerSort, mode: TowerMode, theme: GalleryTheme, reduceMotion: Boolean) {
     val isLoaded = state is TowerGallery.State.Loaded
     val isError = state is TowerGallery.State.Error
     val myTower = if (cmp.mineIsTop) cmp.top else cmp.mine
@@ -453,18 +458,18 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
                 modifier = Modifier.padding(end = 10.dp, bottom = if (none) 0.dp else 8.dp),
             )
             if (!none) {
-                // 数字は物差しの色（高い順はオレンジ、多い順は青緑）。字なので、紙の上で読める濃い色。
+                // 数字は遊び方の字の色（決定 81）。字なので、下地の上で読める濃い色。
                 // 天気の雲や光の上に直接書くので、紙の色の縁取りを付ける（SkyText）
                 SkyText(
                     if (myValue != null) sort.format(meter.value) else "—",
-                    color = sortInk(sort),
+                    color = theme.ink,
                     fontSize = 40.sp,
                     maxLines = 1,
                     softWrap = false,
                 )
                 SkyText(
                     sort.unit,
-                    color = sortInk(sort),
+                    color = theme.ink,
                     fontSize = 18.sp,
                     modifier = Modifier.padding(start = 4.dp, bottom = 7.dp),
                 )
@@ -472,9 +477,10 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
         }
         Spacer(Modifier.height(4.dp))
         when {
-            // あと少し：黄色の札。自分が 1 番：自分の色（道のオレンジ）の札。数字の下にそろえて、傾けずに水平に置く
-            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = Pop.OrangeDeep, text = Pop.Letter)
-            isLoaded && myValue != null -> PopChip(sub, face = Pop.Yellow, text = Pop.InkOnYellow)
+            // あと少し：白い面に遊び方の色の字と縁の札。自分が 1 番：遊び方の色で塗った札。数字の下にそろえて、傾けずに水平に置く
+            // （決定 81。前は黄色とオレンジで、強すぎて目に痛かった）
+            isLoaded && myValue != null && cmp.mineIsTop -> PopChip("★ $sub", face = theme.face, text = Pop.Letter)
+            isLoaded && myValue != null -> PopChip(sub, face = Fieldbook.Card, text = theme.ink, edge = theme.ink)
             else -> Text(
                 sub,
                 fontFamily = Pop.Rounded,
@@ -565,14 +571,16 @@ private fun TowerSheet(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDis
  */
 @Composable
 private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, onDismiss: () -> Unit) {
+    // 地と「× 閉じる」は、開いたランキングと同じ遊び方の色（決定 81）
+    val theme = galleryTheme(tower.mode)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Fieldbook.Paper)
+                .background(theme.tint)
                 .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
         ) {
-            PopChip("× 閉じる", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 16.sp, onClick = onDismiss)
+            PopChip("× 閉じる", face = theme.face, text = Pop.Letter, fontSize = 16.sp, onClick = onDismiss)
             Spacer(Modifier.height(4.dp))
             TowerDetail(tower, sketch, mine, picture = Modifier.fillMaxWidth().weight(1f))
         }
@@ -581,10 +589,11 @@ private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, on
 
 /**
  * タワー 1 基の中身：高さ、絵（[picture] の大きさ）、本数（毎日 1 つずつ積むは連続日数）・作者・日時、
- * 「共有ページを開く」（ブラウザ）と「リンクをコピー」。コピーしたら同じ言葉で知らせる
+ * 「共有ページを開く」（ブラウザ）と「リンクをコピー」。コピーしたら同じ言葉で知らせる。ボタンはその塔の遊び方の色（決定 81）
  */
 @Composable
 private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: Boolean, picture: Modifier) {
+    val theme = galleryTheme(tower.mode)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val url = "${ApiClient.baseUrl}/towers/${tower.id}"
@@ -617,7 +626,7 @@ private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: B
         PopButton(
             label = "共有ページを開く",
             onClick = { uriHandler.openUri(url) },
-            face = Pop.OrangeDeep,
+            face = theme.face,
             text = Pop.Letter,
             fontSize = 15.sp,
             modifier = Modifier.weight(1f),
@@ -630,8 +639,8 @@ private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: B
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, "リンクをコピーしました", Toast.LENGTH_SHORT).show()
             },
             face = Fieldbook.Card,
-            text = Pop.TealLine,
-            edge = Pop.TealLine,
+            text = theme.ink,
+            edge = theme.ink,
             fontSize = 15.sp,
         )
     }
