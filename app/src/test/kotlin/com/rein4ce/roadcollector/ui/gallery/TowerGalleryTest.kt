@@ -192,4 +192,48 @@ class TowerGalleryTest {
         runCurrent()
         assertEquals(2, asked.size)
     }
+
+    @Test
+    fun `毎日の塔の絵は、一覧を取り直すと前の絵を出したまま取り直す。取っている最中なら、取れたあとにもう一度取る（決定 88）`() = runTest {
+        var version = 1f
+        val fetched = ArrayList<CompletableDeferred<Tower>>()
+        val g = TowerGallery(
+            listTowers = { listOf(summary("d1", version).copy(mode = TowerMode.DAILY)) },
+            getTower = { _ -> CompletableDeferred<Tower>().also { fetched += it }.await() },
+            scope = this,
+        )
+        fun tower(h: Float) = Tower(parts = emptyList(), placements = emptyList(), height = h, createdAt = 0L)
+
+        g.refresh(TowerMode.DAILY)
+        runCurrent()
+        g.loadSketch("d1")
+        runCurrent()
+        fetched[0].complete(tower(1f))
+        runCurrent()
+        assertEquals(1f, g.sketches["d1"]!!.height)
+
+        // 再読み込み（一覧は前と同じ）：前の絵は消さずに取り直す。前は消えて、画面からは取りに行かないので点線のままだった
+        g.refresh(TowerMode.DAILY)
+        runCurrent()
+        assertEquals("取れるまでは前の絵", 1f, g.sketches["d1"]!!.height)
+        assertEquals(2, fetched.size)
+        fetched[1].complete(tower(2f))
+        runCurrent()
+        assertEquals(2f, g.sketches["d1"]!!.height)
+
+        // 取っている最中に一覧が取り直された：古い形が先に届いても、そのあともう一度取る
+        version = 3f
+        g.refresh(TowerMode.DAILY)
+        runCurrent()
+        assertEquals(3, fetched.size)
+        g.refresh(TowerMode.DAILY)
+        runCurrent()
+        assertEquals("取っている最中は重ねて取りに行かない", 3, fetched.size)
+        fetched[2].complete(tower(2f))
+        runCurrent()
+        assertEquals(4, fetched.size)
+        fetched[3].complete(tower(3f))
+        runCurrent()
+        assertEquals(3f, g.sketches["d1"]!!.height)
+    }
 }
