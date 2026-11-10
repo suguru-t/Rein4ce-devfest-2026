@@ -27,6 +27,7 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
@@ -41,7 +42,8 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 internal fun ChangeButton(enabled: Boolean, left: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val source = remember { MutableInteractionSource() }
     val density = LocalDensity.current
-    val face = if (enabled) Pop.Orange else Fieldbook.Mark
+    // 遊び方の塗り（通常はテラコッタ。決定 84）。押せないときは灰色
+    val face = if (enabled) modeFaceOr(Pop.Orange) else Fieldbook.Mark
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier

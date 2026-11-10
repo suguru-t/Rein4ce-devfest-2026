@@ -45,6 +45,7 @@ import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
 import com.rein4ce.roadcollector.ui.common.rememberHaptics
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
@@ -117,7 +118,7 @@ internal class TurnClock(private val degPerSecond: Float = ROTATE_SPEED_DEG_PER_
  * 軽く触って離せば、少しだけ回る。指をボタンの外へずらしたら止まる。裏に回ったときや画面を離れたときも止まる。
  * 回している間は [ROTATE_TICK_DEG] ごとに軽く振動する（設定の「振動」に従う）。押した瞬間の振動と音は、ほかのボタンと同じ押し心地（pressFeel）から鳴る。
  * 読み上げ（TalkBack）では押し続けられないので、1 回押すごとに [ROTATE_A11Y_STEP_DEG] 回す。
- * 見た目は、ほかの画面のボタン（`PopButton`）と同じ積み木（オレンジの面・下にのぞく側面・太い丸ゴシックの白い字）に、
+ * 見た目は、ほかの画面のボタン（`PopButton`）と同じ積み木（遊び方の色の面（決定 84。遊ぶ画面の外ではオレンジ）・下にのぞく側面・太い丸ゴシックの白い字）に、
  * 回る矢印のアイコン（決定 67）。押せないときは灰色
  *
  * @param onRotate 回す角度 [度]（+ が ⟲）。押している間、毎コマ呼ぶ。狙っている間だけ回る（落下中などは、呼ぶ側の VM が何もしない）
@@ -176,7 +177,7 @@ fun RotateButton(
                         }
                     }
                 }
-                .popBlock(face = if (active) Pop.OrangeDeep else Fieldbook.GridMajor, corner = 14.dp)
+                .popBlock(face = if (active) modeFaceOr(Pop.OrangeDeep) else Fieldbook.GridMajor, corner = 14.dp)
                 .heightIn(min = 48.dp)
                 .padding(contentPadding)
                 .semantics {

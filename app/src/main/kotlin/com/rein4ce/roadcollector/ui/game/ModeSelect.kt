@@ -53,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
 import com.rein4ce.roadcollector.core.daily.DailyTower
-import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
 import com.rein4ce.roadcollector.ui.Dest
 import com.rein4ce.roadcollector.ui.TabIcon
@@ -75,7 +74,11 @@ import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.pressFeel
+import com.rein4ce.roadcollector.ui.common.LocalModeTheme
+import com.rein4ce.roadcollector.ui.common.modeTheme
+import com.rein4ce.roadcollector.ui.common.PageWash
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
+import com.rein4ce.roadcollector.core.model.TowerMode
 
 /**
  * 積む画面の遊び方（モード）。並びは、モードを選ぶ画面の上から。
@@ -90,6 +93,25 @@ enum class PlayMode(val label: String, val note: String, val ready: Boolean) {
     // 前は 3 分チャレンジ。90 秒にした（決定 75）
     CHALLENGE("90 秒チャレンジ", "90 秒のあいだに、道を高く積む", ready = true),
     DAILY("毎日 1 つずつ積む", "1 日に 1 つずつ積んで、塔を育てる", ready = true),
+}
+
+/*
+ * みちをつむのモードと「みんな」の遊び方の対応（行き・帰りの 2 つを並べて置く。遊び方を足すときは両方を直す。#138 の C のレビュー）
+ */
+
+/** みちをつむのモード → 「みんな」の遊び方（色合い [modeTheme] を同じにする） */
+internal val PlayMode.towerMode: TowerMode
+    get() = when (this) {
+        PlayMode.NORMAL -> TowerMode.NORMAL
+        PlayMode.CHALLENGE -> TowerMode.CHALLENGE
+        PlayMode.DAILY -> TowerMode.DAILY
+    }
+
+/** 遊び方 → みちをつむのモード（ホームの行の色・アイコン・名前を同じにする） */
+internal fun playModeOf(mode: TowerMode): PlayMode = when (mode) {
+    TowerMode.NORMAL -> PlayMode.NORMAL
+    TowerMode.CHALLENGE -> PlayMode.CHALLENGE
+    TowerMode.DAILY -> PlayMode.DAILY
 }
 
 /**
@@ -403,29 +425,37 @@ private fun ModePlayPage(
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
     val narrow = isNarrowScreen()
-    content { compact ->
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
-            PopBackButton(onBack, small = compact || narrow, onClickLabel = "遊び方を選ぶ画面に戻る")
-            // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした
-            if (!compact) PopModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
+    // 遊び方ごとの色合い（「みんな」の遊び方のランキングと同じ。決定 84）。画面全体（端末のバーとタブバーの裏まで）に下地を薄く敷き
+    // （「みんな」より薄く、天気が見えるように。playWash）、
+    // 中の画面（積む画面・90 秒チャレンジ・毎日 1 つずつ積む）の数字・ボタン・札は LocalModeTheme からこの色を使う
+    val theme = modeTheme(mode.towerMode)
+    PageWash(theme.playWash)
+    CompositionLocalProvider(LocalModeTheme provides theme) {
+        content { compact ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
+                PopBackButton(onBack, small = compact || narrow, onClickLabel = "遊び方を選ぶ画面に戻る")
+                // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした。
+                // 色は遊び方の塗り（「みんな」の札と同じ。決定 84）
+                if (!compact) PopModeTag(mode.label, theme.face, small = narrow)
+            }
         }
     }
 }
 
 /**
- * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き・遊んでいるときの札の色。
+ * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き（遊んでいるときの札の色は、遊び方の色合い [modeTheme] の塗り。決定 84）。
  * 色は題字の積み木の色から（通常＝オレンジ、3 分チャレンジ＝青緑、毎日＝紺）。アイコンの字の色はどれも題字の字と同じ
  */
-private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float, val tagFace: Color)
+private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float)
 
 /** モードの行の積み木の面の色（題字の積み木の色。「みんな」のホームのメダルもこの色にする） */
 internal fun modeBlockFace(mode: PlayMode): Color = lookOf(mode).face
 
 private fun lookOf(mode: PlayMode): ModeLook = when (mode) {
-    PlayMode.NORMAL -> ModeLook(Pop.Orange, null, -4f, Pop.OrangeDeep)
-    PlayMode.CHALLENGE -> ModeLook(Pop.Teal, AppIcons.Stopwatch, 3f, Pop.TealDeep)
-    PlayMode.DAILY -> ModeLook(Pop.Navy, AppIcons.Calendar, -2f, Pop.Navy)
+    PlayMode.NORMAL -> ModeLook(Pop.Orange, null, -4f)
+    PlayMode.CHALLENGE -> ModeLook(Pop.Teal, AppIcons.Stopwatch, 3f)
+    PlayMode.DAILY -> ModeLook(Pop.Navy, AppIcons.Calendar, -2f)
 }
 
 /** ページの上と下の余白（ホームと同じ） */

@@ -86,6 +86,8 @@ import com.rein4ce.roadcollector.ui.common.drawPart
 import com.rein4ce.roadcollector.ui.common.SkyText
 import kotlinx.coroutines.isActive
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
+import com.rein4ce.roadcollector.ui.common.modeFaceOr
+import com.rein4ce.roadcollector.ui.common.modeInkOr
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.graphics.graphicsLayer
@@ -272,7 +274,7 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
 }
 
 /**
- * 始まる前の「3・2・1」の数（決定 76）。塔を描く所のまん中に、大きなオレンジの太い丸ゴシックで、紙の色の縁取り（SkyText）を付けて出す。
+ * 始まる前の「3・2・1」の数（決定 76）。塔を描く所のまん中に、遊び方の色（決定 84）の大きな太い丸ゴシックで、紙の色の縁取り（SkyText）を付けて出す。
  * 数が変わるたびに、少し大きく出てから縮んで収まる（動きを減らす設定なら、動かさない）。読み上げでも数を伝える
  */
 @Composable
@@ -283,7 +285,7 @@ private fun CountdownNumber(n: Int, modifier: Modifier = Modifier) {
     val size = with(LocalDensity.current) { 96.dp.toSp() }
     SkyText(
         "$n",
-        color = if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep,
+        color = modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep),
         fontSize = size,
         modifier = modifier
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
@@ -329,7 +331,7 @@ private fun NextPiece(next: Part, compact: Boolean, modifier: Modifier = Modifie
 
 /**
  * 残り時間（「残り 02:37」）。秒が変わったときだけ、この字だけを組み立て直す。
- * 通常のモードの「模型の高さ」（HeightMeter）と同じ形：見出しは墨、数字はオレンジの太い丸ゴシックで、方眼紙の上に縁取りで浮かせる（決定 67）。
+ * 通常のモードの「模型の高さ」（HeightMeter）と同じ形：見出しは墨、数字は遊び方の色（決定 84）の太い丸ゴシックで、方眼紙の上に縁取りで浮かせる（決定 67）。
  * 残り 10 秒からは数字を赤にする。大きさは dp で決め、文字の大きさの設定では大きくしない（「‹ 戻る」と同じ行に入れるため）
  */
 @Composable
@@ -339,11 +341,10 @@ private fun ChallengeClock(vm: ChallengeViewModel, compact: Boolean) {
     val rest = seconds % 60
     val density = LocalDensity.current
     fun fixed(dp: Float) = with(density) { dp.dp.toSp() }
-    // ダークモードでは濃いオレンジが暗い紙に沈むので、明るいオレンジにする（HeightMeter と同じ）
+    // 遊び方の字の色（決定 84。HeightMeter と同じ）。残り 10 秒からは赤。遊ぶ画面の外では、前のオレンジ（ダークでは明るいオレンジ）
     val number = when {
         seconds <= 10 -> LastSecondsRed
-        Fieldbook.dark -> Pop.Orange
-        else -> Pop.OrangeDeep
+        else -> modeInkOr(if (Fieldbook.dark) Pop.Orange else Pop.OrangeDeep)
     }
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -494,9 +495,9 @@ private fun AimHint(visible: Boolean = true) {
  */
 @Composable
 private fun RunControls(onRestart: () -> Unit) {
-    // 通常のモードの「やり直す」と同じ、紙の面に青緑の縁の小さな札（決定 67）
+    // 通常のモードの「やり直す」と同じ、紙の面に遊び方の色の縁の小さな札（決定 67・84）
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
-        PopChip("やり直す", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = onRestart)
+        PopChip("やり直す", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = onRestart)
     }
 }
 
@@ -525,9 +526,9 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
         if (score != null) SendState(vm)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PopButton("もう一度", onClick = { vm.start() }, face = Pop.OrangeDeep, text = Pop.Letter, enabled = vm.canStart)
-            // 「みんな」の 3 分チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ紺の縁。決定 77）
-            PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = rankingInk(), edge = rankingInk())
+            PopButton("もう一度", onClick = { vm.start() }, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter, enabled = vm.canStart)
+            // 「みんな」の 90 秒チャレンジのランキングへ（通常の終わりのカードの「ランキング」と同じ、遊び方の色の縁。決定 77・84）
+            PopButton("ランキング", onClick = onGoRanking, face = Fieldbook.Card, text = modeInkOr(rankingInk()), edge = modeInkOr(rankingInk()))
         }
         Spacer(Modifier.height(8.dp))
         Records(vm.ranking, highlight = score?.runId)
@@ -543,10 +544,10 @@ private fun SendState(vm: ChallengeViewModel) {
     when (vm.sendState) {
         ChallengeViewModel.SendState.IDLE -> Unit
         ChallengeViewModel.SendState.SENDING -> Text("ランキングに送っています…", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
-        ChallengeViewModel.SendState.SENT -> Text("ランキングに出しました", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Pop.TealLine)
+        ChallengeViewModel.SendState.SENT -> Text("ランキングに出しました", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = modeInkOr(Pop.TealLine))
         ChallengeViewModel.SendState.FAILED -> {
             Text("ランキングに送れませんでした", style = MaterialTheme.typography.bodySmall, color = Fieldbook.Muted)
-            PopChip("もう一度送る", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::resend)
+            PopChip("もう一度送る", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::resend)
         }
     }
 }
@@ -565,7 +566,7 @@ private fun SaveState(vm: ChallengeViewModel) {
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
         )
-        PopChip("再試行", face = Fieldbook.Card, text = Pop.TealLine, edge = Pop.TealLine, onClick = vm::refreshRecords)
+        PopChip("再試行", face = Fieldbook.Card, text = modeInkOr(Pop.TealLine), edge = modeInkOr(Pop.TealLine), onClick = vm::refreshRecords)
     }
 }
 
