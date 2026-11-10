@@ -63,7 +63,7 @@ class RoadCollectorApp : Application() {
         // 端末の言語によらず、字を日本語として描く（漢字が中国語の形にならないように。#46）
         JapaneseText.apply()
         settings = AppSettings(this)
-        // タワーを送るときの作者名は、設定のニックネーム（空なら名無し）
+        // タワーを送るときの作者名は、設定のニックネーム（空なら入れない。「みんな」では「ゲスト」と出る）
         ApiClient.authorName = { settings.nickname.value.ifBlank { null } }
         // 送信できたタワーは、自分のものとして端末に覚えておく（サーバが落ちていても印が出る）
         myTowers = MyTowers(this)

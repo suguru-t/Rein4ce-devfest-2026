@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.ui.gallery
 
+import com.rein4ce.roadcollector.data.AppSettings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -59,7 +60,7 @@ internal fun TowerMeta(
     partsLabel: Boolean = false,
     dateOnNewLine: Boolean = false,
 ) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: "名無し"
+    val author = tower.author?.takeIf { it.isNotBlank() } ?: AppSettings.GUEST_NAME
     val parts: @Composable () -> Unit = {
         if (tower.mode == TowerMode.DAILY) {
             // 毎日 1 つずつ積むは、本数の代わりに今も続いている連続日数（決定 77。1 日 1 つなので、本数はほぼ積んだ日数と同じ）

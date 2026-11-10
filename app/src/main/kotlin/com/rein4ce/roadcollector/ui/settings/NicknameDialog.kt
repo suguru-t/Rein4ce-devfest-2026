@@ -40,7 +40,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 
 /**
  * ニックネームを付ける（「みんなのタワー」に作者名として出る）。見た目はパーツの「名前を付ける」と同じ（部品は ui/common/NameField.kt）。
- * 空にすると名無しに戻る。[AppSettings.MAX_NICKNAME_LENGTH] 文字を超えると保存できない（入力は止めない）。
+ * 空にすると「ゲスト」に戻る（[AppSettings.GUEST_NAME]）。[AppSettings.MAX_NICKNAME_LENGTH] 文字を超えると保存できない（入力は止めない）。
  *
  * 「AI に考えてもらう」で、サーバ（Gemini）にニックネームを考えてもらい、入力欄に入れる。保存するかは自分で決める。
  * 手がかりは、コレクションのパーツに付いている名前・本数・合計距離だけ（[nicknameHintsFor]。歩いた場所（位置）は送らない）。
@@ -79,12 +79,12 @@ internal fun NicknameDialog(
             readOnly = naming.asking,
             singleLine = true,
             label = { Text("ニックネーム") },
-            placeholder = { Text("名無し") },
+            placeholder = { Text(AppSettings.GUEST_NAME) },
             isError = tooLong,
             supportingText = {
                 Row(Modifier.fillMaxWidth()) {
                     Text(
-                        if (tooLong) notes("$max 文字までです") else notes("空なら名無しになります"),
+                        if (tooLong) notes("$max 文字までです") else notes("空ならゲストになります"),
                         style = noteStyle,
                         modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )

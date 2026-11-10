@@ -135,8 +135,8 @@ fun SettingsDialog(onDismiss: () -> Unit) {
                 Section("みんなのタワー", accent = Pop.Navy) {
                     // ニックネームは人や AI が付けた字なので、丸ゴシック（使う字だけの切り出し）ではなく端末の字体で出す
                     // （切り出しに無い字だけ端末の字体になって、1 つの名前の中で字体が混ざらないように。#105 の C のレビュー）。
-                    // 「名無し」はアプリの言葉なので、ほかの値と同じ丸ゴシック
-                    LinkRow("ニックネーム", nickname.ifBlank { "名無し" }, valueFont = if (nickname.isBlank()) Pop.Rounded else null) {
+                    // 「ゲスト」はアプリの言葉なので、ほかの値と同じ丸ゴシック
+                    LinkRow("ニックネーム", nickname.ifBlank { AppSettings.GUEST_NAME }, valueFont = if (nickname.isBlank()) Pop.Rounded else null) {
                         editingNickname = true
                     }
                 }
