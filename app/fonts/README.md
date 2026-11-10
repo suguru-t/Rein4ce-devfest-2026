@@ -16,7 +16,7 @@ python -m fontTools.subset MPLUSRounded1c-Black.ttf --text="ミチツミ" --outp
 
 題字の文字を変えるときは、`--text` に新しい文字を入れて切り出し直す。
 
-「みんな」・コレクション・ホーム・積む画面のフォントは、`tools/subset_rounded_font.py` で切り出す（いまは 438 字）。
+「みんな」・コレクション・ホーム・積む画面のフォントは、`tools/subset_rounded_font.py` で切り出す（いまは 440 字）。
 `ui/gallery`・`ui/inventory`・`ui/common/Pop.kt`・`ui/HomeScreen.kt`・`ui/TitleIntro.kt`（ホームの一言）・積む画面の情報の字（`ui/game/StackScreen.kt`）・3 分チャレンジの画面と「回す」のボタン（`ui/game/ChallengeScreen.kt`・`RotateButtons.kt`）・積む画面のモードを選ぶ画面（`ui/game/ModeSelect.kt`）・毎日 1 つずつ積む画面（`ui/game/DailyScreen.kt`）・設定の窓と使い方（`ui/settings/SettingsDialog.kt`・`HowToContent.kt`）・設定の選択肢の名前（`data/AppSettings.kt`）・名前を付ける窓（`ui/common/NameField.kt`）の `.kt` にある文字列（"…" の中身。コメントは除く）と、並び・天気の名前（`data/PartFilter.kt`・`core/.../weather/Weather.kt`）・3 分チャレンジの形の名前（`core/.../challenge/ChallengeRun.kt`）の字に、
 半角の英数字・記号と、数字まわりの記号（`—‹›★☆〜・（）` など）を足して切り出す。
 画面に新しい言葉を足したら、切り出し直す（入っていない字は端末の字体で出るので、崩れはしないが太さが変わる）。

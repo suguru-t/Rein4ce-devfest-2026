@@ -27,11 +27,13 @@ data class DailyBlock(
 
 /**
  * 「毎日 1 つずつ積む」の塔。1 日に 1 つだけ積め、積んだ形を残して、次の日に続きから積む。
- * 昨日までの塔は固めてあり（決定 70）、落ちるのは今日のパーツだけ。今日のパーツが台から落ちたら、1 日 [MAX_RETRIES] 回まで置き直せる
+ * 昨日までの塔は固めてあり（決定 70）、落ちるのは今日のパーツだけ。置き直しは 1 日 [MAX_RETRIES] 回まで：
+ * 今日のパーツが台から落ちたときと、積んで残ったあとに自分で「置き直す」ときの、どちらでも 1 回使う（決定 86。前は落ちたときだけ）
  *
  * @property height 止まったときの塔の高さ [m]（台の上面からいちばん上まで。選ぶ画面のカードに出す）
- * @property fellDay 今日のパーツが台から落ちた日（[fellCount] を数えている日。"2026-11-10"）
- * @property fellCount [fellDay] に今日のパーツが台から落ちた回数。保存するので、画面を出入りしても置き直しは増えない
+ * @property fellDay 置き直しを数えている日（"2026-11-10"）。名前は前のまま（前は落ちた日だけを数えていた。保存したファイルと合わせる）
+ * @property fellCount [fellDay] に、今日のパーツが台から落ちた回数と、自分で置き直した回数の合計（決定 86）。
+ *   保存するので、画面を出入りしても置き直しは増えない
  * @property sentDay 「みんな」のランキングに送れた塔の、最後に積んだ日（[lastDay]）。これと違えば、まだ送っていない形がある（決定 77）
  */
 @Serializable
@@ -46,17 +48,44 @@ data class DailyTower(
     /** [day] にもう積んだか（1 日 1 つまで） */
     fun placedOn(day: String): Boolean = blocks.any { it.day == day }
 
-    /** [day] に今日のパーツが台から落ちた回数 */
-    fun fallsOn(day: String): Int = if (fellDay == day) fellCount else 0
+    /**
+     * [day] に置き直しを使った回数（台から落ちた回数と、自分で置き直した回数の合計。決定 86）。
+     * 前は落ちた回数だけだったので fallsOn という名前だった（保存するのは [fellCount] のまま）
+     */
+    fun retriesUsedOn(day: String): Int = if (fellDay == day) fellCount else 0
 
     /**
      * [day] にあと何回置き直せるか（落ちるたびに 1 回置き直せて、1 日 [MAX_RETRIES] 回まで。決定 70）。
      * まだ落ちていなければ [MAX_RETRIES]。1 回落ちたら、これからする置き直しを含めて [MAX_RETRIES]、[MAX_RETRIES] + 1 回落ちたら 0
      */
-    fun retriesLeft(day: String): Int = (MAX_RETRIES + 1 - fallsOn(day)).coerceIn(0, MAX_RETRIES)
+    fun retriesLeft(day: String): Int = (MAX_RETRIES + 1 - retriesUsedOn(day)).coerceIn(0, MAX_RETRIES)
 
     /** [day] にまだ積めるか（まだ積んでいなくて、置き直しを使い切っていない） */
     fun canPlaceOn(day: String): Boolean = !placedOn(day) && retriesLeft(day) > 0
+
+    /**
+     * [day] に積んで残っている今日のパーツを、あと何回自分で置き直せるか（決定 86）。積んでいなければ 0。
+     * 置き直しは落ちたときと合わせて 1 日 [MAX_RETRIES] 回まで（はじめに積んだ 1 回は数えない）
+     */
+    fun redosLeft(day: String): Int = if (placedOn(day)) (MAX_RETRIES - retriesUsedOn(day)).coerceAtLeast(0) else 0
+
+    /**
+     * 積んで残っている今日のパーツを外して、置き直せる形にする（決定 86）。置き直しを 1 回使う。昨日までのパーツは固めてあるので動かない。
+     * 今日の形を「みんな」に送っていたら、送ったことを消す（置き直したら、新しい形を送り直す。置き直さなければ昨日までの形を送る）
+     *
+     * 塔の高さ（[height]）はそのまま。外したあとの高さは、組み直した物理で測って入れる（DailyViewModel）。
+     * はじめて積んだ日（昨日までのパーツが無い）は、外すと塔が空になる。空の塔は送れない（サーバに消す API も無い）ので、
+     * 「みんな」には外した今日の形が、次に積むまで残る（決定 86）
+     */
+    fun redoOn(day: String): DailyTower {
+        require(redosLeft(day) > 0) { "置き直しを使い切っている（または、まだ積んでいない）" }
+        return copy(
+            blocks = blocks.filter { it.day != day },
+            fellDay = day,
+            fellCount = retriesUsedOn(day) + 1,
+            sentDay = if (sentDay == day) "" else sentDay,
+        )
+    }
 
     /** 積んだ日の数（落ちて外れたパーツの日は数えない。塔に残っているパーツの日数） */
     val days: Int get() = blocks.map { it.day }.distinct().size
@@ -112,14 +141,14 @@ data class DailyTower(
         val kept = (blocks + added).mapNotNull { block -> byId[block.part.id]?.let { block.copy(placement = it) } }
         val fell = added.part.id !in byId
         return if (fell) {
-            copy(blocks = kept, height = height, fellDay = added.day, fellCount = fallsOn(added.day) + 1)
+            copy(blocks = kept, height = height, fellDay = added.day, fellCount = retriesUsedOn(added.day) + 1)
         } else {
             copy(blocks = kept, height = height)
         }
     }
 
     companion object {
-        /** 今日のパーツが台から落ちたときに、置き直せる回数（1 日に。決定 70） */
+        /** 置き直せる回数（1 日に。台から落ちたときと、自分で置き直すときの合計。決定 70・86） */
         const val MAX_RETRIES = 3
     }
 }
