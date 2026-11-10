@@ -35,15 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -73,6 +66,9 @@ import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
 import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
+import com.rein4ce.roadcollector.ui.common.artBars
+import com.rein4ce.roadcollector.ui.common.artSlab
+import com.rein4ce.roadcollector.ui.common.artBar
 import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
@@ -246,37 +242,31 @@ private fun ModeTitle(scale: Float) {
 }
 
 /**
- * 台に積んだパーツの絵（飾り。読み上げない）。積む画面と同じ紺の台に、題字の色の道のパーツを 3 つ：
- * 下に横たわった棒（黄）、その上に橋のような形（青緑）、いちばん上に少し傾いた L（オレンジ）。
- * パーツは、コレクションの道と同じく、濃い縁取りを描いてから本体を重ねる
+ * 積んでいる途中の絵（飾り。読み上げない）。積む画面と同じ紺の台に、形の違う道のパーツを積み、上からもう 1 つ落ちてくる：
+ * 台の上に横たわった板（黄）、その上に U（青緑）と L（紺）を並べ、上にクランク（オレンジ）が浮いている。
+ * ホームの塔（アプリのアイコン）と同じ質感で描く：色だけの面で、道のパーツは角の立った同じ太さの棒を組み合わせ、
+ * 板と台だけ角を少し丸め、傾けない（ui/common/TowerArt.kt。決定 82。前は縁取りのある丸い太線で、ホームと質感が違った）。
+ * 並びはホームの塔（板・橋・L を 1 本に積む）と同じにならないよう、横に並べて、落ちてくるパーツを足した（B の希望）
  */
 @Composable
 private fun StackArt(modifier: Modifier = Modifier) {
     // 台の色は積む画面と同じ（ダークでは、暗い地の上でも見える明るさ）
     val platform = if (Fieldbook.dark) Color(0xFF7A7FA6) else Pop.Navy
+    // 紺のパーツは、ダークでは台と同じ明るい紺にして、暗い地に沈ませない
+    val navy = if (Fieldbook.dark) Color(0xFF9DA2C8) else Pop.Navy
     Canvas(modifier = modifier.clearAndSetSemantics {}) {
         // 絵は 176×112 の目盛りで描き、場所の大きさに合わせる
         val u = size.width / 176f
-        fun p(x: Float, y: Float) = Offset(x * u, y * u)
-        val width = 10f * u
-        fun part(color: Color, points: List<Offset>) {
-            val path = Path().apply {
-                moveTo(points[0].x, points[0].y)
-                points.drop(1).forEach { lineTo(it.x, it.y) }
-            }
-            drawPath(path, Pop.side(color), style = Stroke(width + 3f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
-        }
         // 台
-        drawRoundRect(platform, topLeft = p(34f, 96f), size = Size(108f * u, 14f * u), cornerRadius = CornerRadius(2f * u))
-        // 横たわった棒
-        part(Pop.Yellow, listOf(p(46f, 87f), p(130f, 87f)))
-        // 橋のような形
-        part(Pop.Teal, listOf(p(60f, 79f), p(60f, 60f), p(114f, 60f), p(114f, 79f)))
-        // 少し傾いた L
-        rotate(degrees = -8f, pivot = p(92f, 38f)) {
-            part(Pop.Orange, listOf(p(70f, 51f), p(104f, 51f), p(104f, 22f)))
-        }
+        artSlab(platform, x = 22f, y = 98f, w = 132f, h = 12f, r = 3f, u = u)
+        // 横たわった板
+        artSlab(Pop.Yellow, x = 30f, y = 84f, w = 116f, h = 14f, r = 4f, u = u)
+        // U（2 本の脚と下の棒）
+        artBars(Pop.Teal, u, artBar(38f, 50f, 11f, 34f), artBar(76f, 50f, 11f, 34f), artBar(38f, 73f, 49f, 11f))
+        // L（縦の棒と、下の横の棒）
+        artBars(navy, u, artBar(100f, 46f, 11f, 38f), artBar(100f, 73f, 36f, 11f))
+        // 上から落ちてくるクランク（段になった 3 本の棒）
+        artBars(Pop.Orange, u, artBar(66f, 8f, 30f, 11f), artBar(85f, 8f, 11f, 26f), artBar(85f, 23f, 30f, 11f))
     }
 }
 
@@ -293,9 +283,18 @@ private fun dailyRecord(tower: DailyTower?): String =
  * 押せるモードは行のどこを押しても始まり、ほかのボタンと同じ押し心地で縮む。
  * まだ作っていないモードは、全体をうすくして「準備中」の札を出し、押せない（読み上げでも「準備中」と伝える）。
  * 「みんな」のホーム（どのランキングを見に行くか。ui/gallery/GalleryHome.kt）も同じ行を使う（決定 77。一言だけ [note] で替える）
+ *
+ * @param leading 左の積み木の代わりに置くもの（「みんな」のホームでは、遊び方の色のメダルに自分の順位。決定 82）。
+ *   無ければ、モードの色の積み木にモードのアイコン。[MODE_LEADING_SIZE] の場所に置く
  */
 @Composable
-internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note: String = mode.note) {
+internal fun ModeRow(
+    mode: PlayMode,
+    record: String?,
+    onClick: () -> Unit,
+    note: String = mode.note,
+    leading: (@Composable () -> Unit)? = null,
+) {
     val look = lookOf(mode)
     val source = remember { MutableInteractionSource() }
     val action = if (mode.ready) {
@@ -315,18 +314,22 @@ internal fun ModeRow(mode: PlayMode, record: String?, onClick: () -> Unit, note:
         modifier = Modifier.fillMaxWidth().then(action),
     ) {
         Box(modifier = Modifier.width(BLOCK_COLUMN), contentAlignment = Alignment.Center) {
-            // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .graphicsLayer { rotationZ = look.tiltDeg }
-                    .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
-                    .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
-            ) {
-                val iconModifier = Modifier.size(ICON_SIZE)
-                when (val icon = look.icon) {
-                    null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
-                    else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+            if (leading != null) {
+                leading()
+            } else {
+                // 題字と同じ色の積み木に、モードのアイコン。題字の積み木のように少し傾ける
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .graphicsLayer { rotationZ = look.tiltDeg }
+                        .size(width = BLOCK_SIZE, height = BLOCK_SIZE + BLOCK_DEPTH)
+                        .popBlock(face = look.face, corner = 14.dp, depth = BLOCK_DEPTH),
+                ) {
+                    val iconModifier = Modifier.size(ICON_SIZE)
+                    when (val icon = look.icon) {
+                        null -> TabIcon(dest = Dest.Stack, selected = true, animate = false, tint = Pop.Letter, modifier = iconModifier)
+                        else -> Icon(icon, contentDescription = null, tint = Pop.Letter, modifier = iconModifier)
+                    }
                 }
             }
         }
@@ -416,6 +419,9 @@ private fun ModePlayPage(
  */
 private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float, val tagFace: Color)
 
+/** モードの行の積み木の面の色（題字の積み木の色。「みんな」のホームのメダルもこの色にする） */
+internal fun modeBlockFace(mode: PlayMode): Color = lookOf(mode).face
+
 private fun lookOf(mode: PlayMode): ModeLook = when (mode) {
     PlayMode.NORMAL -> ModeLook(Pop.Orange, null, -4f, Pop.OrangeDeep)
     PlayMode.CHALLENGE -> ModeLook(Pop.Teal, AppIcons.Stopwatch, 3f, Pop.TealDeep)
@@ -445,6 +451,12 @@ private val ROW_GAP = 14.dp
 private val BLOCK_COLUMN = 84.dp
 private val BLOCK_SIZE = 68.dp
 private val BLOCK_DEPTH = 5.dp
+
+/** 行の左の積み木の大きさ（[ModeRow] の leading も、この大きさに収める） */
+internal val MODE_LEADING_SIZE = BLOCK_SIZE
+
+/** 行の左の積み木の、下にのぞく側面の厚み（leading もそろえる） */
+internal val MODE_LEADING_DEPTH = BLOCK_DEPTH
 private val ICON_SIZE = 38.dp
 
 /** 右の紙のカードの、いちばん低い高さ（積み木と同じくらい） */
