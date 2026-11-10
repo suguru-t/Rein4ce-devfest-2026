@@ -9,7 +9,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,16 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,7 +67,12 @@ import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
 import com.rein4ce.roadcollector.ui.common.PopButton
+import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.PopModeTag
+import com.rein4ce.roadcollector.ui.common.ZoomInFrom
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
+import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -109,9 +107,21 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     // そのため rememberSaveable ではなく remember（タブを移るとこの画面は作り直されるので、ホームに戻る）。
     // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から来たときだけ、その遊び方のランキングから（TowerGallery.open）
     var page by remember { mutableStateOf(if (gallery.consumeOpenRequest()) GalleryPage.OVERVIEW else GalleryPage.HOME) }
-    BackHandler(enabled = page != GalleryPage.HOME) {
+
+    // 「‹ 戻る」で 1 つ前の画面（ホーム・遊び方のランキング）に戻るときだけ、戻った先を「‹ 戻る」の所から大きくして出す
+    // （積む画面の「‹ 戻る」と同じ。決定 78・80。共通の仕組みは ui/common/ZoomFrom.kt）。端末の「戻る」と、先へ進むときは動かさない
+    val zoom = rememberBackZoom()
+    // 1 つ前の画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
+    fun back(center: Offset?) {
+        zoom.back(center)
         page = if (page == GalleryPage.OVERVIEW) GalleryPage.HOME else GalleryPage.OVERVIEW
     }
+    // 先へ進む（戻った先ではないので、大きくする動きは付けない）
+    fun forward(to: GalleryPage) {
+        zoom.forward()
+        page = to
+    }
+    BackHandler(enabled = page != GalleryPage.HOME) { back(null) }
 
     // 画面を開くたび（タブを切り替えて戻ったときも）・ホームに戻ったとき・遊び方を選んだときに一覧を取り直す。
     // ホームでは、行にそれぞれのランキングのようすを出すので 3 つとも。起動時の先読み（TowerGallery.prefetch）が
@@ -148,40 +158,46 @@ fun GalleryScreen(gallery: TowerGallery = RoadCollectorApp.from(LocalContext.cur
     var opened by remember { mutableStateOf<TowerSummary?>(null) }
     var showNickname by remember { mutableStateOf(false) }
 
-    when (page) {
-        GalleryPage.HOME -> GalleryHome(
-            stateOf = gallery::stateOf,
-            isMine = isMine,
-            onPick = {
-                gallery.mode = it
-                page = GalleryPage.OVERVIEW
-            },
-        )
-        GalleryPage.OVERVIEW -> Overview(
-            gallery = gallery,
-            towers = towers,
-            isMine = isMine,
-            mode = mode,
-            onBack = { page = GalleryPage.HOME },
-            sort = sort,
-            onSort = setSort,
-            openedId = opened?.id,
-            onOpen = { opened = it },
-            onRanking = { page = GalleryPage.RANKING },
-            onMine = { page = GalleryPage.MINE },
-            nicknameMissing = nickname.isBlank(),
-            onNickname = { showNickname = true },
-        )
-        GalleryPage.RANKING, GalleryPage.MINE -> RankingScreen(
-            gallery = gallery,
-            towers = towers,
-            isMine = isMine,
-            mineOnly = page == GalleryPage.MINE,
-            sort = if (page == GalleryPage.MINE) mineSort else sort,
-            onSort = { if (page == GalleryPage.MINE) mineSortChosen = it else setSort(it) },
-            onBack = { page = GalleryPage.OVERVIEW },
-            onOpen = { opened = it },
-        )
+    Box(modifier = Modifier.fillMaxSize().then(zoom.area)) {
+        when (page) {
+            GalleryPage.HOME -> ZoomInFrom(zoom.from, zoom::settled) {
+                GalleryHome(
+                    stateOf = gallery::stateOf,
+                    isMine = isMine,
+                    onPick = {
+                        gallery.mode = it
+                        forward(GalleryPage.OVERVIEW)
+                    },
+                )
+            }
+            GalleryPage.OVERVIEW -> ZoomInFrom(zoom.from, zoom::settled) {
+                Overview(
+                    gallery = gallery,
+                    towers = towers,
+                    isMine = isMine,
+                    mode = mode,
+                    onBack = ::back,
+                    sort = sort,
+                    onSort = setSort,
+                    openedId = opened?.id,
+                    onOpen = { opened = it },
+                    onRanking = { forward(GalleryPage.RANKING) },
+                    onMine = { forward(GalleryPage.MINE) },
+                    nicknameMissing = nickname.isBlank(),
+                    onNickname = { showNickname = true },
+                )
+            }
+            GalleryPage.RANKING, GalleryPage.MINE -> RankingScreen(
+                gallery = gallery,
+                towers = towers,
+                isMine = isMine,
+                mineOnly = page == GalleryPage.MINE,
+                sort = if (page == GalleryPage.MINE) mineSort else sort,
+                onSort = { if (page == GalleryPage.MINE) mineSortChosen = it else setSort(it) },
+                onBack = ::back,
+                onOpen = { opened = it },
+            )
+        }
     }
 
     opened?.let { t ->
@@ -225,7 +241,7 @@ private fun Overview(
     towers: List<TowerSummary>,
     isMine: (TowerSummary) -> Boolean,
     mode: TowerMode,
-    onBack: () -> Unit,
+    onBack: (center: Offset) -> Unit,
     sort: TowerSort,
     onSort: (TowerSort) -> Unit,
     openedId: String?,
@@ -259,10 +275,14 @@ private fun Overview(
             .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 12.dp),
     ) {
-        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札（みちをつむで遊んでいるときと同じ形。決定 77）、右にリロードのブロック
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
-            PopTag("${mode.fullLabel}のランキング", face = modeFace(mode), fontSize = 12.sp, tiltDeg = 2f)
+        // 「‹ 戻る」（ホームへ）と、どの遊び方のランキングかの札、右にリロードのブロック。
+        // 「‹ 戻る」と札は、みちをつむで遊んでいるときと同じ積み木・同じ大きさ（ui/common/PopBack.kt。決定 77・80）。
+        // 札は前は「通常のランキング」だったが、字を大きくすると幅に入らないので、みちをつむと同じく遊び方の名前だけにした
+        val narrow = isNarrowScreen()
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PopBackButton(onBack, small = narrow, onClickLabel = "どのランキングを見るかの画面に戻る")
+            // 見た目は遊び方の名前だけ。読み上げでは、前と同じく「通常のランキング」と何の画面かを伝える（#134 の C のレビュー）
+            PopModeTag(mode.fullLabel, face = modeFace(mode), small = narrow, spoken = "${mode.fullLabel}のランキング")
             Spacer(Modifier.weight(1f))
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
         }
@@ -278,13 +298,13 @@ private fun Overview(
             }
             // 利用者向けの短い案内だけ。生のエラー文や開発者向けの説明は出さない（手元のサーバの使い方は README）
             is TowerGallery.State.Error -> Note {
-                Text("少し待って、右上のリロードの印を押してください。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("電波のない場所か、サーバが起動中かもしれません。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("少し待って、右上のリロードの印を押してください。", fontFamily = Pop.Rounded, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+                Text("電波のない場所か、サーバが起動中かもしれません。", fontFamily = Pop.Rounded, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
             }
             is TowerGallery.State.Loaded -> if (towers.isEmpty()) {
                 Note {
-                    Text("まだタワーがありません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                    Text("${howToSend(mode)}、ここに立ちます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                    Text("まだタワーがありません。", fontFamily = Pop.Rounded, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+                    Text("${howToSend(mode)}、ここに立ちます。", fontFamily = Pop.Rounded, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
                 }
             } else {
                 SortTabs(sort = sort, options = TowerSort.comparableFor(mode), onSelect = onSort)
@@ -345,7 +365,7 @@ private fun Overview(
                                     fontFamily = Pop.Rounded,
                                     fontWeight = FontWeight.Black,
                                     color = Pop.TealLine,
-                                    fontSize = 12.sp,
+                                    fontSize = 14.sp,
                                 )
                             }
                         }
@@ -458,7 +478,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
                 sub,
                 fontFamily = Pop.Rounded,
                 fontWeight = FontWeight.Black,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = if (isError) Fieldbook.Danger else Fieldbook.Muted,
             )
         }
@@ -499,7 +519,7 @@ private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: To
                 label,
                 fontFamily = Pop.Rounded,
                 fontWeight = FontWeight.Black,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
                 color = if (mine) Pop.MineInk else Fieldbook.Ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -551,7 +571,7 @@ private fun TowerFullView(tower: TowerSummary, sketch: Tower?, mine: Boolean, on
                 .background(Fieldbook.Paper)
                 .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
         ) {
-            PopChip("× 閉じる", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onDismiss)
+            PopChip("× 閉じる", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 16.sp, onClick = onDismiss)
             Spacer(Modifier.height(4.dp))
             TowerDetail(tower, sketch, mine, picture = Modifier.fillMaxWidth().weight(1f))
         }
@@ -611,7 +631,7 @@ private fun ColumnScope.TowerDetail(tower: TowerSummary, sketch: Tower?, mine: B
             face = Fieldbook.Card,
             text = Pop.TealLine,
             edge = Pop.TealLine,
-            fontSize = 14.sp,
+            fontSize = 15.sp,
         )
     }
 }

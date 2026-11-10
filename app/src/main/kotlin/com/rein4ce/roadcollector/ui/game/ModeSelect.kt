@@ -37,19 +37,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -63,8 +59,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rein4ce.roadcollector.RoadCollectorApp
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.foundation.layout.sizeIn
 import com.rein4ce.roadcollector.core.daily.DailyTower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.data.ChallengeStorage
@@ -74,11 +68,13 @@ import com.rein4ce.roadcollector.ui.common.AppIcons
 import com.rein4ce.roadcollector.ui.common.BlockWord
 import com.rein4ce.roadcollector.ui.common.HeaderFillLayout
 import com.rein4ce.roadcollector.ui.common.Pop
-import com.rein4ce.roadcollector.ui.common.PopChip
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.SECTION_CORNER
+import com.rein4ce.roadcollector.ui.common.PopBackButton
+import com.rein4ce.roadcollector.ui.common.PopModeTag
 import com.rein4ce.roadcollector.ui.common.ZoomInFrom
-import com.rein4ce.roadcollector.ui.common.zoomOrigin
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
+import com.rein4ce.roadcollector.ui.common.rememberBackZoom
 import com.rein4ce.roadcollector.ui.common.noteStyle
 import com.rein4ce.roadcollector.ui.common.notes
 import com.rein4ce.roadcollector.ui.common.popBlock
@@ -117,18 +113,16 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     // 「‹ 戻る」で選ぶ画面に戻るときだけ、選ぶ画面を「‹ 戻る」の所から大きくして出す（ホームの家のボタンと同じ。決定 78）。
-    // 値は大きくなり始める点（画面の中の割合）。端末の「戻る」では null にして、今までどおりすぐ切り替える
-    var selectZoomFrom by remember { mutableStateOf<TransformOrigin?>(null) }
-    // この画面（積むタブの中身）の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため）
-    val area = remember { arrayOf(Rect.Zero) }
+    // 端末の「戻る」では、今までどおりすぐ切り替える（ランキングと共通の仕組み。ui/common/ZoomFrom.kt）
+    val zoom = rememberBackZoom()
 
     // 選ぶ画面に戻る。[center] は押した「‹ 戻る」のまん中（端末の「戻る」なら null）
     fun backToSelect(center: Offset?) {
-        selectZoomFrom = center?.let { zoomOrigin(it, area[0]) ?: SELECT_ZOOM_FALLBACK }
+        zoom.back(center)
         chosen = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().onGloballyPositioned { area[0] = it.boundsInRoot() }) {
+    Box(modifier = Modifier.fillMaxSize().then(zoom.area)) {
         when (mode) {
             PlayMode.NORMAL -> {
                 // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
@@ -176,16 +170,17 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 // 毎日の塔は、選ぶ画面を開くたびに読み直す（積んで戻ったときも、新しい高さになる）
                 val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
                 val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
-                ZoomInFrom(selectZoomFrom) {
-                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
+                ZoomInFrom(zoom.from, zoom::settled) {
+                    // 先へ進むときは、戻るときの大きくする動きを終わったことにする（大きくなり終わる前に選んでも、次の「‹ 戻る」がずれない。#134 の A のレビュー）
+                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = {
+                        zoom.forward()
+                        chosen = it
+                    })
                 }
             }
         }
     }
 }
-
-/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、選ぶ画面が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
-private val SELECT_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
 
 /**
  * モードを選ぶ画面（ゲームのタイトル画面のように）。ホームと同じ組み方：
@@ -404,65 +399,16 @@ private fun ModePlayPage(
     content: @Composable (leading: @Composable (compact: Boolean) -> Unit) -> Unit,
 ) {
     // 幅の狭い端末（400dp 未満）では、「‹ 戻る」と札を一回り小さくする（90 秒チャレンジは右に残り時間が並ぶので、幅が足りなくならないように）
-    val narrow = LocalConfiguration.current.screenWidthDp < NARROW_WIDTH_DP
+    val narrow = isNarrowScreen()
     content { compact ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BackButton(onBack, small = compact || narrow)
+            // 「‹ 戻る」と今のモードの札は、ランキングの画面と共通（ui/common/PopBack.kt）
+            PopBackButton(onBack, small = compact || narrow, onClickLabel = "遊び方を選ぶ画面に戻る")
             // 今のモードの札。前は 12sp の小さな札だったので（B の希望）、「‹ 戻る」と同じ高さ・同じ字の大きさの積み木にした
-            if (!compact) ModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
+            if (!compact) PopModeTag(mode.label, lookOf(mode).tagFace, small = narrow)
         }
     }
 }
-
-/**
- * モードで遊ぶ画面の「‹ 戻る」（モードを選ぶ画面へ）。「みんな」のランキングと同じ黄色い積み木。
- * 前は小さな札（字 14sp・見た目の高さ 28dp ほど）で押しにくかったので（B の希望）、字を大きくし（16dp。[small] なら 15dp）、
- * 見た目の高さ 42dp・幅 88dp 以上の積み木にした（押せる範囲も同じ大きさ）。上の行に収めるため、文字の大きさの設定では大きくしない
- *
- * @param onBack 押したとき。ボタンのまん中（アプリの画面の左上から）を渡す。選ぶ画面はここから大きくなって出てくる（決定 78）
- * @param small 小さい画面か、幅の狭い端末。一回り小さくする
- */
-@Composable
-private fun BackButton(onBack: (center: Offset) -> Unit, small: Boolean) {
-    val source = remember { MutableInteractionSource() }
-    val size = with(LocalDensity.current) { (if (small) 15.dp else 16.dp).toSp() }
-    // 置かれた所のまん中。押したときに渡すだけなので、変わっても描き直さない（State にしない）
-    val center = remember { arrayOf(Offset.Unspecified) }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
-            .pressFeel(source)
-            .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = "遊び方を選ぶ画面に戻る") { onBack(center[0]) }
-            .popBlock(face = Pop.Yellow, corner = 50.dp, depth = 3.dp)
-            .sizeIn(minWidth = if (small) 80.dp else 88.dp, minHeight = if (small) 40.dp else 42.dp)
-            .padding(horizontal = 14.dp),
-    ) {
-        Text("‹ 戻る", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.InkOnYellow, maxLines = 1)
-    }
-}
-
-/**
- * 遊んでいるモードの札（「通常」「90 秒チャレンジ」「毎日 1 つずつ積む」）。モードの色の積み木に白い字で、少し傾ける。
- * 「‹ 戻る」と同じ高さ・同じ字の大きさ（[small] なら一回り小さく）。押すものではないので、読み上げでは字だけ
- */
-@Composable
-private fun ModeTag(label: String, face: Color, small: Boolean) {
-    val size = with(LocalDensity.current) { (if (small) 14.dp else 16.dp).toSp() }
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .graphicsLayer { rotationZ = 2f }
-            .popBlock(face = face, corner = 10.dp, depth = 3.dp)
-            .heightIn(min = if (small) 36.dp else 42.dp)
-            .padding(horizontal = 8.dp),
-    ) {
-        Text(label, fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = size, color = Pop.Letter, maxLines = 1)
-    }
-}
-
-/** これより幅の狭い端末では、モードで遊ぶ画面の「‹ 戻る」と札を一回り小さくする [dp] */
-private const val NARROW_WIDTH_DP = 400
 
 /**
  * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き・遊んでいるときの札の色。
@@ -485,7 +431,7 @@ private const val HEADER_SCALE_MAX = 1.8f
 private val HEADER_ROWS_GAP = 22.dp
 
 /**
- * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ほかの画面の見出しは 26dp。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
+ * 上の部分の絵の大きさと、画面名の積み木 1 つの大きさ（ランキングの一覧の見出しは 26dp、記録とコレクションは 30dp（決定 80）。上の部分ごと大きくするので、ほぼ同じ大きさから始める。
  * はじめは 40dp で画面の幅いっぱいになり、B が大きすぎるとした）
  */
 private val ART_WIDTH = 176.dp
