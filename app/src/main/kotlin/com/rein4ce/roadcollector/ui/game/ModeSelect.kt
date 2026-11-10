@@ -87,9 +87,10 @@ import com.rein4ce.roadcollector.core.model.TowerMode
 /**
  * 積む画面の遊び方（モード）。並びは、モードを選ぶ画面の上から。
  * まだ作っていないモード（[ready] が false）は、選ぶ画面に「準備中」で出して、押せないようにする。
+ * [note] は選ぶ画面の行の一言、[material] は遊ぶ画面の上の行の下に出す、何を積むかの一言（[PlayMaterialNote]。決定 87）。
  *
  * - 通常：広い台に、コレクションの全部のパーツからランダムに 1 つずつ出て、終わりなく積む。台から落ちたら終わり（決定 62・#108）
- * - 3 分チャレンジ：#45・#78（D）。[StackTab] から ChallengeScreen を始める。カードには、この端末での最高の記録（ChallengeStorage）
+ * - 90 秒チャレンジ（前は 3 分。決定 75）：#45・#78（D）。決まった 5 種類の形（出る順は回ごとに違う）で積む。[StackTab] から ChallengeScreen を始める。カードには、この端末での最高の記録（ChallengeStorage）
  * - 毎日 1 つずつ積む：#106・決定 61。[StackTab] から DailyScreen を始める。カードには、今の塔の高さと日数（DailyTowerStore）
  */
 enum class PlayMode(val label: String, val note: String, val material: String, val ready: Boolean) {
@@ -120,7 +121,8 @@ internal val LocalPlayMode = staticCompositionLocalOf<PlayMode?> { null }
 internal fun PlayMaterialNote(compact: Boolean, modifier: Modifier = Modifier) {
     val mode = LocalPlayMode.current ?: return
     if (compact) return
-    SkyText(mode.material, color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 1, modifier = modifier)
+    // ふだんは 1 行。幅の狭い端末で文字を大きくしたときは、切れないよう 2 行まで（#141 の A のレビュー）
+    SkyText(mode.material, color = Fieldbook.Muted, fontSize = 13.sp, maxLines = 2, modifier = modifier)
 }
 
 /** みちをつむのモード → 「みんな」の遊び方（色合い [modeTheme] を同じにする） */
@@ -160,7 +162,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
     }
     val mode = chosen
     val records = RoadCollectorApp.from(LocalContext.current).stackRecords
-    // 3 分チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 77）
+    // 90 秒チャレンジ・毎日 1 つずつ積むの「ランキング」から「みんな」を開くときに、見る遊び方を先に決める（決定 77）
     val gallery = RoadCollectorApp.from(LocalContext.current).gallery
 
     // 「‹ 戻る」で選ぶ画面に戻るときだけ、選ぶ画面を「‹ 戻る」の所から大きくして出す（ホームの家のボタンと同じ。決定 78）。
@@ -220,7 +222,7 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
             }
             null -> {
                 val best by records.normalBest.collectAsStateWithLifecycle()
-                // 3 分チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
+                // 90 秒チャレンジの記録はファイル（ChallengeStorage）にあるので、選ぶ画面を開くたびに読み直す（遊んで戻ったときも新しい記録になる）。
                 // 画面で遊べる遊び方（自分で落とす。決定 69）の記録の最高
                 val directory = LocalContext.current.applicationContext.filesDir
                 val challengeBest by produceState<Double?>(null, directory) {
@@ -333,7 +335,7 @@ private fun StackArt(modifier: Modifier = Modifier) {
     }
 }
 
-/** 通常と 3 分チャレンジのカードに出す自分の記録（「自分の最高 2.40 m」。まだ無ければその一言） */
+/** 通常と 90 秒チャレンジのカードに出す自分の記録（「自分の最高 2.40 m」。まだ無ければその一言） */
 private fun bestRecord(best: Double?): String =
     if (best == null) "まだ記録はありません" else "自分の最高 %.2f m".format(best)
 
@@ -487,7 +489,7 @@ private fun ModePlayPage(
 
 /**
  * モードの見た目：積み木の面の色・アイコン（null なら積むタブのアイコン）・傾き（遊んでいるときの札の色は、遊び方の色合い [modeTheme] の塗り。決定 84）。
- * 色は題字の積み木の色から（通常＝オレンジ、3 分チャレンジ＝青緑、毎日＝紺）。アイコンの字の色はどれも題字の字と同じ
+ * 色は題字の積み木の色から（通常＝オレンジ、90 秒チャレンジ＝青緑、毎日＝紺）。アイコンの字の色はどれも題字の字と同じ
  */
 private class ModeLook(val face: Color, val icon: ImageVector?, val tiltDeg: Float)
 
