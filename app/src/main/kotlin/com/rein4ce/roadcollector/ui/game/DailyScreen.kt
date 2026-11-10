@@ -172,6 +172,17 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                     DailyViewModel.Phase.Viewing -> when {
                         vm.placedToday -> {
                             Note("今日の 1 つは積みました。あしたまた、その日に歩いた道を 1 つ積めます")
+                            // 気に入らなければ、今日のパーツを外して置き直せる（落ちたときと合わせて 1 日 3 回まで。決定 86）
+                            if (vm.redosLeftToday > 0) {
+                                PopChip(
+                                    "置き直す（あと ${vm.redosLeftToday} 回）",
+                                    face = Fieldbook.Card,
+                                    text = modeInkOr(Pop.TealLine),
+                                    edge = modeInkOr(Pop.TealLine),
+                                    enabled = vm.canRedo,
+                                    onClick = vm::redo,
+                                )
+                            }
                             // 積んで止まったら、自動で「みんな」に送る（決定 77）。送ったようすと「ランキング」
                             DailySendRow(vm, onGoRanking)
                         }
@@ -181,15 +192,15 @@ internal fun DailyScreen(leading: @Composable (compact: Boolean) -> Unit = {}, o
                         )
                         todays.isEmpty() -> Note("今日歩いた道がまだありません。歩いて道を集めると（デモ散歩でも）、1 つ積めます")
                         else -> {
-                            if (vm.fallsToday > 0) // 1 行に収まるように短く（前は「今日は…（置き直しは 1 日 3 回まで）」で、最後の 2 字だけ次の行に落ちていた）
-                            Note("台から ${vm.fallsToday} 回落ちました（置き直しは ${DailyTower.MAX_RETRIES} 回まで）")
+                            // 置き直している途中（落ちたか、自分で置き直して、道を選び直しているとき）。1 行に収まるように短く
+                            if (vm.fallsToday > 0) Note("置き直し ${vm.fallsToday} 回目（${DailyTower.MAX_RETRIES} 回まで）")
                             Note("今日歩いた道から 1 つ選んで積みましょう（1 日に 1 つ）")
                             TodayChoices(todays, colorsOf = pieceColorsOf, onPick = { part -> vm.choose(part, gripOf(part)) })
                         }
                     }
                     DailyViewModel.Phase.Aiming -> {
                         val part = vm.current
-                        // 置き直している間は、何回目かを出す（落ちた回数＝今の置き直しの回数。決定 70）
+                        // 置き直している間は、何回目かを出す（落ちた回数と自分で置き直した回数の合計＝今の置き直しの回数。決定 70・86）
                         if (vm.fallsToday > 0) {
                             Note(
                                 (if (vm.lastFell) "台から落ちました。" else "") +

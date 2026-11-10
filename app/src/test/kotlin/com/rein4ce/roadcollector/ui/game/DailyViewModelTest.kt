@@ -100,6 +100,63 @@ class DailyViewModelTest {
         waitUntil { saved?.fallsOn(day) == DailyTower.MAX_RETRIES + 1 }
     }
 
+    @Test fun `積んで残った今日のパーツを置き直すと、外して同じパーツで狙い直す。落ちたときと合わせて 1 日 3 回まで（決定 86）`() {
+        val yesterday = DailyBlock(part("yesterday"), Placement("yesterday", 0f, 0.05f, 0f), Grip.NORMAL, "2026-11-09")
+        val vm = newVm(DailyTower(listOf(yesterday)))
+        val road = part("today")
+        vm.choose(road, Grip.NORMAL)
+        vm.place() // 台のまん中に落とす
+        vm.runUntilStill()
+        assertTrue(vm.placedToday)
+        assertEquals(DailyTower.MAX_RETRIES, vm.redosLeftToday)
+        val placedX = vm.tower.blocks.single { it.day == day }.placement.x
+        for (n in 1..DailyTower.MAX_RETRIES) {
+            assertTrue(vm.canRedo)
+            vm.redo()
+            assertEquals("$n 回目の置き直しは狙うところから", DailyViewModel.Phase.Aiming, vm.phase)
+            assertSame(road, vm.current)
+            assertFalse("今日のパーツは外れている", vm.placedToday)
+            assertEquals(listOf("yesterday"), vm.tower.blocks.map { it.part.id })
+            assertEquals(n, vm.fallsToday)
+            assertEquals("さっき止まった所から狙う", placedX, vm.ghostX, 0.3f)
+            waitUntil { saved?.fallsOn(day) == n }
+            vm.place()
+            vm.runUntilStill()
+            assertTrue(vm.placedToday)
+            assertEquals(DailyTower.MAX_RETRIES - n, vm.redosLeftToday)
+        }
+        assertFalse("使い切ったら置き直せない", vm.canRedo)
+        vm.redo()
+        assertEquals(DailyViewModel.Phase.Viewing, vm.phase)
+        assertTrue(vm.placedToday)
+    }
+
+    @Test fun `置き直したら、置き直したあとの形を「みんな」に送り直す（決定 86）`() {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<com.rein4ce.roadcollector.core.model.Tower>()
+        val text = AppJson.encodeToString(DailyTower.serializer(), DailyTower())
+        val store = DailyTowerStore(read = { text }, write = { saved = AppJson.decodeFromString(DailyTower.serializer(), it) }, quarantine = {}, io = Dispatchers.Unconfined)
+        val vm = DailyViewModel(store, today = { day }, sendTower = { tower ->
+            sent += tower
+            com.rein4ce.roadcollector.core.model.TowerCreated("d1", "https://example.test/towers/d1")
+        })
+        waitUntil { vm.phase != DailyViewModel.Phase.Loading }
+        vm.choose(part("today"), Grip.NORMAL)
+        vm.place()
+        vm.runUntilStill()
+        waitUntil { vm.sendState == DailyViewModel.SendState.SENT && saved?.sentDay == day }
+        assertEquals(1, sent.size)
+        vm.redo()
+        assertEquals(DailyViewModel.SendState.IDLE, vm.sendState)
+        vm.dragBy(0.2f)
+        vm.place()
+        vm.runUntilStill()
+        assertTrue(vm.placedToday)
+        waitUntil { sent.size >= 2 && vm.sendState == DailyViewModel.SendState.SENT }
+        assertEquals("置き直したあとの形を送った", day, sent.last().lastDay)
+        waitUntil { saved?.sentDay == day }
+        assertFalse(vm.tower.needsSend)
+    }
+
     @Test fun `落ちた回数は保存してあるので、開き直しても置き直しは増えない`() {
         val vm = newVm(DailyTower(fellDay = day, fellCount = DailyTower.MAX_RETRIES + 1))
         assertFalse(vm.canPlaceToday)

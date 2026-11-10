@@ -106,8 +106,17 @@ class DailyViewModel(
     /** 今日まだ積めるか（まだ積んでいなくて、置き直しを使い切っていない。決定 70） */
     val canPlaceToday: Boolean get() = tower.canPlaceOn(day)
 
-    /** 今日のパーツが台から落ちた回数（置き直している間は、今が何回目の置き直しか） */
+    /** 今日、置き直しを使った回数（台から落ちた回数と、自分で置き直した回数の合計。置き直している間は、今が何回目の置き直しか。決定 86） */
     val fallsToday: Int get() = tower.fallsOn(day)
+
+    /** 積んで残っている今日のパーツを、あと何回自分で置き直せるか（積んでいなければ 0。決定 86） */
+    val redosLeftToday: Int get() = tower.redosLeft(day)
+
+    /**
+     * 今、置き直せるか（塔を見ていて、置き直しが残っている。「みんな」に送っている途中は待つ：
+     * 送り終わったときに「今日の形を送った」と書くので、その前に置き直すと、置き直したあとの形を送らなくなるため）
+     */
+    val canRedo: Boolean get() = phase == Phase.Viewing && redosLeftToday > 0 && sendState != SendState.SENDING
 
     init {
         viewModelScope.launch {
@@ -177,6 +186,30 @@ class DailyViewModel(
         ghostAngleDeg = 0f
         phase = Phase.Aiming
         camera = CameraTarget.Follow(top = spawnY() + reachOf(part))
+    }
+
+    /**
+     * 積んで残っている今日のパーツを外して、同じパーツで狙い直す（決定 86）。置き直しを 1 回使う（落ちたときと合わせて 1 日 3 回まで）。
+     * 昨日までのパーツは固めてあるので動かない。狙い始める位置と向きは、さっき止まった所（少しずらして置き直しやすいように）。
+     * 「選び直す」で、今日のほかの道にも替えられる。今日の形を「みんな」に送っていたら、置き直したあとの形を送り直す
+     */
+    fun redo() {
+        if (!canRedo) return
+        val block = tower.blocks.lastOrNull { it.day == day } ?: return
+        // 今日のパーツを外した形で組み直し、その高さを残す
+        tower = tower.redoOn(day, height = tower.height)
+        rebuild()
+        tower = tower.copy(height = height.toDouble())
+        sendState = SendState.IDLE
+        lastFell = false
+        current = block.part
+        currentGrip = block.grip
+        ghostX = block.placement.x
+        ghostAngleDeg = ((Math.toDegrees(block.placement.angleRad.toDouble()) % 360 + 360) % 360).toFloat()
+        phase = Phase.Aiming
+        camera = CameraTarget.Follow(top = spawnY() + reachOf(block.part))
+        // 置き直しを使ったことを残す（狙っている途中で画面を離れても、置き直しは増えない）
+        saveLatest()
     }
 
     /** 選び直す（狙うのをやめて、今日の道の一覧に戻る） */
