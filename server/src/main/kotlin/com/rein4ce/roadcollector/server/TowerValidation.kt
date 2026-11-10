@@ -25,6 +25,13 @@ import kotlin.math.sin
 const val MAX_TOWER_PARTS = 100
 
 /**
+ * 毎日 1 つずつ積むの塔のパーツ（種類）の上限（決定 88）。1 日に 1 つ、その日に歩いた違うパーツを積むので、
+ * [MAX_TOWER_PARTS]（100）のままだと、101 日目から送れなくなっていた。配置の上限（[MAX_TOWER_PLACEMENTS]）と同じにする。
+ * ふつうのパーツ（点 12 個ほど）なら 500 個でも 300 KB ほどで、本文の上限（BodyLimit.kt）に収まる
+ */
+const val MAX_DAILY_TOWER_PARTS = 500
+
+/**
  * 配置（台に残った数）の上限。同じパーツを何度も置けるので（通常は全部のパーツから出し、3 分チャレンジは 5 種類の形をくり返す）、
  * パーツの種類より多くなる。前はパーツと同じ 100 で、通常で 100 個を超えて積むと「保存」が 400 で断られていた（決定 77）。
  * 配置は 1 つ 100 バイトほどなので、500 個でも 50 KB ほど
@@ -97,7 +104,8 @@ const val MAX_PLACEMENT_SCALE = 5f
  */
 internal fun Tower.validationError(today: LocalDate = LocalDate.now(ZoneOffset.UTC)): String? {
     if (parts.isEmpty()) return "parts is empty"
-    if (parts.size > MAX_TOWER_PARTS) return "too many parts (${parts.size} > $MAX_TOWER_PARTS)"
+    val maxParts = if (mode == TowerMode.DAILY) MAX_DAILY_TOWER_PARTS else MAX_TOWER_PARTS
+    if (parts.size > maxParts) return "too many parts (${parts.size} > $maxParts)"
     if (placements.isEmpty()) return "placements is empty"
     if (placements.size > MAX_TOWER_PLACEMENTS) return "too many placements (${placements.size} > $MAX_TOWER_PLACEMENTS)"
 

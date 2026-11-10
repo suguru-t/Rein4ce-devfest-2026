@@ -131,7 +131,7 @@ class MemoryTowerStore(private val maxEntries: Int = TowerStore.SUMMARY_LIMIT) :
 
     override suspend fun putDaily(tower: Tower): Tower = synchronized(lock) {
         val existing = towers.values.firstOrNull { it.mode == TowerMode.DAILY && it.ownerId != null && it.ownerId == tower.ownerId }
-        val saved = tower.copy(mode = TowerMode.DAILY).stamped(existing?.id ?: newId())
+        val saved = tower.copy(mode = TowerMode.DAILY).stamped(existing?.id ?: tower.ownerId?.let(FirestoreTowerStore::dailyIdFor) ?: newId())
         towers[saved.id] = saved
         trim(TowerMode.DAILY)
         saved

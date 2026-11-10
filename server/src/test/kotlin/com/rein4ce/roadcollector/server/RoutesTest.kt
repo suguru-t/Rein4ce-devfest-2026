@@ -170,6 +170,7 @@ class RoutesTest {
         val id = AppJson.decodeFromString(TowerCreated.serializer(), first.bodyAsText()).id
         val second = put(day1.copy(height = 0.7f, lastDay = "2026-11-10", streakDays = 2))
         assertEquals(id, AppJson.decodeFromString(TowerCreated.serializer(), second.bodyAsText()).id, "同じ持ち主は同じ id")
+        assertEquals(FirestoreTowerStore.dailyIdFor(me), id, "新しい持ち主の id は、持ち主の印から決まる（決定 88）")
         put(sampleTower().copy(ownerId = "b".repeat(64), lastDay = "2026-11-10", streakDays = 1))
 
         val list = client.summariesOf("daily", owner = me)

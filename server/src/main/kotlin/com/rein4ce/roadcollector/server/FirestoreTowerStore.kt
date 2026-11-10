@@ -5,6 +5,7 @@ import com.google.api.core.ApiFutureCallback
 import com.google.api.core.ApiFutures
 import com.google.api.gax.rpc.AlreadyExistsException
 import com.google.cloud.firestore.CollectionReference
+import com.google.cloud.firestore.DocumentSnapshot
 import com.google.cloud.firestore.Firestore
 import com.google.cloud.firestore.FirestoreOptions
 import com.google.cloud.firestore.Query
@@ -13,8 +14,11 @@ import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.model.TowerSummary
+import java.security.MessageDigest
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -97,15 +101,18 @@ class FirestoreTowerStore(
 
     /**
      * 毎日 1 つずつ積む：同じ持ち主の 1 基を新しい形にする（決定 77）。持ち主の印で 1 件だけ探し（等しいかだけの問い合わせなので、
-     * Firestore が自動で作る 1 項目のインデックスで足りる）、あれば同じ id のまま上書き、無ければ作る
+     * Firestore が自動で作る 1 項目のインデックスで足りる）、あれば同じ id のまま上書きする。
+     * 無ければ、持ち主の印から決まる id（[dailyIdFor]）に書く（決定 88）。前はランダムな id で作っていたので、
+     * 同じ持ち主の送信が重なると（時間切れで送り直したときなど）、どちらも「無い」と見て 2 基できることがあった。
+     * id が決まっていれば、重なっても同じ 1 件への上書きになる
      */
     override suspend fun putDaily(tower: Tower): Tower {
         val daily = towersOf(TowerMode.DAILY)
         val owner = requireNotNull(tower.ownerId) { "daily tower needs ownerId" }
         val found = daily.whereEqualTo("ownerId", owner).limit(1).get().await().documents.firstOrNull()
-            ?: return add(tower.copy(mode = TowerMode.DAILY))
-        val saved = tower.copy(mode = TowerMode.DAILY).stamped(found.id)
-        daily.document(found.id).set(saved.toFields()).await()
+        val id = found?.id ?: dailyIdFor(owner)
+        val saved = tower.copy(mode = TowerMode.DAILY).stamped(id)
+        daily.document(id).set(saved.toFields()).await()
         written(TowerMode.DAILY)
         return saved
     }
@@ -125,15 +132,30 @@ class FirestoreTowerStore(
         TowerMode.entries.sumOf { towersOf(it).count().get().await().count.toInt() }
     }
 
-    override suspend fun summaries(owner: String?, mode: TowerMode): List<TowerSummary> =
-        summaryCache.get(mode) { readSummaries(mode) }
+    /**
+     * 一覧（決定 88）：新しい順の [TowerStore.SUMMARY_LIMIT] 件に、高い順と多い順（毎日 1 つずつ積むは連続日数順）の
+     * 上位 [RANK_LIMIT] 件ずつと、頼んだ人（[owner]）の塔を足す。前は新しい順の 500 件だけで、それより古い塔は、
+     * どんなに高くてもランキングと「あなたのタワー」から消えた。並べ替えはアプリがする
+     */
+    override suspend fun summaries(owner: String?, mode: TowerMode): List<TowerSummary> {
+        val shared = summaryCache.get(mode) { readSummaries(mode) }
+        // 自分の塔は人ごとに違うので覚えない（印を送ってきたときだけ、等しいかの問い合わせで取る）
+        val own = if (owner.isNullOrBlank()) emptyList() else rowsOf(ownerQuery(owner, mode).get().await().documents, mode)
+        return (shared + own).distinctBy { it.summary.id }
             // 持ち主の印は Firestore から読むだけで、返事には「同じか」だけを入れる
             .map { row -> row.summary.copy(mine = isOwnedBy(row.ownerId, owner)) }
+    }
 
-    private suspend fun readSummaries(mode: TowerMode): List<SummaryRow> =
-        summariesQuery(mode).get().await()
-            .documents
-            .map { doc ->
+    private suspend fun readSummaries(mode: TowerMode): List<SummaryRow> = coroutineScope {
+        listQueries(mode)
+            .map { q -> async { q.get().await().documents } }
+            .flatMap { it.await() }
+            .let { docs -> rowsOf(docs, mode) }
+            .distinctBy { it.summary.id }
+    }
+
+    private fun rowsOf(docs: List<DocumentSnapshot>, mode: TowerMode): List<SummaryRow> =
+        docs.map { doc ->
                 SummaryRow(
                     TowerSummary(
                         id = doc.id,
@@ -150,6 +172,18 @@ class FirestoreTowerStore(
                     ownerId = doc.getString("ownerId"),
                 )
             }
+
+    /** 一覧に使う問い合わせ（決定 88）：新しい順・高い順・多い順（毎日は連続日数順）。どれも 1 項目の並べ替えなので、自動のインデックスで足りる */
+    internal fun listQueries(mode: TowerMode): List<Query> = listOf(
+        summariesQuery(mode),
+        towersOf(mode).orderBy("height", Query.Direction.DESCENDING).limit(RANK_LIMIT).select(*SUMMARY_FIELDS),
+        towersOf(mode).orderBy(if (mode == TowerMode.DAILY) "streakDays" else "partCount", Query.Direction.DESCENDING)
+            .limit(RANK_LIMIT).select(*SUMMARY_FIELDS),
+    )
+
+    /** 頼んだ人の塔（「あなたのタワー」）。等しいかだけの問い合わせなので、自動のインデックスで足りる */
+    internal fun ownerQuery(owner: String, mode: TowerMode): Query =
+        towersOf(mode).whereEqualTo("ownerId", owner).limit(OWN_LIMIT).select(*SUMMARY_FIELDS)
 
     /**
      * 一覧のクエリ。[mode] のコレクションを新しい順に [TowerStore.SUMMARY_LIMIT] 件、取る項目は一覧用のもの（[SUMMARY_FIELDS]）だけ。
@@ -180,6 +214,22 @@ class FirestoreTowerStore(
 
         /** 一覧を覚えておく時間 [ms]（決定 88） */
         const val SUMMARY_CACHE_MS = 20_000L
+
+        /** 一覧に足す、高い順・多い順（連続日数順）の上位の数（決定 88） */
+        const val RANK_LIMIT = 300
+
+        /** 一覧に足す、頼んだ人の塔の数の上限 */
+        const val OWN_LIMIT = 100
+
+        /**
+         * 毎日 1 つずつ積むの塔の id（決定 88）。持ち主の印から決まるが、印そのものは id に使わない
+         * （id は共有 URL に出るので、印をそのまま入れると、ほかの人がその人の塔を書き換えられる）。
+         * 印に別の言葉を付けてハッシュし、先頭の 16 桁を使う（[ID_PATTERN] に合う形）
+         */
+        fun dailyIdFor(owner: String): String {
+            val bytes = MessageDigest.getInstance("SHA-256").digest("daily-tower:$owner".toByteArray(Charsets.UTF_8))
+            return bytes.joinToString("") { "%02x".format(it) }.take(16)
+        }
 
         /** 数を覚えておく時間 [ms] */
         const val COUNT_CACHE_MS = 60_000L

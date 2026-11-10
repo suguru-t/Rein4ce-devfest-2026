@@ -241,4 +241,19 @@ class TowerValidationTest {
         assertNull(daily.rule)
         assertEquals("2026-11-10", daily.lastDay)
     }
+
+    @Test
+    fun `毎日の塔は 100 日を超えても送れる（パーツは 500 個まで。決定 88）`() {
+        val days = (1..MAX_DAILY_TOWER_PARTS).map { Part(id = "d$it", points = listOf(Pt(-0.3f, 0f), Pt(0.3f, 0f))) }
+        val daily = ok.copy(
+            mode = TowerMode.DAILY, ownerId = "a".repeat(64), lastDay = "2026-11-10", streakDays = 1,
+            parts = days,
+            placements = days.mapIndexed { i, p -> Placement(p.id, x = 0f, y = 0.1f * i, angleRad = 0f) },
+            height = 0.1f * (days.size - 1),
+        )
+        assertNull(daily.validationError(LocalDate.parse("2026-11-10")))
+        bad(daily.copy(parts = days + Part(id = "extra", points = listOf(Pt(0f, 0f)))), "too many parts")
+        // 通常は今までどおり 100 まで
+        bad(daily.copy(mode = TowerMode.NORMAL), "too many parts")
+    }
 }
