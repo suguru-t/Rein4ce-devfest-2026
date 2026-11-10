@@ -2,6 +2,7 @@ package com.rein4ce.roadcollector.ui.common
 
 import androidx.compose.ui.graphics.Color
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartColors
 import com.rein4ce.roadcollector.core.physics.Grip
 import com.rein4ce.roadcollector.core.weather.Sky
 import java.time.Instant
@@ -118,3 +119,21 @@ val Grip.shownSky: Sky
 
 /** 積む画面の積み木の線の太さ（形の外側に出る幅）[dp] */
 const val PIECE_OUTLINE_DP = 1.5f
+
+/** 送る塔に入れる形（"#RRGGBB" の塗りと縁。決定 95）にする */
+fun PieceColors.toPartColors(): PartColors = PartColors(fill.toHex(), outline.toHex())
+
+/** 送られてきた塔の色（"#RRGGBB"）から、描くときの色にする。形の違う値なら null（形ごとの色で描く） */
+fun PartColors.toPieceColors(): PieceColors? {
+    val f = parseHex(fill) ?: return null
+    val o = parseHex(outline) ?: return null
+    return PieceColors(f, o)
+}
+
+private fun Color.toHex(): String {
+    fun ch(v: Float) = (v.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+    return String.format(java.util.Locale.US, "#%02X%02X%02X", ch(red), ch(green), ch(blue))
+}
+
+private fun parseHex(s: String): Color? =
+    if (Regex("^#[0-9A-Fa-f]{6}$").matches(s)) Color(0xFF000000 or s.substring(1).toLong(16)) else null

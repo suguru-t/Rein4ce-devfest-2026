@@ -12,6 +12,8 @@ import com.rein4ce.roadcollector.core.physics.PartSize
 import com.rein4ce.roadcollector.core.physics.StackWorld
 import com.rein4ce.roadcollector.ui.common.color
 import com.rein4ce.roadcollector.ui.common.drawPart
+import com.rein4ce.roadcollector.ui.common.drawPiece
+import com.rein4ce.roadcollector.ui.common.toPieceColors
 import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import kotlin.math.abs
 import kotlin.math.max
@@ -66,6 +68,7 @@ fun TowerSketch(tower: Tower, modifier: Modifier = Modifier, referenceHeight: Fl
 
 /**
  * 置いたパーツを描く：細い墨の縁取りを全部描いてから、種類ごとの色で本体を重ねる（縁取りは細く。太いと輪の穴や棒の細さがつぶれる）。
+ * 塔にパーツの色が入っていれば（決定 95。積む画面と同じ、歩いたときの天気と時間帯の色）、そのパーツは積む画面と同じく、自分の色を暗くした線で囲んで塗る。
  * 紙片の絵（[TowerSketch]）と断面図（TowerSection）の両方がこれを使うので、描き方を変えるときは 1 か所で済む。
  *
  * @param at     ワールド座標 [m]（台の上面が y=0、y は上向き）を Canvas の位置にする
@@ -76,8 +79,10 @@ internal fun DrawScope.drawTowerParts(tower: Tower, at: (Float, Float) -> Offset
     val edgePx = max(1f, 0.02f * pxPerM)
     // パーツの大きさ（歩いた距離で決まる。Placement.scale）を掛けて描く（#71。積む画面・共有ページの絵と同じ）。
     // 縁取りの太さは px で決めたいので、大きさで割って形の太さに足す
+    val colorsOf = tower.colors.mapValues { (_, c) -> c.toPieceColors() }
     for (pl in tower.placements) {
         val part = partsById[pl.partId] ?: continue
+        if (colorsOf[part.id] != null) continue // 色の入ったパーツは、下で線ごと描く
         val partScale = pxPerM * pl.scale
         drawPart(
             part.copy(thickness = part.thickness + 2 * edgePx / partScale),
@@ -89,7 +94,12 @@ internal fun DrawScope.drawTowerParts(tower: Tower, at: (Float, Float) -> Offset
     }
     for (pl in tower.placements) {
         val part = partsById[pl.partId] ?: continue
-        drawPart(part, center = at(pl.x, pl.y), scalePx = pxPerM * pl.scale, angleRad = pl.angleRad, color = part.kind.color())
+        val colors = colorsOf[part.id]
+        if (colors != null) {
+            drawPiece(part, center = at(pl.x, pl.y), scalePx = pxPerM * pl.scale, colors = colors, outlinePx = edgePx, angleRad = pl.angleRad)
+        } else {
+            drawPart(part, center = at(pl.x, pl.y), scalePx = pxPerM * pl.scale, angleRad = pl.angleRad, color = part.kind.color())
+        }
     }
 }
 

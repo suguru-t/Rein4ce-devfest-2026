@@ -115,4 +115,14 @@ class PiecePaletteTest {
         // 歩いた時刻が分からないパーツは昼
         assertEquals(Daypart.DAY, Daypart.of(part.copy(walkedAt = 0L), startedAt = null, zone = ZoneOffset.UTC))
     }
+
+    @Test
+    fun `送る塔の色（#RRGGBB）と、描く色を行き来できる（決定 95）`() {
+        val colors = PiecePalette.colors(com.rein4ce.roadcollector.core.weather.Sky.RAIN, Daypart.EVENING)
+        val sent = colors.toPartColors()
+        org.junit.Assert.assertTrue(Regex("^#[0-9A-F]{6}$").matches(sent.fill))
+        val back = sent.toPieceColors()!!
+        assertEquals(sent, back.toPartColors())
+        org.junit.Assert.assertNull(com.rein4ce.roadcollector.core.model.PartColors("blue", "#000000").toPieceColors())
+    }
 }

@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Part
+import com.rein4ce.roadcollector.core.model.PartColors
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Pt
 import com.rein4ce.roadcollector.core.model.Tower
@@ -255,5 +256,14 @@ class TowerValidationTest {
         bad(daily.copy(parts = days + Part(id = "extra", points = listOf(Pt(0f, 0f)))), "too many parts")
         // 通常は今までどおり 100 まで
         bad(daily.copy(mode = TowerMode.NORMAL), "too many parts")
+    }
+
+    @Test
+    fun `パーツの色は、載っているパーツの id ごとに #RRGGBB だけ通す（決定 95）`() {
+        val c = PartColors(fill = "#5C95E0", outline = "#2E5A99")
+        assertNull(ok.copy(colors = mapOf(parts[0].id to c)).validationError())
+        bad(ok.copy(colors = mapOf("nothere" to c)), "colors: unknown partId")
+        bad(ok.copy(colors = mapOf(parts[0].id to c.copy(fill = "red"))), "must be #RRGGBB")
+        bad(ok.copy(colors = mapOf(parts[0].id to c.copy(outline = "#12345"))), "must be #RRGGBB")
     }
 }

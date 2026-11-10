@@ -72,14 +72,16 @@ class RateLimits(
     val towerView: RateLimiter? = null,
     /** PNG の絵（共有ページのプレビュー）。その場で描くので重い（決定 88） */
     val towerImage: RateLimiter? = null,
+    /** 共有ページの字体（決定 95）。ブラウザは 1 回読んだら覚えるので、ふつうはページを開くたびに 1 回も来ない */
+    val fontFile: RateLimiter? = null,
 ) {
     /** 起動のログに出す説明 */
     val description: String
-        get() = if (this === OFF || listOf(towersPost, towersGet, partName, nickname, towerView, towerImage).all { it == null }) {
+        get() = if (this === OFF || listOf(towersPost, towersGet, partName, nickname, towerView, towerImage, fontFile).all { it == null }) {
             "off"
         } else {
             "on（1 分あたり 端末ごと / 1 台の合計：投稿 ${towersPost.text()}、一覧 ${towersGet.text()}、" +
-                "名前 ${partName.text()}、ニックネーム ${nickname.text()}、タワー 1 基 ${towerView.text()}、PNG ${towerImage.text()}）"
+                "名前 ${partName.text()}、ニックネーム ${nickname.text()}、タワー 1 基 ${towerView.text()}、PNG ${towerImage.text()}、字体 ${fontFile.text()}）"
         }
 
     private fun RateLimiter?.text(): String = when {
@@ -102,6 +104,7 @@ class RateLimits(
             // 絵はカードが見えるたびに 1 基ずつ取るので、一覧より多めに（決定 88）
             towerView = RateLimiter(perClient = 300, total = 3000, now = now),
             towerImage = RateLimiter(perClient = 30, total = 300, now = now),
+            fontFile = RateLimiter(perClient = 30, total = 600, now = now),
         )
 
         /**

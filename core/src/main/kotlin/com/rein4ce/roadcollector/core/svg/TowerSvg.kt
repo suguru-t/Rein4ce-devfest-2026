@@ -14,6 +14,14 @@ import kotlin.math.min
  */
 object TowerSvg {
 
+    /** 色が入っているパーツ（決定 95）の縁の線の太さ（形の外側に出る幅）[px]。積む画面の線（PIECE_OUTLINE_DP）と同じくらいに見える太さ */
+    const val OUTLINE_PX = 2.0
+
+    /** "#RRGGBB" の形か（形の違う値は使わず、形ごとの色で描く） */
+    fun isHexColor(s: String): Boolean = HEX.matches(s)
+
+    private val HEX = Regex("^#[0-9A-Fa-f]{6}$")
+
     fun colorOf(kind: Kind): String = when (kind) {
         Kind.BAR -> "#F2C14E"
         Kind.L -> "#E07A2A"
@@ -57,7 +65,6 @@ object TowerSvg {
         // パーツ
         for (pl in tower.placements) {
             val part = partsById[pl.partId] ?: continue
-            val color = colorOf(part.kind)
             val cx = sx(pl.x.toDouble())
             val cy = sy(pl.y.toDouble())
             val deg = -Math.toDegrees(pl.angleRad.toDouble()) // SVG は y 下向きなので回転も反転
@@ -66,7 +73,15 @@ object TowerSvg {
             val d = PartGeometry.shapes(part, pl.scale.toDouble()).joinToString(" ") { poly ->
                 poly.points.joinToString(" L ", prefix = "M ", postfix = " Z") { "${f(it.x * scale)} ${f(-it.y * scale)}" }
             }
-            sb.append("""<path d="$d" fill="$color" transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})"/>""")
+            val at = """transform="translate(${f(cx)} ${f(cy)}) rotate(${f(deg)})""""
+            val colors = tower.colors[part.id]?.takeIf { isHexColor(it.fill) && isHexColor(it.outline) }
+            if (colors != null) {
+                // 積む画面と同じ色（決定 95）：形を太い線でなぞってから面を重ねる（継ぎ目の線は面に隠れ、外側だけが線になる）
+                sb.append("""<path d="$d" fill="${colors.outline}" stroke="${colors.outline}" stroke-width="${f(OUTLINE_PX * 2)}" stroke-linejoin="round" $at/>""")
+                sb.append("""<path d="$d" fill="${colors.fill}" $at/>""")
+            } else {
+                sb.append("""<path d="$d" fill="${colorOf(part.kind)}" $at/>""")
+            }
         }
         // 高さ
         sb.append(

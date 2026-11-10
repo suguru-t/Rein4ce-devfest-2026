@@ -18,6 +18,7 @@ import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.writeFully
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -380,5 +381,16 @@ class RoutesTest {
         assertEquals(now, sampleTower().copy(createdAt = 0L).stamped("a", now).createdAt)
         assertEquals(midnight, sampleTower().copy(createdAt = now + 86_400_000L).stamped("a", now).createdAt)
         assertEquals(midnight, sampleTower().copy(createdAt = midnight).stamped("a", now).createdAt)
+    }
+
+    @Test
+    fun `共有ページの字体を、このサーバから長いキャッシュ付きで配る（決定 95）`() = testApplication {
+        application { module(store = MemoryTowerStore(), namer = DisabledPartNamer) }
+        val res = client.get(SharePage.FONT_PATH)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals("font/woff", res.headers[HttpHeaders.ContentType]?.substringBefore(";"))
+        assertContains(res.headers[HttpHeaders.CacheControl].orEmpty(), "immutable")
+        val bytes = res.readRawBytes()
+        assertEquals("wOFF", bytes.take(4).map { it.toInt().toChar() }.joinToString(""))
     }
 }

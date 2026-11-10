@@ -1,6 +1,7 @@
 package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Placement
+import com.rein4ce.roadcollector.core.model.PartColors
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.sample.SampleParts
 import com.rein4ce.roadcollector.core.svg.TowerSvg
@@ -54,5 +55,25 @@ class TowerPngTest {
     fun `配置が無いパーツや、空に近いタワーでも落ちない`() {
         val t = tower().copy(placements = emptyList())
         assertTrue(TowerPng.render(t).isNotEmpty())
+    }
+
+    @Test
+    fun `パーツの色が入っていれば、その塗りと縁の色で描く（決定 95）。入っていないパーツは形ごとの色`() {
+        val t = tower()
+        val colored = t.copy(colors = mapOf(t.parts[0].id to PartColors(fill = "#5C95E0", outline = "#2E5A99")))
+        val img = ImageIO.read(ByteArrayInputStream(TowerPng.render(colored)))
+        val colors = HashSet<Int>()
+        for (y in 0 until img.height) for (x in 0 until img.width) colors += img.getRGB(x, y) and 0xFFFFFF
+        assertTrue(0x5C95E0 in colors, "塗りの色")
+        assertTrue(0x2E5A99 in colors, "縁の色")
+        assertTrue((Color.decode(TowerSvg.colorOf(t.parts[1].kind)).rgb and 0xFFFFFF) in colors, "色の無いパーツは形ごとの色")
+        // SVG も同じ（縁の線を描いてから塗る）
+        val svg = TowerSvg.render(colored)
+        assertTrue(svg.contains("stroke=\"#2E5A99\""))
+        assertTrue(svg.contains("fill=\"#5C95E0\""))
+        assertTrue(svg.contains("fill=\"${TowerSvg.colorOf(t.parts[1].kind)}\""))
+        // 形の違う値は使わない（形ごとの色で描く）
+        val broken = t.copy(colors = mapOf(t.parts[0].id to PartColors(fill = "blue", outline = "#2E5A99")))
+        assertTrue(!TowerSvg.render(broken).contains("stroke="))
     }
 }

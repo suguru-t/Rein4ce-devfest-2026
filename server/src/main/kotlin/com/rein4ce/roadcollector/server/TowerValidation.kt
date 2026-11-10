@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.server
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.physics.PartGeometry
+import com.rein4ce.roadcollector.core.svg.TowerSvg
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -133,6 +134,11 @@ internal fun Tower.validationError(today: LocalDate = LocalDate.now(ZoneOffset.U
     if (a != null && a.codePointCount(0, a.length) > MAX_AUTHOR_LENGTH) return "author too long (> $MAX_AUTHOR_LENGTH)"
     val o = ownerId
     if (o != null && !OWNER_ID_PATTERN.matches(o)) return "ownerId must be 64 hex chars"
+    // パーツの色（決定 95）：載っているパーツの id ごとに、"#RRGGBB" の塗りと縁だけ
+    for ((partId, c) in colors) {
+        if (partId !in ids) return "colors: unknown partId $partId"
+        if (!TowerSvg.isHexColor(c.fill) || !TowerSvg.isHexColor(c.outline)) return "colors: $partId must be #RRGGBB"
+    }
     // 遊び方ごとに要るもの（決定 77）
     when (mode) {
         TowerMode.NORMAL -> Unit
