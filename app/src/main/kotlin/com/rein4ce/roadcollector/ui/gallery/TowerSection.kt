@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -63,6 +64,7 @@ internal data class SectionSlot(
  * @param selected 紙片を開いているタワーの id（破線で囲む）
  * @param progress 開いたときの演出（0 で何も立っていない → 1 で全部立つ）。動かさないなら 1。描くときに読む（組み立て直しを減らすため）
  * @param onTap    タワーを押した
+ * @param paper 枠の中に敷く紙の色（遊び方の色のやわらかい下地。決定 81）
  * @param topWindow 高すぎる塔は頂上のあたりだけを映すか（3 分チャレンジ・毎日 1 つずつ積む。決定 77）。
  *   全部を同じ縮尺で入れると読めないほど細くなるとき（[WINDOW_BELOW]）、縮尺を枠の幅で決まる大きさに保ち、
  *   それぞれの塔の頂上を枠の上にそろえて映す。映らない下のほうは波線で切り、「下の ○ m は省略」と書く。
@@ -78,6 +80,7 @@ internal fun TowerSection(
     onTap: (TowerSummary) -> Unit,
     modifier: Modifier = Modifier,
     topWindow: Boolean = false,
+    paper: Color = Fieldbook.Paper,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -114,7 +117,8 @@ internal fun TowerSection(
         // 枠がとても低いとき（小さい画面・大きい文字）は、つぶれた絵を出すより何も描かない。下の 2 行が残る
         if (h < MIN_HEIGHT_DP.dp.toPx()) return@Canvas
         // 紙の色を半分透かして敷く。雨や太陽の光は通るので、その上で絵が読めるように
-        drawRoundRect(Fieldbook.Paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(SECTION_CORNER.toPx()))
+        // 遊び方の画面では、遊び方の色のやわらかい下地（[paper]。決定 81）
+        drawRoundRect(paper.copy(alpha = 0.78f), cornerRadius = CornerRadius(SECTION_CORNER.toPx()))
         val staffW = STAFF_WIDTH_DP.dp.toPx()
         val topPad = TOP_PAD_DP.dp.toPx()
         val slotW = (w - staffW) / max(1, slots.size)
