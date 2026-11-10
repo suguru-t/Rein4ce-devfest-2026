@@ -22,7 +22,7 @@ import kotlin.math.min
  * 2. ボーナスの付いたパーツの上に、低い順に 1 つずつ「雪 +0.20」の札を出す（ボーナスが足されていく様子）
  * 3. 札が全部出たら、最後に上の「天気ボーナス ×1.30」（足した合計）を白い札でポンと出す（[BANNER_DELAY_MS]・[BANNER_POP_MS]）。
  *    パーツの上の札は、合計が出るのに合わせて薄くして消す（[TAG_FADE_MS]。合計にまとまる。塔のてっぺんの札が上の合計と重ならないように）。
- *    前は最初の札と一緒に出て数え上がり、札は大きくなり終わるまで残していた。字も方眼紙の上の縁取りだけで見づらかった（決定 91）
+ *    前は最初の札と一緒に出て数え上がり、札は大きくなり終わるまで残していた。字も方眼紙の上の縁取りだけで見づらかった（決定 92）
  * 4. 少し待って（[PAUSE_MS]）、[GROW_MS] かけて塔と台を大きくする。高さのメーターも一緒に回る（上の合計と終わりのカードは残る）
  *
  * 札の間隔は、全部で [TAGS_TOTAL_MS] に収まるようにし、[MIN_TAG_MS]〜[MAX_TAG_MS] にする（多いと速く、少ないとゆっくり）。
@@ -55,7 +55,7 @@ internal class BonusTimeline(private val percents: List<Int>) {
     /** 最後の札がポンと出終わる時刻（札が無ければ、札を出し始める時刻） */
     private val tagsDoneMs: Long = if (marks == 0) TAGS_START_MS else tagStartMs(marks - 1) + TAG_POP_MS
 
-    /** 上の「天気ボーナス ×1.30」が出始める時刻（札が全部出て、足し終わったあと。決定 91） */
+    /** 上の「天気ボーナス ×1.30」が出始める時刻（札が全部出て、足し終わったあと。決定 92） */
     val bannerStartMs: Long = tagsDoneMs + BANNER_DELAY_MS
 
     /** 大きくなり始める時刻（合計が出てから） */
@@ -88,7 +88,7 @@ internal class BonusTimeline(private val percents: List<Int>) {
         return if (q < 0.6f) q / 0.6f * 1.15f else 1.15f - (q - 0.6f) / 0.4f * 0.15f
     }
 
-    /** [t] のときの札の濃さ（上の合計が出始めたら薄くして消す。決定 91） */
+    /** [t] のときの札の濃さ（上の合計が出始めたら薄くして消す。決定 92） */
     fun tagAlpha(t: Long): Float = 1f - ((t - bannerStartMs).toFloat() / TAG_FADE_MS).coerceIn(0f, 1f)
 
     /** 上に出す倍率：札で足した分の合計（上限で止める） */

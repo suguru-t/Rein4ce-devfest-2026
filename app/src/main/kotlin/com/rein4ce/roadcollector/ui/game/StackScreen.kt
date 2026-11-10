@@ -664,7 +664,7 @@ private fun StackCanvas(
         }
 
         // 天気のボーナスの札。ボーナスの付いたパーツの上に、低い順に 1 つずつポンと出し、塔と一緒に動かす（字は大きくしない）。
-        // 上の合計（BonusBanner）が出たら、合計にまとまったので薄くして消す（決定 91）
+        // 上の合計（BonusBanner）が出たら、合計にまとまったので薄くして消す（決定 92）
         if (tags.isNotEmpty()) {
             val t = bonusShow.elapsedMs
             val alpha = bonusShow.timeline.tagAlpha(t)

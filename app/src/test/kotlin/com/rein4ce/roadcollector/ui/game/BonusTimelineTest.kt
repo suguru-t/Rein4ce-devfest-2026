@@ -23,7 +23,7 @@ class BonusTimelineTest {
     }
 
     @Test
-    fun `上の合計は、札が全部出て足し終わってから最後に出し、そのあと大きくなる（決定 91）`() {
+    fun `上の合計は、札が全部出て足し終わってから最後に出し、そのあと大きくなる（決定 92）`() {
         val timeline = BonusTimeline(listOf(20, 10, 10))
         assertEquals(1.4, timeline.multiplier, 1e-9)
         // 札を出している間は出さない（前は最初の札と一緒に出て数え上がっていた）
@@ -91,7 +91,7 @@ class BonusTimelineTest {
         assertEquals(0f, timeline.tagPop(0, start - 1), 0f)
         assertTrue(timeline.tagPop(0, start + BonusTimeline.TAG_POP_MS * 6 / 10) > 1f) // 少し大きくなってから
         assertEquals(1f, timeline.tagPop(0, start + BonusTimeline.TAG_POP_MS), 1e-6f) // 戻る
-        // 上の合計が出るまでは濃いまま、出たら薄くして消す（合計にまとまる。決定 91）
+        // 上の合計が出るまでは濃いまま、出たら薄くして消す（合計にまとまる。決定 92）
         assertEquals(1f, timeline.tagAlpha(timeline.bannerStartMs), 0f)
         assertEquals(0f, timeline.tagAlpha(timeline.bannerStartMs + BonusTimeline.TAG_FADE_MS), 0f)
         assertEquals(0f, timeline.tagAlpha(timeline.totalMs), 0f)
