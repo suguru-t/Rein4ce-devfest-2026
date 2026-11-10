@@ -1,6 +1,5 @@
 package com.rein4ce.roadcollector.ui.gallery
 
-import com.rein4ce.roadcollector.data.AppSettings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
@@ -498,7 +497,7 @@ private fun GalleryHero(state: TowerGallery.State, cmp: Comparison, sort: TowerS
  */
 @Composable
 private fun TowerRow(label: String, tower: TowerSummary, mine: Boolean, sort: TowerSort, onClick: () -> Unit) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: AppSettings.GUEST_NAME
+    val author = tower.displayAuthor
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
         verticalAlignment = Alignment.CenterVertically,

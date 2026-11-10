@@ -147,6 +147,13 @@ class GalleryOrderTest {
     }
 
     @Test
+    fun `作者名：名前が無い・空白だけのタワーは「ゲスト」、あればその名前（決定 83）`() {
+        assertEquals("ゲスト", tower("a", 1f).copy(author = null).displayAuthor)
+        assertEquals("ゲスト", tower("b", 1f).copy(author = "  ").displayAuthor)
+        assertEquals("伊能忠敬", tower("c", 1f).copy(author = "伊能忠敬").displayAuthor)
+    }
+
+    @Test
     fun `メダルの順位：カードの文と同じ高い順の並びで、自分のいちばん良い順位。無ければ null（決定 82）`() {
         val loaded = TowerGallery.State.Loaded(listOf(tower("a", 3f), tower("b", 2f), tower("c", 1f), tower("d", 2.5f)))
         val order = heightOrder(loaded, TowerMode.NORMAL)

@@ -1,6 +1,5 @@
 package com.rein4ce.roadcollector.ui.gallery
 
-import com.rein4ce.roadcollector.data.AppSettings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -263,7 +262,7 @@ private fun TowerCard(
     theme: GalleryTheme,
     onClick: () -> Unit,
 ) {
-    val author = tower.author?.takeIf { it.isNotBlank() } ?: AppSettings.GUEST_NAME
+    val author = tower.displayAuthor
     val heightText = "%.2f".format(Locale.US, tower.height)
     Row(
         verticalAlignment = Alignment.CenterVertically,
