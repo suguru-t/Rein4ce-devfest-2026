@@ -59,6 +59,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -284,17 +286,19 @@ fun StackScreen(
                     }
                     // 何を積むか（「コレクションの道で積む」。決定 87）
                     PlayMaterialNote(compact = false, modifier = Modifier.padding(top = 4.dp))
-                    // 高さの右に「チェンジ」（狙っているパーツを替える。決定 62）。高さの数字より少し下げ、下の「○ m の道」の行の右にかかる所に置く
-                    // （ずらすのは見た目だけで、段の高さは変えない。右側は空いているので、下の行の字には重ならない）
+                    // 高さの右に「ほかの道」（狙っているパーツを替える。決定 62・93）。高さの行の高さのまん中に置く
+                    // （前はアイコンだけの小さな積み木で、少し下げて下の「○ m の道」の行の右にかけていた。字を添えて幅が広がったので、
+                    // 下げると、字を大きくしたときに下の行の字と重なる）。残りの幅に字が入らないとき（狭い画面・字を大きくしたとき）は、アイコンだけにする
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         HeightMeter(shownHeight, compact = false, follow = meterFollows)
-                        Spacer(Modifier.weight(1f))
-                        ChangeButton(
-                            enabled = vm.canChange,
-                            left = vm.changesLeft,
-                            onClick = vm::change,
-                            modifier = Modifier.offset(y = CHANGE_BUTTON_DROP),
-                        )
+                        BoxWithConstraints(modifier = Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                            ChangeButton(
+                                enabled = vm.canChange,
+                                left = vm.changesLeft,
+                                onClick = vm::change,
+                                label = maxWidth >= CHANGE_LABEL_MIN_WIDTH,
+                            )
+                        }
                     }
                 }
                 val current = vm.current
@@ -324,16 +328,17 @@ fun StackScreen(
             // 2 段目：キャンバス。ドラッグはこの中だけで受け付け、はみ出した絵は切る（情報や操作の段の上に描かない）
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 StackCanvas(vm = vm, bonusShow = bonusShow, colorsOf = pieceColorsOf, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
-                // 終わったときの天気のボーナスの倍率（札が出るたびに数え上がる。決定 68）
+                // 終わったときの天気のボーナスの倍率（札が全部出たあと、最後に白い札で出す。決定 68・92）
                 BonusBanner(bonusShow, compact, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
-                // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
-                // （段を伸ばすと塔を描く所が狭くなるため）
+                // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「ほかの道」はキャンバスの右上に重ねる
+                // （段を伸ばすと塔を描く所が狭くなるため）。塔の上に重なるので、字は出さずアイコンだけ
                 if (compact) {
                     ChangeButton(
                         enabled = vm.canChange,
                         left = vm.changesLeft,
                         onClick = vm::change,
                         modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 4.dp),
+                        label = false,
                     )
                 }
             }
@@ -662,7 +667,7 @@ private fun StackCanvas(
         }
 
         // 天気のボーナスの札。ボーナスの付いたパーツの上に、低い順に 1 つずつポンと出し、塔と一緒に動かす（字は大きくしない）。
-        // 大きくなり終わったら薄くして消す
+        // 上の合計（BonusBanner）が出たら、合計にまとまったので薄くして消す（決定 92）
         if (tags.isNotEmpty()) {
             val t = bonusShow.elapsedMs
             val alpha = bonusShow.timeline.tagAlpha(t)
@@ -723,20 +728,36 @@ private fun DrawScope.drawBonusTag(tag: BonusTag, bottomCenter: Offset, pop: Flo
 }
 
 /**
- * 終わったときの天気のボーナスの倍率（「天気ボーナス ×1.30」）。キャンバスの上のまん中に、札が出るたびに数え上がる（決定 68）。
- * 字は情報の段と同じく、方眼紙の上に縁取りで浮かせる太い丸ゴシック（青緑）。ボーナスが無いとき・最初の札が出る前は出さない
+ * 終わったときの天気のボーナスの倍率（「天気ボーナス ×1.30」）。キャンバスの上のまん中に、札が全部出て足し終わったあと、
+ * 最後に合計をポンと出す（決定 68・92）。前は最初の札と一緒に出て数え上がり、字も方眼紙の上に縁取りだけで、天気の背景や塔と重なると見づらかった。
+ * 白い紙の札（終わりのカードの「やり直す」などと同じ、縁と下にのぞく側面）に、太い丸ゴシックで書く。色は、終わりのカードの「天気ボーナス」の行と
+ * 情報の段の「ボーナス」と同じ青緑（天気のボーナスの字は青緑。決定 84。#145 の C のレビュー）。
+ * ボーナスが無いとき・札が出終わる前は出さない
  */
 @Composable
 private fun BonusBanner(show: BonusShowState, compact: Boolean, modifier: Modifier = Modifier) {
     if (!show.active) return
-    val t = show.elapsedMs
-    if (show.timeline.tagsShown(t) == 0) return
+    val pop = show.timeline.bannerPop(show.elapsedMs)
+    if (pop <= 0f) return
+    // 天気のボーナスの字は、どの遊び方でも青緑（終わりのカードの行・情報の段の「ボーナス」とそろえる。決定 84）
+    val ink = Pop.TealLine
     val size = with(LocalDensity.current) { (if (compact) 18.dp else 22.dp).toSp() }
-    SkyText(
-        "天気ボーナス ${multiplierText(show.timeline.shownMultiplier(t))}",
-        color = Pop.TealLine,
+    Text(
+        "天気ボーナス ${multiplierText(show.timeline.multiplier)}",
+        fontFamily = Pop.Rounded,
+        fontWeight = FontWeight.Black,
         fontSize = size,
-        modifier = modifier,
+        color = ink,
+        maxLines = 1,
+        modifier = modifier
+            // ポンと出る（札と同じ動き。下の辺のまん中から大きくなる）
+            .graphicsLayer {
+                scaleX = pop
+                scaleY = pop
+                transformOrigin = TransformOrigin(0.5f, 1f)
+            }
+            .popBlock(face = Fieldbook.Card, corner = 12.dp, depth = 3.dp, edge = ink)
+            .padding(horizontal = 14.dp, vertical = 4.dp),
     )
 }
 
@@ -930,8 +951,8 @@ internal fun bonusText(percent: Int): String = "+%d.%02d".format(Locale.JAPAN, p
 /** 「回す」のボタンの幅（ボタンが 1 つだけなので、押しやすい幅にする。画面いっぱいには広げない） */
 private val TURN_BUTTON_MIN_WIDTH = 220.dp
 
-/** 「チェンジ」を、高さの行のまん中からどれだけ下げて置くか（ふつうの画面） */
-private val CHANGE_BUTTON_DROP = 24.dp
+/** 「ほかの道」の字も出すのに要る幅（アイコン・字・回数の札。これより狭ければアイコンだけ） */
+private val CHANGE_LABEL_MIN_WIDTH = 132.dp
 
 /** 「落下 ○ 個」の赤 */
 private val FALLEN_RED = Color(0xFFD64545)

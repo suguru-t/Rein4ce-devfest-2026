@@ -109,7 +109,13 @@ data class ChallengeScore(
     val height: Double,
     val createdAt: Long,
     val rule: String,
-)
+) {
+    /**
+     * 記録に残す回か。台に何も残らなかった回（何も置かずに時間切れ・置いたのが全部落ちた。高さ 0 m）は、
+     * 端末の記録にも「みんな」にも残さない（遊んでいないのに「自分の最高 0.00 m」が出ていた。決定 89）
+     */
+    val counts: Boolean get() = height > 0.0
+}
 
 /**
  * 3分チャレンジの 1 回。時計はアプリが前に出ている間の経過時間（単調時計）で、端末の時刻や物理の時間の上限とは別に数える。

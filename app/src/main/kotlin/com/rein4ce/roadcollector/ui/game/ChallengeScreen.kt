@@ -515,17 +515,22 @@ private fun ChallengeResult(vm: ChallengeViewModel, frame: ChallengeFrame, onGoR
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (score != null) {
+        if (score != null && score.counts) {
             Text("記録 %.2f m".format(Locale.JAPAN, score.height), fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink)
             if (vm.ranking.any { it.runId == score.runId }) {
                 Text("この端末で ${rankOf(score.height, vm.ranking)} 位", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Fieldbook.Muted)
             }
+        } else if (score != null) {
+            // 何も置かずに時間切れ・置いたのが全部落ちた回は、記録にもランキングにも残さない（決定 89）
+            Text("台に何も残りませんでした", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink)
+            Text("記録にもランキングにも残しません。", style = MaterialTheme.typography.bodyMedium, color = Fieldbook.Muted, textAlign = TextAlign.Center)
         } else {
             Text("揺れが止まりませんでした", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 20.sp, color = Fieldbook.Ink)
             Text("塔が落ち着かなかったので、記録には残しません。", style = MaterialTheme.typography.bodyMedium, color = Fieldbook.Muted, textAlign = TextAlign.Center)
         }
-        SaveState(vm)
-        if (score != null) SendState(vm)
+        // 0 m の回は保存しない（ChallengeRecords が書かない）ので、保存のようすも出さない
+        if (score == null || score.counts) SaveState(vm)
+        if (score != null && score.counts) SendState(vm)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PopButton("もう一度", onClick = { vm.start() }, face = modeFaceOr(Pop.OrangeDeep), text = Pop.Letter, enabled = vm.canStart)

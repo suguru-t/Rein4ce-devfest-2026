@@ -75,8 +75,9 @@ class RoadCollectorApp : Application() {
             // 送れたら、その遊び方の一覧も取り直す（送ってすぐ「みんな」を開いても、新しいタワーが出る。取っている最中なら 1 回だけ取り直す）
             gallery.refresh(mode)
         }
-        // 持ち主の印（端末ごと）。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。入れ直しても残る（端末を替えると変わる）
-        val owner = OwnerId.of(this)
+        // 持ち主の印。送るタワーに入れ、一覧ではサーバが「あなたのか」を答える。新しく入れたアプリは乱数から作るので、
+        // 入れ直すと新しい印になる。前の版で送ったことがあれば（myTowers に id がある）前の印のまま（決定 90）
+        val owner = OwnerId.of(this, sentBefore = myTowers.ids.value.isNotEmpty())
         ApiClient.ownerId = { owner }
         partRepository = PartRepository(this)
         // 送る塔のパーツの色：積む画面と同じ、歩いたときの天気と時間帯の色（決定 74・95）
