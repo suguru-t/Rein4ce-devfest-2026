@@ -71,13 +71,13 @@ class DailyTowerTest {
     fun `今日のパーツが落ちた回数を数え、置き直しは 1 日 3 回まで（決定 70）`() {
         val day = "2026-11-10"
         var tower = DailyTower(listOf(block("a", "2026-11-09")))
-        assertEquals(0, tower.fallsOn(day))
+        assertEquals(0, tower.retriesUsedOn(day))
         assertEquals(DailyTower.MAX_RETRIES, tower.retriesLeft(day))
         assertTrue(tower.canPlaceOn(day))
         // 1〜3 回落ちても、まだ置き直せる
         for (n in 1..DailyTower.MAX_RETRIES) {
             tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f)), height = 0.2)
-            assertEquals(n, tower.fallsOn(day))
+            assertEquals(n, tower.retriesUsedOn(day))
             assertTrue("$n 回落ちたあと", tower.canPlaceOn(day))
         }
         assertEquals(1, tower.retriesLeft(day))
@@ -87,7 +87,7 @@ class DailyTowerTest {
         assertFalse(tower.canPlaceOn(day))
         assertEquals("昨日までの塔はそのまま", listOf("a"), tower.blocks.map { it.part.id })
         // 次の日は数え直す
-        assertEquals(0, tower.fallsOn("2026-11-11"))
+        assertEquals(0, tower.retriesUsedOn("2026-11-11"))
         assertTrue(tower.canPlaceOn("2026-11-11"))
     }
 
@@ -99,24 +99,24 @@ class DailyTowerTest {
         assertTrue(tower.placedOn(day))
         assertEquals("はじめに積んだ 1 回は数えない", DailyTower.MAX_RETRIES, tower.redosLeft(day))
         // 置き直す：今日のパーツだけ外れ、昨日のパーツは残る
-        tower = tower.redoOn(day, height = 0.2)
+        tower = tower.redoOn(day)
         assertFalse(tower.placedOn(day))
         assertTrue(tower.canPlaceOn(day))
         assertEquals(listOf("a"), tower.blocks.map { it.part.id })
-        assertEquals(0.2, tower.height, 1e-9)
-        assertEquals(1, tower.fallsOn(day))
+        assertEquals("高さはそのまま（組み直して測った高さを VM が入れる）", 0.5, tower.height, 1e-9)
+        assertEquals(1, tower.retriesUsedOn(day))
         assertEquals("積んでいないときは置き直しの数は 0（積めるかは canPlaceOn）", 0, tower.redosLeft(day))
         // もう一度積んで残る → あと 2 回
         tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f), Placement("b", 0.2f, 0.3f, 0f)), height = 0.5)
         assertEquals(DailyTower.MAX_RETRIES - 1, tower.redosLeft(day))
         // 落ちたら 1 回使う（落ちた分と合わせて数える）
-        tower = tower.redoOn(day, height = 0.2)
+        tower = tower.redoOn(day)
         tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f)), height = 0.2)
-        assertEquals(3, tower.fallsOn(day))
+        assertEquals(3, tower.retriesUsedOn(day))
         assertTrue("最後の 1 回は置ける", tower.canPlaceOn(day))
         tower = tower.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f), Placement("b", 0f, 0.3f, 0f)), height = 0.5)
         assertEquals("使い切ったら、もう置き直せない", 0, tower.redosLeft(day))
-        assertThrows(IllegalArgumentException::class.java) { tower.redoOn(day, height = 0.2) }
+        assertThrows(IllegalArgumentException::class.java) { tower.redoOn(day) }
     }
 
     @Test
@@ -124,11 +124,11 @@ class DailyTowerTest {
         val day = "2026-11-10"
         val placed = DailyTower(listOf(block("a", "2026-11-09"), block("b", day)), sentDay = day)
         assertFalse(placed.needsSend)
-        val redone = placed.redoOn(day, height = 0.2)
+        val redone = placed.redoOn(day)
         assertEquals("", redone.sentDay)
         assertTrue("昨日までの形を送り直す", redone.needsSend)
         val notSentToday = DailyTower(listOf(block("a", "2026-11-09"), block("b", day)), sentDay = "2026-11-09")
-        assertEquals("2026-11-09", notSentToday.redoOn(day, height = 0.2).sentDay)
+        assertEquals("2026-11-09", notSentToday.redoOn(day).sentDay)
     }
 
     @Test
@@ -138,7 +138,7 @@ class DailyTowerTest {
         val kept = fell.settledWith(block("b", day), listOf(Placement("a", 0f, 0.1f, 0f), Placement("b", 0f, 0.3f, 0f)), height = 0.5)
         assertTrue(kept.placedOn(day))
         assertFalse(kept.canPlaceOn(day))
-        assertEquals(1, kept.fallsOn(day))
+        assertEquals(1, kept.retriesUsedOn(day))
         assertEquals(listOf("a", "b"), kept.blocks.map { it.part.id })
     }
 
@@ -174,7 +174,7 @@ class DailyTowerTest {
         val text = AppJson.encodeToString(DailyTower.serializer(), tower)
         assertEquals(tower, AppJson.decodeFromString(DailyTower.serializer(), text))
         val old = AppJson.decodeFromString(DailyTower.serializer(), """{"blocks":[],"height":0.0}""")
-        assertEquals(0, old.fallsOn("2026-11-10"))
+        assertEquals(0, old.retriesUsedOn("2026-11-10"))
         assertTrue(old.canPlaceOn("2026-11-10"))
     }
 }

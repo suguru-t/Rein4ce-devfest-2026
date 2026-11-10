@@ -107,7 +107,7 @@ class DailyViewModel(
     val canPlaceToday: Boolean get() = tower.canPlaceOn(day)
 
     /** 今日、置き直しを使った回数（台から落ちた回数と、自分で置き直した回数の合計。置き直している間は、今が何回目の置き直しか。決定 86） */
-    val fallsToday: Int get() = tower.fallsOn(day)
+    val retriesUsedToday: Int get() = tower.retriesUsedOn(day)
 
     /** 積んで残っている今日のパーツを、あと何回自分で置き直せるか（積んでいなければ 0。決定 86） */
     val redosLeftToday: Int get() = tower.redosLeft(day)
@@ -194,23 +194,37 @@ class DailyViewModel(
      * 「選び直す」で、今日のほかの道にも替えられる。今日の形を「みんな」に送っていたら、置き直したあとの形を送り直す
      */
     fun redo() {
+        // 画面を開いたまま日付が変わっていたら、前の日のパーツは外さない（今日の 1 つを積む画面にする。#140 の A のレビュー）
+        if (today() != day) {
+            refreshDay()
+            return
+        }
         if (!canRedo) return
         val block = tower.blocks.lastOrNull { it.day == day } ?: return
         // 今日のパーツを外した形で組み直し、その高さを残す
-        tower = tower.redoOn(day, height = tower.height)
+        tower = tower.redoOn(day)
         rebuild()
         tower = tower.copy(height = height.toDouble())
         sendState = SendState.IDLE
         lastFell = false
         current = block.part
         currentGrip = block.grip
-        ghostX = block.placement.x
-        ghostAngleDeg = ((Math.toDegrees(block.placement.angleRad.toDouble()) % 360 + 360) % 360).toFloat()
+        // 狙い始める位置と向きは、さっき狙った所（落ちたときの置き直しと同じ。#140 の C のレビュー）。
+        // アプリを開き直していて分からなければ、止まった所（向きは止まったときの向き）
+        val aim = lastAim?.takeIf { it.partId == block.part.id && it.day == day }
+        ghostX = aim?.x ?: block.placement.x
+        ghostAngleDeg = aim?.angleDeg ?: ((Math.toDegrees(block.placement.angleRad.toDouble()) % 360 + 360) % 360).toFloat()
         phase = Phase.Aiming
         camera = CameraTarget.Follow(top = spawnY() + reachOf(block.part))
-        // 置き直しを使ったことを残す（狙っている途中で画面を離れても、置き直しは増えない）
-        saveLatest()
+        // 置き直しを使ったことを残し、「みんな」には今日のパーツを外した形（昨日までの形）を送り直す。
+        // 置かずに離れても、外した今日の形がランキングに残らないように（#140 の C と A のレビュー）。
+        // 置き直して積んだら、その形をまた送る（送っている途中なら、送り終わったときに送り直す）
+        saveLatest(then = { sendIfNeeded() })
     }
+
+    /** さっき狙った所（[redo] で狙い直すときの始めの位置と向き）。[place] で覚える。画面の中だけで、保存しない */
+    private class Aim(val partId: String, val day: String, val x: Float, val angleDeg: Float)
+    private var lastAim: Aim? = null
 
     /** 選び直す（狙うのをやめて、今日の道の一覧に戻る） */
     fun cancelChoice() {
@@ -237,6 +251,7 @@ class DailyViewModel(
     fun place() {
         val part = current ?: return
         if (phase != Phase.Aiming) return
+        lastAim = Aim(part.id, day, ghostX, ghostAngleDeg)
         world.place(
             part,
             ghostX.toDouble(),
