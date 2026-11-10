@@ -1,18 +1,26 @@
 package com.rein4ce.roadcollector.server
 
 import com.rein4ce.roadcollector.core.model.Tower
+import com.rein4ce.roadcollector.core.model.TowerMode
 import com.rein4ce.roadcollector.core.svg.TowerSvg
+import java.time.LocalDate
 import java.util.Locale
 
 /**
  * 共有ページ。LINE / X に貼ったときのプレビュー（OGP）と、タワーの絵（インライン SVG）。
  *
  * og:image は PNG（/towers/{id}/image.png）。SVG を読まないクローラが多いため。PNG は TowerPng がその場で描く。
+ *
+ * 見た目はアプリにそろえる（決定 94）：字はアプリと同じ M PLUS Rounded 1c の太字（Google Fonts から読む。読めなければ端末の丸い字）、
+ * 地は方眼紙（8 px ごとに細い線、5 本ごとに太い線。アプリの Fieldbook と同じ色）、題字「ミチツミ」は 4 色の積み木、
+ * 遊び方の札と高さの数字は遊び方ごとの色（アプリの ModeTheme と同じ）、絵は下に側面がのぞくカード（アプリの popBlock と同じ）。
+ * 端末がダークモードなら、アプリのダークの色にする
  */
 object SharePage {
 
     fun render(tower: Tower, baseUrl: String): String {
-        val title = "高さ ${String.format(Locale.US, "%.2f", tower.height)} m のタワー"
+        val heightText = String.format(Locale.US, "%.2f", tower.height)
+        val title = "高さ $heightText m のタワー"
         // 作者名（アプリの設定のニックネーム）があれば、説明に入れる。LINE / X のプレビューにも出る
         val author = cleanAuthor(tower.author)
         // 「〜さん」で終わる名前には「さん」を重ねない
@@ -21,11 +29,15 @@ object SharePage {
             author.endsWith("さん") -> "$author が "
             else -> "$author さんが "
         }
-        val desc = "$who${tower.placements.size} 個の散歩パーツで積みました — ミチツミ"
+        // 本文の一言。プレビュー（og:description）には、どのアプリかが分かるよう「— ミチツミ」を付ける（本文は下の行に出すので付けない）
+        val sentence = "$who${tower.placements.size} 個の散歩パーツで積みました"
+        val desc = "$sentence — ミチツミ"
         val url = "$baseUrl/towers/${tower.id}"
         val image = "$baseUrl/towers/${tower.id}/image.png"
         val svg = TowerSvg.render(tower, widthPx = 480, heightPx = 640)
         val kinds = tower.parts.joinToString("、") { it.kind.label }
+        val look = ModeLook.of(tower.mode)
+        val streak = streakLine(tower)
 
         return """
 <!doctype html>
@@ -44,21 +56,71 @@ object SharePage {
 <meta property="og:image:alt" content="${esc(title)}">
 <meta name="twitter:image" content="${esc(image)}">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800;900&display=swap">
 <style>
-  body { margin: 0; font-family: system-ui, sans-serif; background: #FFF8F2; color: #1F2A37; }
-  main { max-width: 520px; margin: 0 auto; padding: 24px 16px; text-align: center; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  p { color: #5B6675; margin: 4px 0 16px; }
-  svg { max-width: 100%; height: auto; border-radius: 12px; }
-  .parts { font-size: 14px; color: #5B6675; }
+  :root {
+    --paper: #F3F6F0; --grid-minor: #E2E8DF; --grid-major: #CED8CA;
+    --ink: #2F3A2E; --muted: #5E6B5D; --card: #FBFCF9; --edge: #B8C5B3; --edge-side: ${side("B8C5B3")};
+    --face: #${look.face}; --face-side: ${side(look.face)}; --mode-ink: #${look.ink};
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #161B17; --grid-minor: #1F2620; --grid-major: #2D3830;
+      --ink: #E3E9DF; --muted: #A3AFA0; --card: #20271F; --edge: #3A463C; --edge-side: ${side("3A463C")};
+      --face: #${look.darkFace}; --face-side: ${side(look.darkFace)}; --mode-ink: #${look.darkInk};
+    }
+  }
+  body {
+    margin: 0; color: var(--ink);
+    font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif; font-weight: 800;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid-major) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+      linear-gradient(var(--grid-minor) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px);
+    background-size: 40px 40px, 40px 40px, 8px 8px, 8px 8px;
+  }
+  main { max-width: 520px; margin: 0 auto; padding: 28px 16px 36px; text-align: center; }
+  .title { display: flex; justify-content: center; gap: 6px; margin: 0 0 22px; }
+  .title span {
+    display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+    border-radius: 10px; color: #F3F6F0; font-size: 27px; font-weight: 900; line-height: 1;
+  }
+  .tag {
+    display: inline-block; padding: 6px 16px; border-radius: 12px; background: var(--face); color: #F3F6F0;
+    font-size: 16px; font-weight: 900; box-shadow: 0 4px 0 var(--face-side); transform: rotate(-2deg);
+  }
+  .label { margin: 18px 0 0; font-size: 15px; }
+  .height { margin: 0; color: var(--mode-ink); font-weight: 900; line-height: 1.1; }
+  .height .num { font-size: 56px; }
+  .height .unit { font-size: 24px; margin-left: 4px; }
+  .desc { margin: 8px 0 0; font-size: 15px; }
+  .streak { margin: 4px 0 0; font-size: 14px; color: var(--mode-ink); }
+  .card {
+    margin: 18px 0 0; padding: 8px; background: var(--card); border: 2px solid var(--edge); border-radius: 14px;
+    box-shadow: 0 4px 0 var(--edge-side);
+  }
+  .card svg { display: block; width: 100%; height: auto; }
+  /* 絵の地はカードの色に、絵の中の高さの字は出さない（上に大きく出しているため） */
+  .card svg > rect:first-of-type { fill: transparent; }
+  .card svg text { display: none; }
+  .parts { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
+  .foot { margin: 22px 0 0; font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
 <main>
-  <h1>${esc(title)}</h1>
-  <p>${esc(desc)}</p>
-  $svg
+  <div class="title" role="img" aria-label="ミチツミ">${titleBlocks()}</div>
+  <span class="tag">${esc(look.label)}</span>
+  <p class="label">高さ</p>
+  <p class="height"><span class="num">${esc(heightText)}</span><span class="unit">m</span></p>
+  <p class="desc">${esc(sentence)}</p>
+${if (streak != null) "  <p class=\"streak\">${esc(streak)}</p>\n" else ""}  <div class="card">$svg</div>
   <p class="parts">使ったパーツ：${esc(kinds)}</p>
+  <p class="foot">歩いた道を、積み上げよう — ミチツミ</p>
 </main>
 </body>
 </html>
@@ -74,9 +136,46 @@ object SharePage {
             .filterNot { it.isISOControl() || it.category == CharCategory.FORMAT }
             .trim()
 
+    /** 毎日 1 つずつ積むの塔なら「11/10 まで 3 日続けて積みました」。ほかの遊び方・日付が読めないときは null */
+    internal fun streakLine(tower: Tower): String? {
+        if (tower.mode != TowerMode.DAILY || tower.streakDays <= 0) return null
+        val last = tower.lastDay?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
+        return "${last.monthValue}/${last.dayOfMonth} まで ${tower.streakDays} 日続けて積みました"
+    }
+
+    /** 題字「ミチツミ」の積み木（アプリの TitleBlocks と同じ 4 色と傾き。側面は面の色を 3 割黒に寄せる） */
+    private fun titleBlocks(): String = TITLE.joinToString("") { (char, face, tilt) ->
+        """<span style="background:#$face;box-shadow:0 4px 0 ${side(face)};transform:rotate(${tilt}deg)">$char</span>"""
+    }
+
+    private val TITLE = listOf(
+        Triple('ミ', "E07A2A", -5),
+        Triple('チ', "2A9D8F", 3),
+        Triple('ツ', "F2C14E", -2),
+        Triple('ミ', "4A4E69", 8),
+    )
+
+    /** 積み木の側面の色：面の色を 3 割黒に寄せる（アプリの Pop.side と同じ） */
+    internal fun side(hex: String): String {
+        val v = hex.removePrefix("#").toInt(16)
+        fun ch(shift: Int) = (((v shr shift) and 0xFF) * 0.7).toInt().coerceIn(0, 255)
+        return String.format(Locale.US, "#%02X%02X%02X", ch(16), ch(8), ch(0))
+    }
+
     private fun esc(s: String): String = s
         .replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
+}
+
+/** 遊び方の札の名前と色（アプリの ModeTheme と同じ色。面は白い字を載せる塗り、字は高さの数字の色） */
+internal class ModeLook(val label: String, val face: String, val ink: String, val darkFace: String, val darkInk: String) {
+    companion object {
+        fun of(mode: TowerMode): ModeLook = when (mode) {
+            TowerMode.NORMAL -> ModeLook("通常", "A15D36", "9A5634", "9B613A", "E9B48F")
+            TowerMode.CHALLENGE -> ModeLook("90 秒チャレンジ", "3F7970", "2F6B61", "3B796E", "93CFC3")
+            TowerMode.DAILY -> ModeLook("毎日 1 つずつ積む", "6269AB", "545A92", "5E6499", "B9BDE6")
+        }
+    }
 }
