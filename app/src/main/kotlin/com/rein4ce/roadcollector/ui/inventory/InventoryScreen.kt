@@ -210,6 +210,8 @@ fun InventoryScreen() {
         // メーター・注記・並びと絞り込みは、一覧のいちばん上に置いて、カードといっしょに動かす。
         // 上に止めておくと、小さい画面や文字を大きくしている人の画面では、見出しだけで半分ほどになり、カードが 1 段も見えないため
         // （画面名と「選択」の行だけは止めておく）
+        // 幅の狭い端末か（カードの長さと日付を 2 行にする。カードごとに求めず、ここで 1 回だけ）
+        val narrowScreen = isNarrowScreen()
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             state = gridState,
@@ -306,6 +308,7 @@ fun InventoryScreen() {
                         // 隣どうしで逆向きに揺らすと、iPhone のようにばらばらに揺れて見える
                         jiggleDirection = if (index % 2 == 0) 1f else -1f,
                         reduceMotion = reduceMotion,
+                        narrowScreen = narrowScreen,
                         // タップ：普段は大きく見る。並べ替え中は何もしない
                         // （長押しで並べ替え中に入ったあとに届くタップもここで止まる）
                         onClick = { if (!editing) zoomedId = part.id },
@@ -766,6 +769,7 @@ private fun PartCard(
     editing: Boolean,
     jiggleDirection: Float,
     reduceMotion: Boolean,
+    narrowScreen: Boolean,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit,
     dragHandle: Modifier,
@@ -832,7 +836,9 @@ private fun PartCard(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .offset(x = (-8).dp, y = (-8).dp)
+                        // 図の左上の天気のアイコンにかからないよう、少し外へ出す（前は -8dp。カードの注記から天気の名前を外したので、
+                        // 並べ替え中もアイコンで天気が分かるように。#134 の A のレビュー）
+                        .offset(x = (-11).dp, y = (-11).dp)
                         .size(28.dp)
                         .pressFeel(deleteSource)
                         .clip(CircleShape)
@@ -864,7 +870,7 @@ private fun PartCard(
         // 少しだけ大きい設定（1.1 倍など）では、折り返さなくても 1 行分空くが、高さをそろえるほうを取った
         val largeText = LocalDensity.current.fontScale > 1f
         // 幅の狭い端末（400dp 未満）も、13sp の長さと日付が 1 行に入らない（「776 m・1…」で切れる）ので、2 行にする（#134 の C のレビュー）
-        val twoLines = largeText || isNarrowScreen()
+        val twoLines = largeText || narrowScreen
         // 歩いた長さと日付（記録のあとの窓・大きく見る窓と同じ形。ui/common/WalkNote）。
         // 天気の名前は、字を大きくしたら入らなくなったので出さない（左上の天気のアイコンで分かる。読み上げもアイコンが伝える。決定 80）
         WalkNote(

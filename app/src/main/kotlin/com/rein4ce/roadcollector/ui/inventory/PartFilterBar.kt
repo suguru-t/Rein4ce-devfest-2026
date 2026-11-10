@@ -75,7 +75,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         // 並び
         Box {
             var open by remember { mutableStateOf(false) }
-            FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true, enabled = enabled) { open = true }
+            FilterTag("並び：${filter.sort.label}", active = filter.sort != PartSort.CUSTOM, menu = true, enabled = enabled, narrow = narrow) { open = true }
             FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "並び") {
                 for (sort in PartSort.entries) {
                     MenuRow(label = sort.label, selected = sort == filter.sort, enabled = true) {
@@ -88,7 +88,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
         // 天気
         Box {
             var open by remember { mutableStateOf(false) }
-            FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true, enabled = enabled) { open = true }
+            FilterTag("天気：${filter.sky?.label ?: "すべて"}", active = filter.sky != null, menu = true, enabled = enabled, narrow = narrow) { open = true }
             FieldbookDropdownMenu(expanded = open, onDismissRequest = { open = false }, heading = "歩いた日の天気") {
                 MenuRow(label = "すべて", selected = filter.sky == null, enabled = true) {
                     onChange(filter.copy(sky = null))
@@ -113,6 +113,7 @@ fun PartFilterBar(filter: PartFilter, onChange: (PartFilter) -> Unit, skies: Set
             switch = true,
             activeFace = Pop.Yellow,
             activeText = Pop.InkOnYellow,
+            narrow = narrow,
         ) { onChange(filter.copy(favoritesOnly = !filter.favoritesOnly)) }
     }
 }
@@ -134,6 +135,8 @@ private fun FilterTag(
     menu: Boolean,
     enabled: Boolean,
     switch: Boolean = false,
+    // 幅の狭い端末か（[PartFilterBar] で 1 回だけ求めて渡す）。字を一回り小さく、左右の余白を詰める
+    narrow: Boolean = false,
     activeFace: Color = Pop.TealDeep,
     activeText: Color = Pop.Letter,
     onClick: () -> Unit,
@@ -168,7 +171,7 @@ private fun FilterTag(
             fontWeight = FontWeight.Black,
             // 前は 12sp。大きくすると 3 つが 1 行に入らなくなるので 13sp まで（決定 80）。
             // 幅の狭い端末（400dp 未満）では 13sp でも入らないので、前の 12sp のまま（#134 の C のレビュー）
-            fontSize = if (isNarrowScreen()) 12.sp else 13.sp,
+            fontSize = if (narrow) 12.sp else 13.sp,
             maxLines = 1,
             modifier = Modifier
                 .graphicsLayer { rotationZ = if (active) -2f else 0f }
@@ -178,7 +181,7 @@ private fun FilterTag(
                     depth = if (active) 4.dp else 2.dp,
                     edge = if (active) null else Pop.TealLine,
                 )
-                .padding(horizontal = if (isNarrowScreen()) 8.dp else 10.dp, vertical = 6.dp),
+                .padding(horizontal = if (narrow) 8.dp else 10.dp, vertical = 6.dp),
         )
     }
 }

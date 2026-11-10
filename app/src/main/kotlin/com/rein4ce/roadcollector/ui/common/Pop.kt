@@ -331,6 +331,8 @@ internal fun PopRefreshButton(refreshing: Boolean, onClick: () -> Unit, modifier
 @Composable
 internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp = 26.dp) {
     val density = LocalDensity.current
+    // 動きの大きさ（積み木の大きさに合わせる）。押すたびに作らないよう、大きさが変わったときだけ作る
+    val motionSpec = remember(blockDp) { wordMotionFor(blockDp.value) }
     val shape = RoundedCornerShape(blockDp * 0.22f)
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
@@ -377,7 +379,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     val camera = cameraPoint(view, blockPx = blockDp.toPx())
                                     val fromDx = (camera.x - lastCenter[0]) / density.density
                                     val fromDy = (camera.y - lastCenter[1]) / density.density
-                                    motion.dropIn(fromDx, fromDy, wordMotionFor(blockDp.value)) {
+                                    motion.dropIn(fromDx, fromDy, motionSpec) {
                                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                         sfx.play(Sfx.LAND)
                                     }
@@ -385,7 +387,7 @@ internal fun BlockWord(text: String, modifier: Modifier = Modifier, blockDp: Dp 
                                     haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                     // 題字と同じく、「ぴょん」の高さを積み木ごとに変える（音階を上がって、最後の積み木が上のド）
                                     sfx.play(Sfx.HOP, BlockNotes.rate(i, text.length))
-                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = wordMotionFor(blockDp.value))
+                                    motion.hop(sign = if (tilt < 0f) -1f else 1f, spec = motionSpec)
                                 }
                             }
                         }

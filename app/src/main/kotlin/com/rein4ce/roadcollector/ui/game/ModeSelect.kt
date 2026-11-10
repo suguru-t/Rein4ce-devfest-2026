@@ -171,7 +171,11 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 val dailyStore = RoadCollectorApp.from(LocalContext.current).dailyTower
                 val daily by produceState<DailyTower?>(null, dailyStore) { value = runCatching { dailyStore.load() }.getOrNull() }
                 ZoomInFrom(zoom.from, zoom::settled) {
-                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = { chosen = it })
+                    // 先へ進むときは、戻るときの大きくする動きを終わったことにする（大きくなり終わる前に選んでも、次の「‹ 戻る」がずれない。#134 の A のレビュー）
+                    ModeSelectScreen(normalBest = best, challengeBest = challengeBest, daily = daily, onPick = {
+                        zoom.forward()
+                        chosen = it
+                    })
                 }
             }
         }
