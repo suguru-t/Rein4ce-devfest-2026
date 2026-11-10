@@ -198,7 +198,7 @@ internal fun RankingScreen(
  * 読み上げではラジオボタンの組として伝える。押し心地（#76）はほかのボタンとそろえ、札の形だけが縮む（波紋は出さない）
  */
 @Composable
-internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme? = null) {
+internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (TowerSort) -> Unit, theme: GalleryTheme) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -226,15 +226,15 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
                     fontSize = 15.sp,
-                    // 「みんな」の遊び方の画面では、物差しごとの色ではなく遊び方の色にそろえる（決定 81）
-                    color = if (selected) Pop.Letter else theme?.ink ?: sortInk(s),
+                    // 物差しごとの色ではなく、遊び方の色にそろえる（決定 81）
+                    color = if (selected) Pop.Letter else theme.ink,
                     maxLines = 1,
                     modifier = Modifier
                         .popBlock(
-                            face = if (selected) theme?.face ?: sortFace(s) else Fieldbook.Card,
+                            face = if (selected) theme.face else Fieldbook.Card,
                             corner = 50.dp,
                             depth = if (selected) 4.dp else 2.dp,
-                            edge = if (selected) null else theme?.ink ?: sortInk(s),
+                            edge = if (selected) null else theme.ink,
                         )
                         .padding(horizontal = 16.dp, vertical = 6.dp),
                 )
@@ -299,12 +299,12 @@ private fun TowerCard(
                     // 単位は数字の 6 割ほど（見出しの「2.68 m」と同じ釣り合い）。数字の下端にそろえる
                     Text("m", fontFamily = Pop.Rounded, fontWeight = FontWeight.Black, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(start = 3.dp, bottom = 4.dp))
                 }
-                // 全部の中で 1 番のタワーには、物差しに合わせた札（高い順は「最長」、多い順は「最多」）。記録の札は紺
+                // 全部の中で 1 番のタワーには、物差しに合わせた札（高い順は「最長」、多い順は「最多」）。札は遊び方の色（決定 81）
                 if (rank == 1 && showTopTag) PopTag(sort.topLabel, face = theme.face, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
                 // 自分のタワーには「あなた」の札（自分の色＝道のオレンジを、白い字が読める濃さにしたもの）
                 if (mine) PopTag("あなた", face = Pop.OrangeDeep, tiltDeg = 3f, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
             }
-            // 物差しの横棒：この一覧の 1 番を 100% にする（高い順・新しい順は高さ、多い順はパーツ数）。色は物差しの色
+            // 物差しの横棒：この一覧の 1 番を 100% にする（高い順・新しい順は高さ、多い順はパーツ数）。色は遊び方の色（決定 81）
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Fieldbook.GridMajor, RoundedCornerShape(3.dp))) {
                 Box(modifier = Modifier.fillMaxWidth(ratio.coerceIn(0.02f, 1f)).height(6.dp).background(theme.face, RoundedCornerShape(3.dp)))
             }

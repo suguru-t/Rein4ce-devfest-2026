@@ -19,22 +19,12 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 // 「みんな」だけで使うポップな部品（物差しの色・タワーの注記の行）。コレクションと共通の部品は ui/common/Pop.kt、天気の上に直接書く字は ui/common/SkyText.kt
 
 /**
- * 物差しの色の面（白い字を載せる）：高い順はオレンジ、多い順は青緑、新しい順は紺。
- * 連続日数順も紺（毎日 1 つずつ積むの札の色。新しい順と同じ画面には並ばない。決定 77）
- */
-internal fun sortFace(sort: TowerSort): Color = when (sort) {
-    TowerSort.HEIGHT -> Pop.OrangeDeep
-    TowerSort.PARTS -> Pop.TealDeep
-    TowerSort.STREAK, TowerSort.NEWEST -> Pop.Navy
-}
-
-/**
  * 「みんな」の遊び方ごとの色合い（決定 81）。遊び方のランキングを開いた先（断面図の画面・全部の一覧・あなたのタワー）を、
  * この色でそろえる（下地・断面図の枠・物差しの札・数字・ボタン・一覧の横棒）。前はどの遊び方も同じオレンジのボタンと黄色の札で、
  * 開いたあとにどの遊び方か分かりにくかった。色は、強すぎて目に痛くならないよう、彩度を落とした落ち着いた色にした：
  * 通常はやわらかいテラコッタ、90 秒チャレンジはセージ（緑がかった青緑）、毎日 1 つずつ積むはラベンダー（モードを選ぶ画面の色の並びと同じ）
  *
- * @property face 塗りの色（白い字を載せる。太字で 3:1 以上）
+ * @property face 塗りの色（白い字を載せる。小さい札の字（12〜15sp）にも使うので、白い字と 4.5:1 以上。前は 3:1 の目安で 3.4〜3.8 だったのを、色合いはそのままで少し濃くした。#135 の B のレビュー）
  * @property ink  字と縁の色（[tint] の上で 4.5:1 以上）
  * @property tint 下地のやわらかい色（断面図の枠の面。画面全体には [wash] で薄く敷く）
  */
@@ -46,30 +36,16 @@ internal class GalleryTheme(val face: Color, val ink: Color, val tint: Color) {
 /** 遊び方 [mode] の色合い（ライトとダークで別の色） */
 internal fun galleryTheme(mode: TowerMode): GalleryTheme = if (!Fieldbook.dark) {
     when (mode) {
-        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFC47A50), ink = Color(0xFF9A5634), tint = Color(0xFFF6E4D6))
-        TowerMode.CHALLENGE -> GalleryTheme(face = Color(0xFF4A8F84), ink = Color(0xFF2F6B61), tint = Color(0xFFDCEDE8))
-        TowerMode.DAILY -> GalleryTheme(face = Color(0xFF7A80B8), ink = Color(0xFF545A92), tint = Color(0xFFE5E6F3))
+        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFAC633A), ink = Color(0xFF9A5634), tint = Color(0xFFF6E4D6))
+        TowerMode.CHALLENGE -> GalleryTheme(face = Color(0xFF428076), ink = Color(0xFF2F6B61), tint = Color(0xFFDCEDE8))
+        TowerMode.DAILY -> GalleryTheme(face = Color(0xFF6B71B0), ink = Color(0xFF545A92), tint = Color(0xFFE5E6F3))
     }
 } else {
     when (mode) {
-        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFA8693F), ink = Color(0xFFE9B48F), tint = Color(0xFF3A2D25))
+        TowerMode.NORMAL -> GalleryTheme(face = Color(0xFFA5673E), ink = Color(0xFFE9B48F), tint = Color(0xFF3A2D25))
         TowerMode.CHALLENGE -> GalleryTheme(face = Color(0xFF3D7D72), ink = Color(0xFF93CFC3), tint = Color(0xFF1F3431))
         TowerMode.DAILY -> GalleryTheme(face = Color(0xFF5E6499), ink = Color(0xFFB9BDE6), tint = Color(0xFF292C42))
     }
-}
-
-/** 遊び方の色の面（白い字を載せる）：通常はオレンジ、3 分チャレンジは青緑、毎日 1 つずつ積むは紺（モードを選ぶ画面のアイコンと同じ） */
-internal fun modeFace(mode: TowerMode): Color = when (mode) {
-    TowerMode.NORMAL -> Pop.OrangeDeep
-    TowerMode.CHALLENGE -> Pop.TealDeep
-    TowerMode.DAILY -> Pop.Navy
-}
-
-/** 物差しの色の字（紙の上に直接書く）。ダークモードでは濃い色が紙に沈むので、明るい色にする */
-internal fun sortInk(sort: TowerSort): Color = if (!Fieldbook.dark) sortFace(sort) else when (sort) {
-    TowerSort.HEIGHT -> Pop.Orange
-    TowerSort.PARTS -> Pop.Teal
-    TowerSort.STREAK, TowerSort.NEWEST -> Color(0xFFB9BCD0)
 }
 
 /**
