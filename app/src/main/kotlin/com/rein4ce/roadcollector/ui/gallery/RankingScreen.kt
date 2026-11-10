@@ -38,10 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -52,7 +49,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rein4ce.roadcollector.core.model.Tower
@@ -64,7 +60,9 @@ import java.util.Date
 import java.util.Locale
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.popBlock
+import com.rein4ce.roadcollector.ui.common.PopBackButton
 import com.rein4ce.roadcollector.ui.common.PopChip
+import com.rein4ce.roadcollector.ui.common.isNarrowScreen
 import com.rein4ce.roadcollector.ui.common.PopTag
 import com.rein4ce.roadcollector.ui.common.PopRefreshButton
 import com.rein4ce.roadcollector.ui.common.SkyText
@@ -91,7 +89,7 @@ internal fun RankingScreen(
     mineOnly: Boolean,
     sort: TowerSort,
     onSort: (TowerSort) -> Unit,
-    onBack: () -> Unit,
+    onBack: (center: Offset) -> Unit,
     onOpen: (TowerSummary) -> Unit,
 ) {
     var page by rememberSaveable { mutableIntStateOf(0) }
@@ -130,7 +128,8 @@ internal fun RankingScreen(
             .background(theme.wash)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
-        PopChip("‹ 戻る", face = Pop.Yellow, text = Pop.InkOnYellow, fontSize = 14.sp, onClick = onBack)
+        // 積む画面と同じ「‹ 戻る」（ui/common/PopBack.kt。決定 80）。戻った先（遊び方のランキング）は、ここから大きくなって出てくる
+        PopBackButton(onBack, small = isNarrowScreen(), onClickLabel = "遊び方のランキングに戻る")
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BlockWord(if (mineOnly) "あなたのタワー" else "ランキング")
             Spacer(Modifier.weight(1f))
@@ -139,7 +138,7 @@ internal fun RankingScreen(
                 // どの遊び方のランキングか（決定 77）
                 "${gallery.mode.shortLabel}・" + if (mineOnly) "${listed.size} 個" else "全部で ${towers.size} 個",
                 color = Fieldbook.Muted,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 modifier = Modifier.padding(end = 4.dp),
             )
             PopRefreshButton(refreshing = gallery.refreshing, onClick = { gallery.refresh() })
@@ -158,8 +157,8 @@ internal fun RankingScreen(
                     .popBlock(face = Fieldbook.Card, corner = SECTION_CORNER, depth = 3.dp, edge = Fieldbook.CardEdge)
                     .padding(14.dp),
             ) {
-                Text("まだ送っていません。", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Ink)
-                Text("${howToSend(gallery.mode)}、ここに並びます。", fontSize = 12.sp, color = Fieldbook.Muted)
+                Text("まだ送っていません。", fontFamily = Pop.Rounded, fontSize = 16.sp, fontWeight = FontWeight.Black, color = Fieldbook.Ink)
+                Text("${howToSend(gallery.mode)}、ここに並びます。", fontFamily = Pop.Rounded, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Fieldbook.Muted)
             }
         }
         LazyColumn(
@@ -226,7 +225,7 @@ internal fun SortTabs(sort: TowerSort, options: List<TowerSort>, onSelect: (Towe
                     s.label,
                     fontFamily = Pop.Rounded,
                     fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     // 「みんな」の遊び方の画面では、物差しごとの色ではなく遊び方の色にそろえる（決定 81）
                     color = if (selected) Pop.Letter else theme?.ink ?: sortInk(s),
                     maxLines = 1,
@@ -377,7 +376,7 @@ internal fun GalleryStatusRow(gallery: TowerGallery) {
             // 小さな積み木（傾けた四角）の印
             Box(modifier = Modifier.graphicsLayer { rotationZ = 12f }.size(10.dp).clip(RoundedCornerShape(3.dp)).background(status.color))
             Spacer(Modifier.width(8.dp))
-            SkyText(status.text, color = Fieldbook.Muted, fontSize = 12.sp)
+            SkyText(status.text, color = Fieldbook.Muted, fontSize = 13.sp)
         }
     }
 }
@@ -411,7 +410,7 @@ internal fun PagerRow(page: Int, pages: Int, total: Int, onPage: (Int) -> Unit) 
         SkyText(
             "$first〜$last / $total",
             color = Fieldbook.Muted,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             maxLines = 1,
             modifier = Modifier
                 .weight(1f)

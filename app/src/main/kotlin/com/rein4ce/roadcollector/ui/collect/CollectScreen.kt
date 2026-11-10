@@ -108,6 +108,7 @@ import com.rein4ce.roadcollector.ui.inventory.Fieldbook
 import com.rein4ce.roadcollector.ui.inventory.FieldbookPart
 import com.rein4ce.roadcollector.ui.common.FramedDialog
 import com.rein4ce.roadcollector.ui.common.BlockWord
+import com.rein4ce.roadcollector.ui.common.SCREEN_TITLE_BLOCK
 import com.rein4ce.roadcollector.ui.common.Pop
 import com.rein4ce.roadcollector.ui.common.rememberReduceMotion
 import com.rein4ce.roadcollector.ui.common.drawPart
@@ -172,8 +173,10 @@ fun CollectScreen(
         ) {
             // 画面名は押すと動く（BlockWord）。落ちてくる最後の積み木が歩いた長さの上を通るよう、手前に描く
             // （開いたときのタイトルは、ここではなくホームの題字に収まる。ui/HomeScreen.kt）
+            // 画面名は、ほかの画面の名前より一回り大きく（B の希望。決定 80）
             BlockWord(
                 "みちのきろく",
+                blockDp = SCREEN_TITLE_BLOCK,
                 modifier = Modifier
                     .zIndex(1f)
                     // 左の端は、ほかの画面の名前と同じ所にそろえる
@@ -217,13 +220,13 @@ fun CollectScreen(
                         }
                     },
                 ) {
-                    WalkingFootprints(steps = { footSteps.value }, tint = Fieldbook.Ink, modifier = Modifier.size(20.dp))
+                    WalkingFootprints(steps = { footSteps.value }, tint = Fieldbook.Ink, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(4.dp))
                     BasicText(
                         "$walkedM m",
                         style = TextStyle(fontFamily = Fieldbook.Data, fontWeight = FontWeight.Bold, color = Fieldbook.Ink),
                         maxLines = 1,
-                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 18.sp, stepSize = 1.sp),
+                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 22.sp, stepSize = 1.sp),
                     )
                 }
             }
@@ -325,9 +328,9 @@ fun CollectScreen(
                 PartNameLine(o)
                 o.note?.let { note ->
                     // 速すぎて自動で止めたときの説明。赤鉛筆の色で目立たせる
-                    Text(note, fontSize = 12.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
+                    Text(note, fontSize = 14.sp, color = RecordingRed, modifier = Modifier.padding(vertical = 4.dp))
                 }
-                // 歩いた長さ・日付・天気（コレクションのカード・大きく見る窓と同じ形。ui/common/WalkNote）。
+                // 歩いた長さ・日付・天気（大きく見る窓と同じ形。コレクションのカードは天気だけ出さない。ui/common/WalkNote）。
                 // 天気は記録のあとに取ってくるので、届いたら足す（届くまでは出さない）。
                 // 変換の数字（頂点・ε・GPS の点など）は、見ても分からないので出さない（開発用に Logcat へ。CollectViewModel.keep）
                 WalkNote(
@@ -342,7 +345,7 @@ fun CollectScreen(
         }
         // 設定と同じ形：灰色の帯の見出しと、枠の下の丸い「×」で閉じる（枠の外を押しても閉じる）
         is CollectViewModel.Outcome.Rejected -> FramedDialog(title = "パーツになりませんでした", onDismiss = { vm.dismissOutcome() }) {
-            Text(o.reason, style = noteStyle, fontSize = 15.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 10.dp))
+            Text(o.reason, style = noteStyle, fontSize = 16.sp, color = Fieldbook.Ink, modifier = Modifier.padding(top = 10.dp))
         }
         null -> Unit
     }
@@ -371,7 +374,7 @@ private fun StatusChip(status: StatusLine, modifier: Modifier = Modifier) {
     ) {
         Box(modifier = Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(status.color))
         Spacer(Modifier.width(8.dp))
-        Text(status.text, fontSize = 12.sp, color = Fieldbook.Ink)
+        Text(status.text, fontSize = 14.sp, color = Fieldbook.Ink)
     }
 }
 
@@ -391,7 +394,7 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
             if (asking) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Fieldbook.Muted)
             Text(
                 if (asking) "名前を考え中…" else o.part.displayName,
-                fontSize = 16.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (asking) Fieldbook.Muted else Fieldbook.Ink,
             )
@@ -401,7 +404,7 @@ private fun PartNameLine(o: CollectViewModel.Outcome.Created) {
             Text(
                 notes("名前はコレクションから", "あとで付けられます"),
                 style = noteStyle,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = Fieldbook.Muted,
             )
         }
@@ -424,7 +427,7 @@ private fun SurveyButton(text: String, onClick: () -> Unit, modifier: Modifier =
         // 高さは「選んだ n 本で積む」と同じ 48dp（下限だけ決めて、文字を大きくして 2 行になっても切れないように）
         modifier = modifier.heightIn(min = 48.dp),
     ) {
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -446,7 +449,7 @@ private fun DemoMenuButton(
             border = BorderStroke(1.5.dp, if (enabled) Fieldbook.Survey else Fieldbook.GridMajor),
             modifier = Modifier.fillMaxHeight().heightIn(min = 48.dp),
         ) {
-            Text("デモ散歩", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("デモ散歩", fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
         // メニューも野帳の紙にする（Material の標準は薄紫の面で、画面から浮いて見える）。
         // 見本は 1 本ずつ小さな図を添えて、形の名前（棒・L字…）で選ぶ。名前の下に、パーツにしたときの長さを小さく添える
@@ -460,9 +463,9 @@ private fun DemoMenuButton(
                         // 読み上げでは、見本の名前も言う（「棒、まっすぐ北へ、420 メートル」）
                         val spoken = listOfNotNull(track.expectedKind.label, track.name, part?.let { "${it.distanceM} メートル" })
                         Column(modifier = Modifier.clearAndSetSemantics { contentDescription = spoken.joinToString("、") }) {
-                            Text(track.expectedKind.label, fontSize = 15.sp, color = Fieldbook.Ink)
+                            Text(track.expectedKind.label, fontSize = 16.sp, color = Fieldbook.Ink)
                             if (part != null) {
-                                Text("${part.distanceM} m", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                                Text("${part.distanceM} m", fontFamily = Fieldbook.Data, fontSize = 13.sp, color = Fieldbook.Muted)
                             }
                         }
                     },
@@ -498,8 +501,8 @@ private fun DemoMenuButton(
                 // 上の見本の行の右が空きすぎる。2 行にすれば、幅は見本の行と同じくらいに収まる）
                 text = {
                     Column {
-                        Text("ファイル", fontSize = 15.sp, color = Fieldbook.Ink)
-                        Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 11.sp, color = Fieldbook.Muted)
+                        Text("ファイル", fontSize = 16.sp, color = Fieldbook.Ink)
+                        Text("GPX / JSON", fontFamily = Fieldbook.Data, fontSize = 13.sp, color = Fieldbook.Muted)
                     }
                 },
                 colors = MenuDefaults.itemColors(textColor = Fieldbook.Ink, leadingIconColor = Fieldbook.Ink),

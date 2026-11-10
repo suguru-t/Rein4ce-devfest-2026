@@ -105,7 +105,8 @@ internal fun TowerMeta(
     val authorText: @Composable RowScope.() -> Unit = {
         Text(
             author,
-            fontSize = 13.sp,
+            fontFamily = Pop.Rounded,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = Fieldbook.Muted,
             maxLines = 1,
@@ -140,7 +141,7 @@ private fun MetaText(label: String, strong: Boolean) {
         label,
         fontFamily = Pop.Rounded,
         fontWeight = FontWeight.Black,
-        fontSize = 13.sp,
+        fontSize = 14.sp,
         color = if (strong) Fieldbook.Ink else Fieldbook.Muted,
         maxLines = 1,
         softWrap = false,

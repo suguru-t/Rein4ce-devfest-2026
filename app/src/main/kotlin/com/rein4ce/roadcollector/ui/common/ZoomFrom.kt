@@ -9,7 +9,18 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.isSpecified
@@ -50,17 +61,79 @@ internal fun zoomInFrom(origin: TransformOrigin): EnterTransition =
 /**
  * [content] を、出てきたときに [origin] から大きくして見せる（[zoomInFrom] と同じ動き。画面の切り替え（NavHost）の外で使う）。
  * [origin] が null なら、そのまま出す
+ *
+ * @param onSettled 大きくなり終わったとき
  */
 @Composable
-internal fun ZoomInFrom(origin: TransformOrigin?, content: @Composable () -> Unit) {
+internal fun ZoomInFrom(origin: TransformOrigin?, onSettled: () -> Unit = {}, content: @Composable () -> Unit) {
     if (origin == null) {
         content()
         return
     }
     // 出てきた最初のコマは小さく、そこから大きくする（出てくるたびにこの部品ごと作り直されるので、1 回だけ動く）
     val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+    val settled by rememberUpdatedState(onSettled)
+    LaunchedEffect(shown) {
+        snapshotFlow { shown.isIdle && shown.currentState }.first { it }
+        settled()
+    }
     AnimatedVisibility(visibleState = shown, enter = zoomInFrom(origin), exit = ExitTransition.None) { content() }
 }
+
+/**
+ * 「‹ 戻る」で 1 つ前の画面に戻ったときだけ、戻った先を「‹ 戻る」の所から大きくして出す仕組み（決定 78・80）。
+ * 積む画面（遊び方を選ぶ画面へ戻る）とランキング（ホーム・遊び方のランキングへ戻る）で共通。使い方：
+ * - 戻った先を出す入れ物に [area] を付け、戻った先を `ZoomInFrom(from, ::settled)` で包む
+ * - 「‹ 戻る」では [back] にボタンのまん中を、端末の「戻る」では null を渡す（動きを付けない）。先へ進むときは [forward]
+ */
+@Stable
+internal class BackZoom {
+    /** 大きくなり始める点（画面の中の割合）。null なら、戻った先をそのまま出す */
+    var from: TransformOrigin? by mutableStateOf(null)
+        private set
+
+    /** 大きくしている途中か */
+    private var zooming = false
+
+    /** 入れ物の、アプリの画面の中での位置と大きさ（「‹ 戻る」の位置を割合にするため） */
+    private var bounds = Rect.Zero
+
+    /** 戻った先を出す入れ物に付ける */
+    val area: Modifier = Modifier.onGloballyPositioned { bounds = it.boundsInRoot() }
+
+    /**
+     * 戻る。[center] は押した「‹ 戻る」のまん中（アプリの画面の左上から）。端末の「戻る」なら null。
+     * 大きくしている途中に続けて押したときは、ボタンが縮んだ所で測られてずれるので、今と同じ点から大きくする
+     * （どの画面も「‹ 戻る」は左上の同じあたりにある）
+     */
+    fun back(center: Offset?) {
+        val now = from
+        from = when {
+            center == null -> null
+            zooming && now != null -> now
+            else -> zoomOrigin(center, bounds) ?: BACK_ZOOM_FALLBACK
+        }
+        zooming = from != null
+    }
+
+    /** 先へ進む（戻った先ではないので、動きを付けない） */
+    fun forward() {
+        from = null
+        zooming = false
+    }
+
+    /** 大きくなり終わった（[ZoomInFrom] の onSettled に渡す） */
+    fun settled() {
+        zooming = false
+    }
+}
+
+/** [BackZoom] を作って覚えておく */
+@Composable
+internal fun rememberBackZoom(): BackZoom = remember { BackZoom() }
+
+/** 「‹ 戻る」の位置が分からないとき（置かれる前に押された など）に、戻った先が大きくなり始める点：画面の左上（「‹ 戻る」のある所） */
+private val BACK_ZOOM_FALLBACK = TransformOrigin(0.1f, 0.05f)
 
 /** 大きくなり始めるときの大きさ（画面の何倍か）。家のボタン（56dp）は幅 400dp ほどの画面の 0.14 倍なので、それより少し小さく */
 private const val ZOOM_FROM_SCALE = 0.12f
