@@ -37,7 +37,8 @@ class ChallengeRecords(
     @Synchronized
     fun add(score: ChallengeScore): List<ChallengeScore> {
         require(score.height.isFinite() && score.height >= 0)
-        if (scores.none { it.runId == score.runId }) {
+        // 台に何も残らなかった回（0 m）は書かない（決定 89）
+        if (score.counts && scores.none { it.runId == score.runId }) {
             val updated = scores + score
             write(json.encodeToString(serializer, updated))
             scores = updated
@@ -45,9 +46,9 @@ class ChallengeRecords(
         return ranking(score.rule)
     }
 
-    /** 同じ決まり（[rule]）の記録だけを、高い順（同じ高さなら先に出した順）に */
+    /** 同じ決まり（[rule]）の記録だけを、高い順（同じ高さなら先に出した順）に。前に残した 0 m の回は出さない（決定 89） */
     @Synchronized
-    fun ranking(rule: String): List<ChallengeScore> = scores.filter { it.rule == rule }
+    fun ranking(rule: String): List<ChallengeScore> = scores.filter { it.rule == rule && it.counts }
         .sortedWith(compareByDescending<ChallengeScore> { it.height }.thenBy { it.createdAt }.thenBy { it.runId })
 
     fun rank(score: ChallengeScore): Int = rankOf(score.height, ranking(score.rule))
