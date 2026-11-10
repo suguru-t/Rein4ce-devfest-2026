@@ -391,11 +391,12 @@ object AppIcons {
     }
 
     /**
-     * 入れ替え（積む画面の通常モードの「チェンジ」）：上は右向き、下は左向きの矢印（トランプのリバースのように、向きが逆の 2 本）。
-     * 積み木の上で読めるよう、ほかの線画より太い線で描く
+     * シャッフル（積む画面の通常モードの「ほかの道」。決定 93）：音楽アプリのシャッフルと同じ、交差する 2 本の右向きの矢印。
+     * 「ランダムに替わる」ことが伝わるように（前は向きが逆の 2 本の矢印で、トランプのリバースのように見え、何が起きるか分かりにくかった）。
+     * 交差する所は、左上から来る矢印を少し切って、前後が分かるようにする。積み木の上で読めるよう、ほかの線画より太い線で描く
      */
-    val Swap: ImageVector by lazy {
-        icon("Swap") {
+    val Shuffle: ImageVector by lazy {
+        icon("Shuffle") {
             path(
                 fill = null,
                 stroke = SolidColor(Color.Black),
@@ -403,12 +404,13 @@ object AppIcons {
                 strokeLineCap = StrokeCap.Round,
                 strokeLineJoin = StrokeJoin.Round,
             ) {
-                // 上の矢印（左から右へ）
-                moveTo(4f, 8f); lineTo(19f, 8f)
-                moveTo(15f, 4f); lineTo(19f, 8f); lineTo(15f, 12f)
-                // 下の矢印（右から左へ）
-                moveTo(20f, 16f); lineTo(5f, 16f)
-                moveTo(9f, 12f); lineTo(5f, 16f); lineTo(9f, 20f)
+                // 左下から右上への矢印（上に重なる方）
+                moveTo(4f, 18f); lineTo(19f, 5f)
+                moveTo(14f, 5f); lineTo(19f, 5f); lineTo(19f, 10f)
+                // 左上から右下への矢印（交差する所で切る）
+                moveTo(4f, 6f); lineTo(9.6f, 10.8f)
+                moveTo(13.4f, 14.2f); lineTo(19f, 19f)
+                moveTo(19f, 14f); lineTo(19f, 19f); lineTo(14f, 19f)
             }
         }
     }
