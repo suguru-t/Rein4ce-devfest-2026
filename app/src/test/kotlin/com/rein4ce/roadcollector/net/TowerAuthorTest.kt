@@ -3,6 +3,7 @@ package com.rein4ce.roadcollector.net
 import com.rein4ce.roadcollector.core.model.Placement
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.sample.SampleParts
+import io.ktor.client.request.HttpRequestBuilder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -35,5 +36,14 @@ class TowerAuthorTest {
         assertEquals(mark, withOwner(tower, mark).ownerId)
         assertNull(withOwner(tower, null).ownerId)
         assertNull(withOwner(tower, "").ownerId)
+    }
+
+    @Test
+    fun `the owner mark also goes in the header, so the server counts uploads per phone and not per Wi-Fi`() {
+        // サーバの回数制限はヘッダで端末を見分ける。無いと IP で数え、同じ Wi-Fi の全員で上限を分け合ってしまう（決定 57・88）
+        val mark = "d".repeat(64)
+        assertEquals(mark, HttpRequestBuilder().apply { withOwnerHeader(mark) }.headers[OWNER_HEADER])
+        assertNull(HttpRequestBuilder().apply { withOwnerHeader(null) }.headers[OWNER_HEADER])
+        assertNull(HttpRequestBuilder().apply { withOwnerHeader("") }.headers[OWNER_HEADER])
     }
 }

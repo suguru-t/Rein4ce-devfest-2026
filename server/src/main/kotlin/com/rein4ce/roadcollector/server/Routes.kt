@@ -1,5 +1,6 @@
 package com.rein4ce.roadcollector.server
 
+import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.Tower
 import com.rein4ce.roadcollector.core.model.TowerCreated
 import com.rein4ce.roadcollector.core.model.TowerMode
@@ -12,7 +13,6 @@ import io.ktor.server.request.accept
 import io.ktor.server.request.header
 import io.ktor.server.request.host
 import io.ktor.server.request.port
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.header
@@ -45,7 +45,8 @@ import kotlinx.coroutines.withContext
  *   POST /parts/name           パーツに名前を付ける（Gemini）→ { name }。失敗は 503。PartRoutes.kt
  *   POST /nickname             ニックネームを考える（Gemini）→ { name }。失敗は 503。PartRoutes.kt
  *
- *   一覧・投稿・名前・ニックネームは、1 分あたりの回数を数え、超えたら 429（Retry-After 付き）。RateLimit.kt
+ *   一覧・投稿・名前・ニックネーム・タワー 1 基・絵は、1 分あたりの回数を数え、超えたら 429（Retry-After 付き）。RateLimit.kt
+ *   本文は大きさの上限を超えたら読まずに 413（BodyLimit.kt。決定 88）
  *   TODO(C): 対戦方式が決まったら /challenges
  */
 fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
@@ -102,6 +103,7 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
     }
 
     get("/towers/{id}") {
+        if (call.overLimit(limits.towerView)) return@get
         val id = call.parameters["id"].orEmpty()
         val tower = store.get(id)
         if (tower == null) {
@@ -118,6 +120,7 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
     }
 
     get("/towers/{id}/image.svg") {
+        if (call.overLimit(limits.towerView)) return@get
         val id = call.parameters["id"].orEmpty()
         val tower = store.get(id)
         if (tower == null) {
@@ -130,6 +133,8 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
     // 共有ページの og:image 用。LINE / X は SVG を読まないので PNG。タワーは保存後に変わらないのでキャッシュさせる。
     // GET だけで HEAD には応えない（AutoHeadResponse は入れていない）ので、確認は `curl -I` ではなく GET で行う
     get("/towers/{id}/image.png") {
+        // その場で描くので重い。LINE / X のプレビューが取りに来るくらいの回数で足りる
+        if (call.overLimit(limits.towerImage)) return@get
         val id = call.parameters["id"].orEmpty()
         val tower = store.get(id)
         if (tower == null) {
@@ -144,13 +149,15 @@ fun Route.towerRoutes(store: TowerStore, limits: RateLimits = RateLimits.OFF) {
 
 /**
  * 本文のタワーを読んで検査する。誰でも叩ける URL なので、壊れたタワーは保存前に 400 で断る（TowerValidation.kt）。
- * 読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする。断ったら null（応答は済んでいる）
+ * 大きすぎる本文は読み切らずに 413（BodyLimit.kt）。読めない JSON（NaN や型違いも）は Ktor の既定に任せず、ここで 400 にする。
+ * その遊び方で使わない項目は捨てる（[withoutUnusedFields]。決定 88）。断ったら null（応答は済んでいる）
  *
  * @param mode 遊び方をこれにしてから検査する（3 分チャレンジ・毎日 1 つずつ積むの URL。本文の mode は見ない）。null なら本文のまま
  */
 private suspend fun ApplicationCall.receiveValidTower(mode: TowerMode? = null): Tower? {
+    val text = receiveTextWithin(MAX_TOWER_BODY_BYTES) ?: return null
     val received = try {
-        receive<Tower>()
+        AppJson.decodeFromString(Tower.serializer(), text)
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -162,7 +169,7 @@ private suspend fun ApplicationCall.receiveValidTower(mode: TowerMode? = null): 
         respond(HttpStatusCode.BadRequest, reason)
         return null
     }
-    return tower
+    return tower.withoutUnusedFields()
 }
 
 /**

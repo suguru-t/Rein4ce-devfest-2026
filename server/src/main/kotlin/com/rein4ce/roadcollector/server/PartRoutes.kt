@@ -1,11 +1,10 @@
 package com.rein4ce.roadcollector.server
 
+import com.rein4ce.roadcollector.core.model.AppJson
 import com.rein4ce.roadcollector.core.model.NicknameHints
 import com.rein4ce.roadcollector.core.model.Part
 import com.rein4ce.roadcollector.core.model.PartNameResponse
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.contentLength
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
@@ -27,8 +26,10 @@ fun Route.partRoutes(namer: PartNamer, limits: RateLimits = RateLimits.OFF) {
 
     post("/parts/name") {
         if (call.overLimit(limits.partName)) return@post
+        // 大きすぎる本文は読み切らずに 413（BodyLimit.kt。決定 88）
+        val text = call.receiveTextWithin(MAX_PART_BODY_BYTES) ?: return@post
         val part = try {
-            call.receive<Part>()
+            AppJson.decodeFromString(Part.serializer(), text)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -60,14 +61,11 @@ fun Route.partRoutes(namer: PartNamer, limits: RateLimits = RateLimits.OFF) {
      */
     post("/nickname") {
         if (call.overLimit(limits.nickname)) return@post
-        // 受け取る大きさの上限（名前 50 個ぶんでも数 KB。それより大きいものは読まない。#81 のレビュー）
-        val size = call.request.contentLength()
-        if (size != null && size > MAX_NICKNAME_BODY_BYTES) {
-            call.respond(HttpStatusCode.PayloadTooLarge, "body too large")
-            return@post
-        }
+        // 受け取る大きさの上限（名前 50 個ぶんでも数 KB。それより大きいものは読まない。#81 のレビュー）。
+        // Content-Length の無い本文（chunked）も、上限の先までは読まない（BodyLimit.kt。決定 88）
+        val text = call.receiveTextWithin(MAX_NICKNAME_BODY_BYTES) ?: return@post
         val hints = try {
-            call.receive<NicknameHints>()
+            AppJson.decodeFromString(NicknameHints.serializer(), text)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

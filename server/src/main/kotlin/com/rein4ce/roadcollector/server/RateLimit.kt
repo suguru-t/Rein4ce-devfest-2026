@@ -68,14 +68,18 @@ class RateLimits(
     val towersGet: RateLimiter?,
     val partName: RateLimiter?,
     val nickname: RateLimiter?,
+    /** タワー 1 基（共有ページ・JSON）と SVG の絵。Firestore を 1〜3 件読む（決定 88） */
+    val towerView: RateLimiter? = null,
+    /** PNG の絵（共有ページのプレビュー）。その場で描くので重い（決定 88） */
+    val towerImage: RateLimiter? = null,
 ) {
     /** 起動のログに出す説明 */
     val description: String
-        get() = if (this === OFF || listOf(towersPost, towersGet, partName, nickname).all { it == null }) {
+        get() = if (this === OFF || listOf(towersPost, towersGet, partName, nickname, towerView, towerImage).all { it == null }) {
             "off"
         } else {
             "on（1 分あたり 端末ごと / 1 台の合計：投稿 ${towersPost.text()}、一覧 ${towersGet.text()}、" +
-                "名前 ${partName.text()}、ニックネーム ${nickname.text()}）"
+                "名前 ${partName.text()}、ニックネーム ${nickname.text()}、タワー 1 基 ${towerView.text()}、PNG ${towerImage.text()}）"
         }
 
     private fun RateLimiter?.text(): String = when {
@@ -91,9 +95,13 @@ class RateLimits(
         /** 本番の上限 */
         fun standard(now: () -> Long = System::currentTimeMillis) = RateLimits(
             towersPost = RateLimiter(perClient = 10, total = 120, now = now),
-            towersGet = RateLimiter(perClient = 60, total = Int.MAX_VALUE, now = now),
+            // 一覧は Firestore を読む回数を TtlCache で抑えているが、印を変えれば端末ごとの上限はすり抜けられるので、合計でも頭打ちにする（決定 88）
+            towersGet = RateLimiter(perClient = 60, total = 1200, now = now),
             partName = RateLimiter(perClient = 20, total = 120, now = now),
             nickname = RateLimiter(perClient = 10, total = 60, now = now),
+            // 絵はカードが見えるたびに 1 基ずつ取るので、一覧より多めに（決定 88）
+            towerView = RateLimiter(perClient = 300, total = 3000, now = now),
+            towerImage = RateLimiter(perClient = 30, total = 300, now = now),
         )
 
         /**
