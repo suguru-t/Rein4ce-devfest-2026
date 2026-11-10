@@ -157,13 +157,21 @@ fun StackTab(onGoInventory: () -> Unit, onGoGallery: () -> Unit) {
                 // 積む画面と同じ ViewModel（この画面の行き先ごとに 1 つ）
                 val vm: StackViewModel = viewModel()
                 // 「‹ 戻る」（端末の「戻る」も）で選ぶ画面に戻ったら、そのゲームは終わりにして止め、次に通常を開いたときに
-                // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは、今までどおり続きから。
-                // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
+                // そのときのコレクションで新しいゲームから（決定 76。StackViewModel.leave）。ほかのタブへ行って戻ったときは選ぶ画面からで、
+                // 通常を選び直すとそのゲームの続きから（決定 85）。
+                // 落ちて終わり、塔が落ち着くのを待っていた回は、戻るとき・ほかのタブへ移るときに結果を決めて自分の最高に数える（終わっていた回は、下で数えてある）
                 val leave = { center: Offset? ->
                     vm.leave()?.let { records.submitNormal(it.finalHeight) }
                     backToSelect(center)
                 }
                 BackHandler { leave(null) }
+                // ほかのタブへ移ってこの画面が消えるとき（画面の作り直しは除く）：ゲームは続きから選び直せるよう残し、
+                // 落ち着くのを待っていた回だけ、ここで結果を決めて自分の最高に数える（#139 の A のレビュー）
+                DisposableEffect(vm) {
+                    onDispose {
+                        if (activity?.isChangingConfigurations != true) vm.settleNow()?.let { records.submitNormal(it.finalHeight) }
+                    }
+                }
                 ModePlayPage(PlayMode.NORMAL, onBack = { leave(it) }) { leading ->
                     StackScreen(onGoInventory = onGoInventory, onGoGallery = onGoGallery, leading = leading)
                 }
