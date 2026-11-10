@@ -286,17 +286,19 @@ fun StackScreen(
                     }
                     // 何を積むか（「コレクションの道で積む」。決定 87）
                     PlayMaterialNote(compact = false, modifier = Modifier.padding(top = 4.dp))
-                    // 高さの右に「チェンジ」（狙っているパーツを替える。決定 62）。高さの数字より少し下げ、下の「○ m の道」の行の右にかかる所に置く
-                    // （ずらすのは見た目だけで、段の高さは変えない。右側は空いているので、下の行の字には重ならない）
+                    // 高さの右に「ほかの道」（狙っているパーツを替える。決定 62・93）。高さの行の高さのまん中に置く
+                    // （前はアイコンだけの小さな積み木で、少し下げて下の「○ m の道」の行の右にかけていた。字を添えて幅が広がったので、
+                    // 下げると、字を大きくしたときに下の行の字と重なる）。残りの幅に字が入らないとき（狭い画面・字を大きくしたとき）は、アイコンだけにする
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         HeightMeter(shownHeight, compact = false, follow = meterFollows)
-                        Spacer(Modifier.weight(1f))
-                        ChangeButton(
-                            enabled = vm.canChange,
-                            left = vm.changesLeft,
-                            onClick = vm::change,
-                            modifier = Modifier.offset(y = CHANGE_BUTTON_DROP),
-                        )
+                        BoxWithConstraints(modifier = Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                            ChangeButton(
+                                enabled = vm.canChange,
+                                left = vm.changesLeft,
+                                onClick = vm::change,
+                                label = maxWidth >= CHANGE_LABEL_MIN_WIDTH,
+                            )
+                        }
                     }
                 }
                 val current = vm.current
@@ -328,14 +330,15 @@ fun StackScreen(
                 StackCanvas(vm = vm, bonusShow = bonusShow, colorsOf = pieceColorsOf, onRelease = { vm.place(grip) }, modifier = Modifier.fillMaxSize().clipToBounds())
                 // 終わったときの天気のボーナスの倍率（札が全部出たあと、最後に白い札で出す。決定 68・92）
                 BonusBanner(bonusShow, compact, Modifier.align(Alignment.TopCenter).padding(top = 8.dp))
-                // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「チェンジ」はキャンバスの右上に重ねる
-                // （段を伸ばすと塔を描く所が狭くなるため）
+                // 小さい画面では、情報の段の 1 行に高さと置いた数が並んで入らないので、「ほかの道」はキャンバスの右上に重ねる
+                // （段を伸ばすと塔を描く所が狭くなるため）。塔の上に重なるので、字は出さずアイコンだけ
                 if (compact) {
                     ChangeButton(
                         enabled = vm.canChange,
                         left = vm.changesLeft,
                         onClick = vm::change,
                         modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 4.dp),
+                        label = false,
                     )
                 }
             }
@@ -948,8 +951,8 @@ internal fun bonusText(percent: Int): String = "+%d.%02d".format(Locale.JAPAN, p
 /** 「回す」のボタンの幅（ボタンが 1 つだけなので、押しやすい幅にする。画面いっぱいには広げない） */
 private val TURN_BUTTON_MIN_WIDTH = 220.dp
 
-/** 「チェンジ」を、高さの行のまん中からどれだけ下げて置くか（ふつうの画面） */
-private val CHANGE_BUTTON_DROP = 24.dp
+/** 「ほかの道」の字も出すのに要る幅（アイコン・字・回数の札。これより狭ければアイコンだけ） */
+private val CHANGE_LABEL_MIN_WIDTH = 132.dp
 
 /** 「落下 ○ 個」の赤 */
 private val FALLEN_RED = Color(0xFFD64545)

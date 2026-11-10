@@ -79,7 +79,7 @@ object ApiClient {
     var authorName: () -> String? = { null }
 
     /**
-     * この端末の持ち主の印（data/OwnerId。端末の id を塩を付けてハッシュしたもの）。送るタワーに入れ、一覧を取るときにヘッダで送る。
+     * このアプリの持ち主の印（data/OwnerId。はじめて開いたときに作った乱数（前の版から使っていれば端末の id）を、塩を付けてハッシュしたもの。決定 90）。送るタワーに入れ、一覧を取るときにヘッダで送る。
      * アプリの起動時に RoadCollectorApp がつなぐ。null なら送らない（サーバは印なしとして扱う）
      */
     var ownerId: () -> String? = { null }
