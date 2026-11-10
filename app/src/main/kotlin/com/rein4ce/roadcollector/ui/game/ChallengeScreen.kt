@@ -197,6 +197,8 @@ internal fun ChallengeScreen(leading: @Composable (compact: Boolean) -> Unit = {
                 leading(compact)
                 ChallengeClock(vm, compact)
             }
+            // 何を積むか（「みんな同じ形で積む」。決定 87）
+            PlayMaterialNote(compact, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp))
             // 「模型の高さ」は通常のモードと同じ大きな数字（HeightMeter。置いて高さが変わるとメーターのように回る）
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),

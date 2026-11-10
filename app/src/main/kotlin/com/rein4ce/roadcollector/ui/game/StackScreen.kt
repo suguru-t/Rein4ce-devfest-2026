@@ -282,6 +282,8 @@ fun StackScreen(
                         leading(false)
                         PlacedAndFallen(vm.placedCount, vm.fallenCount, vm.bonus, compact = false)
                     }
+                    // 何を積むか（「コレクションの道で積む」。決定 87）
+                    PlayMaterialNote(compact = false, modifier = Modifier.padding(top = 4.dp))
                     // 高さの右に「チェンジ」（狙っているパーツを替える。決定 62）。高さの数字より少し下げ、下の「○ m の道」の行の右にかかる所に置く
                     // （ずらすのは見た目だけで、段の高さは変えない。右側は空いているので、下の行の字には重ならない）
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

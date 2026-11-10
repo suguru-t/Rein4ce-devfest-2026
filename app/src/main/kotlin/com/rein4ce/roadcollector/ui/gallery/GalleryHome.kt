@@ -268,9 +268,10 @@ internal fun myRank(order: List<TowerSummary>, isMine: (TowerSummary) -> Boolean
 
 /** ホームの行の一言（そのランキングで何を比べるか） */
 private fun rankingNote(mode: TowerMode): String = when (mode) {
-    TowerMode.NORMAL -> "みんなの塔を、高さと本数で比べる"
-    TowerMode.CHALLENGE -> "時間内に積んだ高さと本数を比べる"
-    TowerMode.DAILY -> "育てた塔の高さと、続けた日数を比べる"
+    // 何で積んだ塔か（集めた道・みんな同じ形・歩いた道）も一言で（決定 87）
+    TowerMode.NORMAL -> "集めた道で積んだ塔を、高さと本数で比べる"
+    TowerMode.CHALLENGE -> "同じ形で時間内に積んだ、高さと本数を比べる"
+    TowerMode.DAILY -> "歩いた道で育てた塔の高さと、続けた日数を比べる"
 }
 
 /**
