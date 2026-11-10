@@ -39,8 +39,6 @@ import kotlin.random.Random
  * Unresolved … 終わったあと、上限の時間までに塔が止まらなかった（判定できない）。結果は見せるが送信はできない
  */
 class StackViewModel(
-    /** 送信に失敗したとき、画面に出す接続先。デモ端末で接続先の設定ミスを見分けるため */
-    private val serverUrl: () -> String = { ApiClient.baseUrl },
     /** 落下待ちの時間。テストで短くできるように差し替えられる */
     private val settleTiming: SettleTiming = SettleTiming(),
     /** 次に出すパーツを選ぶ乱数。テストで出る順を決められるように差し替えられる */
@@ -457,12 +455,14 @@ class StackViewModel(
                 val response = postTower(tower)
                 if (runId == uploadingRunId) {
                     uploadedRunId = uploadingRunId
-                    uploadMessage = "保存しました：${response.url}"
+                    // 共有ページの URL は出さない（ほかの遊び方の「ランキングに出しました」とそろえる。決定 91）
+                    uploadMessage = "ランキングに出しました"
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (runId == uploadingRunId) uploadMessage = "保存できませんでした（${serverUrl()}）：${e.message}"
+                // 前は接続先の URL と例外の文をそのまま出していた（決定 91）
+                if (runId == uploadingRunId) uploadMessage = "保存できませんでした。もう一度「保存」を押してください"
             } finally {
                 if (runId == uploadingRunId) uploading = false
             }

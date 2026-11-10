@@ -409,7 +409,7 @@ class StackViewModelTest {
             newResponse.complete(TowerCreated("new", "https://example.test/new"))
             runCurrent()
             assertFalse(vm.uploading)
-            assertEquals("保存しました：https://example.test/new", vm.uploadMessage)
+            assertEquals("ランキングに出しました", vm.uploadMessage)
         } finally {
             Dispatchers.resetMain()
         }
@@ -448,11 +448,11 @@ class StackViewModelTest {
     }
 
     @Test
-    fun `送れなかったときは接続先を出し、同じゲームでもう一度送れる`() = runTest {
+    fun `送れなかったときは URL も例外の文も出さず、同じゲームでもう一度送れる（決定 91）`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             var calls = 0
-            val vm = StackViewModel(serverUrl = { "https://server.test" }) {
+            val vm = StackViewModel {
                 if (++calls == 1) error("offline")
                 TowerCreated("ok", "https://example.test/ok")
             }
@@ -462,7 +462,7 @@ class StackViewModelTest {
             runCurrent()
             assertFalse(vm.uploaded)
             assertFalse(vm.uploading)
-            assertEquals("保存できませんでした（https://server.test）：offline", vm.uploadMessage)
+            assertEquals("保存できませんでした。もう一度「保存」を押してください", vm.uploadMessage)
             vm.upload()
             runCurrent()
             assertEquals(2, calls)
